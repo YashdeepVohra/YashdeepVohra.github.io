@@ -204,7 +204,7 @@ function loadMessages() {
 
   db.collection("messages")
     .where("chatId", "==", currentChat)
-    .orderBy("time")
+    .orderBy("time", "asc")
     .onSnapshot(snapshot => {
 
       const box = document.getElementById("messages");
@@ -282,6 +282,7 @@ db.collection("events")
 
 </body>
 </html>
+
 
 
 
