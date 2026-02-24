@@ -205,42 +205,40 @@ function login() {
     });
 
 }
-auth.onAuthStateChanged(userAuth => {
+auth.onAuthStateChanged(async (userAuth) => {
 
-  if (userAuth) {
+  if (!userAuth) {
+    document.getElementById("home").classList.add("hidden");
+    document.getElementById("login").classList.remove("hidden");
+    return;
+  }
 
-    const email = userAuth.email;
+  const email = userAuth.email;
+  const userRef = db.collection("users").doc(email);
 
-    db.collection("users").doc(email).get()
-      .then(doc => {
+  let doc = await userRef.get();
 
-        if (doc.exists && doc.data().name) {
-          user = doc.data().name;
-        } else {
+  if (!doc.exists) {
 
-          const fallback = email.replace("@livesociya.com", "");
+    const fallback = email.replace("@livesociya.com", "");
 
-          user = fallback;
+    await userRef.set({
+      name: fallback
+    });
 
-          return db.collection("users").doc(email).set({
-            name: fallback
-          });
-        }
-
-        document.getElementById("login").classList.add("hidden");
-        document.getElementById("home").classList.remove("hidden");
-
-        loadChatList();
-        loadEvents();
-
-      });
+    user = fallback;
 
   } else {
 
-    document.getElementById("home").classList.add("hidden");
-    document.getElementById("login").classList.remove("hidden");
+    user = doc.data().name;
 
   }
+
+  document.getElementById("login").classList.add("hidden");
+  document.getElementById("home").classList.remove("hidden");
+
+  loadChatList();
+  loadEvents();
 
 });
 
@@ -402,6 +400,7 @@ function addEvent() {
 
 </body>
 </html>
+
 
 
 
