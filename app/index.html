@@ -308,17 +308,34 @@ function render() {
 db.collection("events")
   .orderBy("time", "desc")
   .onSnapshot(snapshot => {
-    events = [];
+
+    const list = document.getElementById("events");
+    list.innerHTML = "";
+
     snapshot.forEach(doc => {
-      events.push(doc.data());
+      const e = doc.data();
+
+      list.innerHTML += `
+        <div class="event">
+          <b>${e.title}</b><br>
+          <small>${e.place} • by ${e.user}</small>
+          ${e.user === user ? `<button onclick="deleteEvent('${doc.id}')">Delete</button>` : ""}
+          <button class="join">Join</button>
+        </div>
+      `;
     });
-    render();
+
   });
+
+  function deleteEvent(id) {
+  db.collection("events").doc(id).delete();
+}
 
 </script>
 
 </body>
 </html>
+
 
 
 
