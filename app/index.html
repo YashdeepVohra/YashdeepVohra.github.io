@@ -75,7 +75,10 @@
 
 <body>
 
-<header id="header">livesociya</header>
+<header id="header">
+  livesociya
+  <button onclick="logout()" style="float:right;">Logout</button>
+</header>
 
 <!-- LOGIN -->
 <div class="container" id="login">
@@ -201,7 +204,10 @@ function showHome() {
 }
 
 function logout() {
-  auth.signOut();
+  auth.signOut().then(() => {
+    document.getElementById("home").classList.add("hidden");
+    document.getElementById("login").classList.remove("hidden");
+  });
 }
 
 function startChat() {
@@ -395,6 +401,7 @@ db.collection("events")
 
 </body>
 </html>
+
 
 
 
