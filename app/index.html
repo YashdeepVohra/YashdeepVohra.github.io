@@ -211,20 +211,28 @@ auth.onAuthStateChanged(userAuth => {
 
     const email = userAuth.email;
 
-    db.collection("users").doc(email).get().then(doc => {
+    db.collection("users").doc(email).get()
+      .then(doc => {
 
-      if (doc.exists) {
-        user = doc.data().name;
-      } else {
-        user = email.replace("@livesociya.com", "");
-      }
+        if (doc.exists && doc.data().name) {
+          user = doc.data().name;
+        } else {
 
-      document.getElementById("login").classList.add("hidden");
-      document.getElementById("home").classList.remove("hidden");
+          const fallback = email.replace("@livesociya.com", "");
 
-      loadChatList();
+          user = fallback;
 
-    });
+          return db.collection("users").doc(email).set({
+            name: fallback
+          });
+        }
+
+        document.getElementById("login").classList.add("hidden");
+        document.getElementById("home").classList.remove("hidden");
+
+        loadChatList();
+
+      });
 
   } else {
 
@@ -234,7 +242,6 @@ auth.onAuthStateChanged(userAuth => {
   }
 
 });
-
 
 function logout() {
   auth.signOut();
@@ -368,6 +375,7 @@ function addEvent() {
 
 </body>
 </html>
+
 
 
 
