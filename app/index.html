@@ -108,11 +108,20 @@
 
   <!-- CHATS -->
   <div id="chatsTab" class="hidden">
-    <div class="card">
-      <p>Chats will appear here</p>
-      <small>(We’ll add real chat after Firebase)</small>
-    </div>
+
+  <div class="card">
+    <input id="chatUser" placeholder="Enter username to chat" />
+    <button onclick="startChat()">Start Chat</button>
   </div>
+
+  <div id="chatBox" class="hidden">
+    <div id="messages"></div>
+
+    <input id="msgInput" placeholder="Type message..." />
+    <button onclick="sendMessage()">Send</button>
+  </div>
+
+</div>
 
 </div>
 <script>
@@ -132,6 +141,7 @@
 
 
 <script>
+let currentChat = null;
 let user = "";
 let events = [];
 
@@ -158,6 +168,59 @@ function login() {
         })
         .catch(err => alert(err.message));
     });
+}
+
+function startChat() {
+  const other = document.getElementById("chatUser").value;
+  if (!other) return;
+
+  const chatId = [user, other].sort().join("_");
+  currentChat = chatId;
+
+  db.collection("chats").doc(chatId).set({
+    users: [user, other]
+  });
+
+  document.getElementById("chatBox").classList.remove("hidden");
+
+  loadMessages();
+}
+
+function sendMessage() {
+  const text = document.getElementById("msgInput").value;
+  if (!text || !currentChat) return;
+
+  db.collection("messages").add({
+    chatId: currentChat,
+    sender: user,
+    text,
+    time: Date.now()
+  });
+
+  document.getElementById("msgInput").value = "";
+}
+
+function loadMessages() {
+
+  db.collection("messages")
+    .where("chatId", "==", currentChat)
+    .orderBy("time")
+    .onSnapshot(snapshot => {
+
+      const box = document.getElementById("messages");
+      box.innerHTML = "";
+
+      snapshot.forEach(doc => {
+        const m = doc.data();
+        box.innerHTML += `
+          <div>
+            <b>${m.sender}:</b> ${m.text}
+          </div>
+        `;
+      });
+
+    });
+
 }
 
 
@@ -219,6 +282,7 @@ db.collection("events")
 
 </body>
 </html>
+
 
 
 
