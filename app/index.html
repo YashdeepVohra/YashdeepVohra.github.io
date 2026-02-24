@@ -231,6 +231,7 @@ auth.onAuthStateChanged(userAuth => {
         document.getElementById("home").classList.remove("hidden");
 
         loadChatList();
+        loadEvents();
 
       });
 
@@ -275,6 +276,32 @@ function sendMessage() {
   });
 
   document.getElementById("msgInput").value = "";
+}
+
+function loadEvents() {
+
+  db.collection("events")
+    .orderBy("time", "desc")
+    .onSnapshot(snapshot => {
+
+      const list = document.getElementById("events");
+      list.innerHTML = "";
+
+      snapshot.forEach(doc => {
+        const e = doc.data();
+
+        list.innerHTML += `
+          <div class="event">
+            <b>${e.title}</b><br>
+            <small>${e.place} • by ${e.user}</small>
+            ${e.user === user ? `<button onclick="deleteEvent('${doc.id}')">Delete</button>` : ""}
+            <button class="join">Join</button>
+          </div>
+        `;
+      });
+
+    });
+
 }
 
 function loadMessages() {
@@ -375,6 +402,7 @@ function addEvent() {
 
 </body>
 </html>
+
 
 
 
