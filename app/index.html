@@ -200,6 +200,10 @@ function showHome() {
   document.getElementById("home").classList.remove("hidden");
 }
 
+function logout() {
+  auth.signOut();
+}
+
 function startChat() {
   const other = document.getElementById("chatUser").value;
   if (!other) return;
@@ -391,6 +395,7 @@ db.collection("events")
 
 </body>
 </html>
+
 
 
 
