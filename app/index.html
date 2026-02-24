@@ -172,13 +172,13 @@
 
 
 <script>
-let authReady = false;
+document.getElementById("login").style.display = "none";
+document.getElementById("home").style.display = "none";
 let currentChat = null;
 let user = "";
 let events = [];
 
 function login() {
-  if (!authReady) return;
   const name = document.getElementById("name").value;
   const password = document.getElementById("password").value;
 
@@ -242,13 +242,16 @@ auth.onAuthStateChanged(u => {
     showLogin();
   }
 
-  authReady = true;
-
 });
 
 function showHome() {
-  document.getElementById("login").classList.add("hidden");
-  document.getElementById("home").classList.remove("hidden");
+  document.getElementById("login").style.display = "none";
+  document.getElementById("home").style.display = "block";
+}
+
+function showLogin() {
+  document.getElementById("home").style.display = "none";
+  document.getElementById("login").style.display = "block";
 }
 
 function logout() {
@@ -446,6 +449,7 @@ db.collection("events")
 
 </body>
 </html>
+
 
 
 
