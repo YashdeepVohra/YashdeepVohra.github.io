@@ -172,11 +172,13 @@
 
 
 <script>
+let authReady = false;
 let currentChat = null;
 let user = "";
 let events = [];
 
 function login() {
+  if (!authReady) return;
   const name = document.getElementById("name").value;
   const password = document.getElementById("password").value;
 
@@ -218,6 +220,7 @@ function login() {
 }
 
 auth.onAuthStateChanged(u => {
+
   if (u) {
 
     const email = u.email;
@@ -235,7 +238,12 @@ auth.onAuthStateChanged(u => {
 
     });
 
+  } else {
+    showLogin();
   }
+
+  authReady = true;
+
 });
 
 function showHome() {
@@ -244,10 +252,7 @@ function showHome() {
 }
 
 function logout() {
-  auth.signOut().then(() => {
-    document.getElementById("home").classList.add("hidden");
-    document.getElementById("login").classList.remove("hidden");
-  });
+  auth.signOut();
 }
 
 function startChat() {
@@ -441,6 +446,7 @@ db.collection("events")
 
 </body>
 </html>
+
 
 
 
