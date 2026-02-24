@@ -199,6 +199,13 @@ function login() {
     })
     .catch(() => {
       auth.createUserWithEmailAndPassword(email, password)
+      .then(() => {
+
+       return db.collection("users").doc(email).set({
+       name: name
+       });
+
+    })
         .then(() => {
           user = name;
           document.getElementById("login").classList.add("hidden");
@@ -213,10 +220,20 @@ function login() {
 auth.onAuthStateChanged(u => {
   if (u) {
 
-    user = u.email.replace("@livesociya.com", "");
+    const email = u.email;
 
-    showHome();
-    loadChatList();
+    db.collection("users").doc(email).get().then(doc => {
+
+      if (doc.exists) {
+        user = doc.data().name;
+      } else {
+        user = email.replace("@livesociya.com", "");
+      }
+
+      showHome();
+      loadChatList();
+
+    });
 
   }
 });
@@ -424,6 +441,7 @@ db.collection("events")
 
 </body>
 </html>
+
 
 
 
