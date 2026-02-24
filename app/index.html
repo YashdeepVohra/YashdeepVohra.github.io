@@ -110,7 +110,12 @@
   <div id="chatsTab" class="hidden">
 
   <div class="card">
-    <input id="chatUser" placeholder="Enter username to chat" />
+    <h3>Your Chats</h3>
+    <div id="chatList"></div>
+
+    <hr>
+
+    <input id="chatUser" placeholder="Start new chat" />
     <button onclick="startChat()">Start Chat</button>
   </div>
 
@@ -146,6 +151,7 @@ let user = "";
 let events = [];
 
 function login() {
+  loadChatList();
   const name = document.getElementById("name").value;
   const password = document.getElementById("password").value;
 
@@ -223,6 +229,37 @@ function loadMessages() {
 
 }
 
+function loadChatList() {
+
+  db.collection("chats")
+    .where("users", "array-contains", user)
+    .onSnapshot(snapshot => {
+
+      const list = document.getElementById("chatList");
+      list.innerHTML = "";
+
+      snapshot.forEach(doc => {
+
+        const chat = doc.data();
+        const other = chat.users.find(u => u !== user);
+
+        list.innerHTML += `
+          <div onclick="openChat('${doc.id}')" style="padding:10px;background:white;margin-bottom:8px;border-radius:10px;">
+            ${other}
+          </div>
+        `;
+      });
+
+    });
+
+}
+
+function openChat(chatId) {
+  currentChat = chatId;
+  document.getElementById("chatBox").classList.remove("hidden");
+  loadMessages();
+}
+
 
 function showTab(tab) {
   document.getElementById("eventsTab").classList.add("hidden");
@@ -282,6 +319,7 @@ db.collection("events")
 
 </body>
 </html>
+
 
 
 
