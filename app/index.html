@@ -185,11 +185,13 @@ function login() {
 
   const email = name.toLowerCase() + "@livesociya.com";
 
-  auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
-    .then(() => auth.signInWithEmailAndPassword(email, password))
+  auth.signInWithEmailAndPassword(email, password)
+    .then(() => {
+      // login success handled automatically
+    })
     .catch(() => {
 
-      return auth.createUserWithEmailAndPassword(email, password)
+      auth.createUserWithEmailAndPassword(email, password)
         .then(() => {
 
           return db.collection("users").doc(email).set({
@@ -200,12 +202,11 @@ function login() {
 
     });
 }
+auth.onAuthStateChanged(userAuth => {
 
-auth.onAuthStateChanged(u => {
+  if (userAuth) {
 
-  if (u) {
-
-    const email = u.email;
+    const email = userAuth.email;
 
     db.collection("users").doc(email).get().then(doc => {
 
@@ -215,26 +216,22 @@ auth.onAuthStateChanged(u => {
         user = email.replace("@livesociya.com", "");
       }
 
-      showHome();
+      document.getElementById("login").classList.add("hidden");
+      document.getElementById("home").classList.remove("hidden");
+
       loadChatList();
 
     });
 
   } else {
-    showLogin();
+
+    document.getElementById("home").classList.add("hidden");
+    document.getElementById("login").classList.remove("hidden");
+
   }
 
 });
 
-function showHome() {
-  document.getElementById("login").classList.add("hidden");
-  document.getElementById("home").classList.remove("hidden");
-}
-
-function showLogin() {
-  document.getElementById("home").classList.add("hidden");
-  document.getElementById("login").classList.remove("hidden");
-}
 
 function logout() {
   auth.signOut();
@@ -431,6 +428,7 @@ db.collection("events")
 
 </body>
 </html>
+
 
 
 
