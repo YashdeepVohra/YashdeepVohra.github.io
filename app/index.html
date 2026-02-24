@@ -192,6 +192,7 @@ function login() {
       return auth.createUserWithEmailAndPassword(email, password)
         .then(() => {
 
+          // ⭐ Save real name here FIRST
           return db.collection("users").doc(email).set({
             name: name
           });
@@ -205,6 +206,8 @@ function login() {
     });
 
 }
+
+
 auth.onAuthStateChanged(async (userAuth) => {
 
   if (!userAuth) {
@@ -400,6 +403,7 @@ function addEvent() {
 
 </body>
 </html>
+
 
 
 
