@@ -34,6 +34,21 @@ let realName = "";
 let currentLiveFilter = 'All';
 let currentRecapFilter = 'All';
 
+// Add this near the top of app.js if you don't have it already!
+// This is the "Translator" that converts text links into actual images
+function renderAvatar(avatarCode) {
+  // 1. Check if the code actually exists
+  if (!avatarCode) return "👤";
+
+  // 2. If it is a Google Photo (starts with http), turn it into an <img> tag
+  if (typeof avatarCode === 'string' && avatarCode.startsWith("http")) {
+    return `<img src="${avatarCode}" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">`;
+  }
+
+  // 3. Otherwise, it's an emoji! Just return the emoji.
+  return avatarCode;
+}
+
 function formatTime(ms) {
   const messageDate = new Date(ms); const today = new Date();
   const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
