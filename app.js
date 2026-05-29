@@ -255,14 +255,17 @@ function addEvent() {
 
 function loadEvents() {
   db.collection("events").orderBy("startTime", "desc").onSnapshot(snapshot => {
-    const liveList = document.getElementById("events"); const recapList = document.getElementById("recapEvents");
+    const liveList = document.getElementById("events"); 
+    const recapList = document.getElementById("recapEvents");
     liveList.innerHTML = ""; recapList.innerHTML = "";
     
     let activeCount = 0; let recapCount = 0;
-    const currentTime = Date.now(); const oneDayAgo = currentTime - (24 * 60 * 60 * 1000);
+    const currentTime = Date.now(); 
+    const oneDayAgo = currentTime - (24 * 60 * 60 * 1000);
 
     snapshot.forEach(doc => {
-      const e = doc.data(); const id = doc.id;
+      const e = doc.data(); 
+      const id = doc.id;
       const attendeesCount = e.participants ? e.participants.length : 1;
       const attendeeNames = e.participants ? e.participants.join(", ") : e.user;
 
@@ -272,9 +275,11 @@ function loadEvents() {
         ? `<span style="background: #fef08a; color: #854d0e; padding: 4px 8px; border-radius: 12px; font-size: 10px; font-weight: 800; text-transform: uppercase;">Upcoming</span>`
         : `<span style="background: #fee2e2; color: #dc2626; padding: 4px 8px; border-radius: 12px; font-size: 10px; font-weight: 800; text-transform: uppercase;"><i class='bx bx-radio-circle-marked bx-burst'></i> Live</span>`;
 
-      // Check which filters are active
-      const matchesLive = (currentLiveFilter === 'All' || e.tag === currentLiveFilter);
-      const matchesRecap = (currentRecapFilter === 'All' || e.tag === currentRecapFilter);
+      // 🐛 BUG FIX: The safe Avatar Renderer wrapper
+      const avatarHTML = `<div style="display:inline-block; width:24px; height:24px; border-radius:50%; vertical-align:middle; overflow:hidden; border:1px solid var(--border); margin-right:4px;">${renderAvatar(e.hostAvatar)}</div>`;
+
+      const matchesLive = (typeof currentLiveFilter !== 'undefined' ? (currentLiveFilter === 'All' || e.tag === currentLiveFilter) : true);
+      const matchesRecap = (typeof currentRecapFilter !== 'undefined' ? (currentRecapFilter === 'All' || e.tag === currentRecapFilter) : true);
 
       if (e.expiresAt > currentTime) {
         if (matchesLive) {
@@ -284,7 +289,11 @@ function loadEvents() {
             <div class="event card" id="event-${id}">
               <div style="display: flex; justify-content: space-between; align-items: flex-start;">${displayTag} ${statusBadge}</div>
               <div class="event-title">${e.title}</div>
-              <div class="event-meta"><span style="font-size:18px;">${e.hostAvatar || '👤'}</span> ${e.place} • hosted by ${e.user}</div>
+              
+              <div class="event-meta" style="display:flex; align-items:center;">
+                ${avatarHTML} <span>${e.place} • hosted by @${e.user}</span>
+              </div>
+              
               ${displayDesc}
               <div class="attendees"><i class='bx bx-group'></i> Going (${attendeesCount}): ${attendeeNames}</div>
               ${e.user === user ? `<button class="delete-btn" onclick="openDeleteModal('${id}')"><i class='bx bx-slider'></i> Manage Event</button>` : (hasJoined ? `<button class="leave-btn" onclick="leaveEvent('${id}')"><i class='bx bx-exit'></i> Leave Hangout</button>` : `<button class="join" onclick="joinEvent('${id}')">Join Hangout</button>`)}
@@ -297,7 +306,11 @@ function loadEvents() {
             <div class="event card" style="background: #f9fafb; border: none; box-shadow: none;">
               ${displayTag}
               <div class="event-title" style="color: #4b5563;">${e.title}</div>
-              <div class="event-meta"><span style="font-size:18px;">${e.hostAvatar || '👤'}</span> ${e.place} • hosted by ${e.user}</div>
+              
+              <div class="event-meta" style="display:flex; align-items:center;">
+                ${avatarHTML} <span>${e.place} • hosted by @${e.user}</span>
+              </div>
+              
               <div class="attendees" style="background:#f3f4f6; color: var(--text-muted);"><i class='bx bx-check-double'></i> Attended (${attendeesCount}): ${attendeeNames}</div>
             </div>`;
         }
@@ -459,3 +472,4 @@ function loadMyEvents() {
     });
   });
 }
+
