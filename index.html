@@ -32,12 +32,14 @@
   </header>
 
   <div class="container" id="login">
-    <div class="card" style="margin-top: 40px; text-align: center;">
-      <div style="font-size: 48px; margin-bottom: 16px; color: var(--primary);"><i class='bx bxs-bolt-circle'></i></div>
-      <h2 style="font-size: 24px; margin-bottom:24px;">Welcome to livesociya</h2>
-      <input id="name" placeholder="Enter username">
-      <input id="password" type="password" placeholder="Password" onkeydown="if(event.key === 'Enter') login()">
-      <button onclick="login()">Continue <i class='bx bx-right-arrow-alt'></i></button>
+    <div class="card" style="margin-top: 40px; text-align: center; padding: 40px 20px;">
+      <div style="font-size: 56px; margin-bottom: 16px; color: var(--primary);"><i class='bx bxs-bolt-circle'></i></div>
+      <h2 style="font-size: 28px; margin-bottom: 8px;">livesociya</h2>
+      <p style="color: var(--text-muted); font-size: 15px; margin-bottom: 32px;">The campus live feed. Verified students only.</p>
+      
+      <button onclick="loginWithGoogle()" style="background: var(--surface); color: var(--text); border: 1px solid var(--border); font-weight: 600; font-size: 16px; padding: 12px; border-radius: 24px;">
+        <img src="https://www.svgrepo.com/show/475656/google-color.svg" style="width: 20px; margin-right: 12px;"> Continue with Google
+      </button>
     </div>
   </div>
 
