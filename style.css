@@ -198,3 +198,20 @@ input[type="datetime-local"] {
 .empty-state i { font-size: 48px; color: #cbd5e1; margin-bottom: 12px; }
 
 @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+/* FEED FILTERS */
+.feed-filters {
+  display: flex; gap: 8px; overflow-x: auto; padding-bottom: 12px; margin-bottom: 8px;
+  -ms-overflow-style: none; scrollbar-width: none;
+}
+.feed-filters::-webkit-scrollbar { display: none; }
+
+.filter-pill {
+  background: var(--surface); color: var(--text-muted); padding: 8px 16px; 
+  border-radius: 20px; font-size: 13px; font-weight: 600; cursor: pointer;
+  white-space: nowrap; border: 1px solid var(--border); transition: all 0.2s;
+  box-shadow: var(--shadow-sm);
+}
+.filter-pill.active { 
+  background: var(--text); color: var(--surface); border-color: var(--text); 
+}
