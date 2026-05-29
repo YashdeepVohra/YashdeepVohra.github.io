@@ -74,7 +74,7 @@ function loginWithGoogle() {
   });
 }
 
-// --- NEW: AUTH WATCHER WITH BAN CHECKER ---
+// --- UPDATED: AUTH WATCHER ---
 auth.onAuthStateChanged(async (userAuth) => {
   if (!userAuth) {
     document.getElementById("home").classList.add("hidden"); 
@@ -86,31 +86,93 @@ auth.onAuthStateChanged(async (userAuth) => {
   const userRef = db.collection("users").doc(userEmail);
   let doc = await userRef.get();
   
-  // SECURITY CHECK: Is this user banned?
   if (doc.exists && doc.data().banned === true) {
-    alert("SECURITY ALERT: Your account has been permanently suspended for violating community guidelines.");
+    alert("SECURITY ALERT: Your account has been suspended.");
     auth.signOut();
     return;
   }
   
-  if (doc.exists) {
-    user = doc.data().name;
-    userAvatar = doc.data().avatar || "👤";
-  } else {
-    // Failsafe just in case
-    user = userAuth.displayName || userEmail.split('@')[0];
-    userAvatar = userAuth.photoURL || "👤";
-    await userRef.set({ name: user, avatar: userAvatar, banned: false, joinedAt: Date.now() });
+  // Create base profile if they are brand new
+  if (!doc.exists) {
+    await userRef.set({ 
+      name: userAuth.displayName, 
+      avatar: userAuth.photoURL || "👤", 
+      banned: false, 
+      joinedAt: Date.now() 
+    });
+    doc = await userRef.get(); // Re-fetch the fresh document
   }
+
+  // NEW: THE USERNAME GATEKEEPER
+  if (!doc.data().username) {
+    // If they don't have a username, trap them in the modal
+    document.getElementById("usernameModal").classList.remove("hidden");
+    return; 
+  }
+
+  // If they have a username, let them into the app normally!
+  user = doc.data().username; // Now we use their @username everywhere!
+  userAvatar = doc.data().avatar || "👤";
   
-  // Since we use Google Photos now, we can hide the Emoji picker!
   document.getElementById("topAvatar").innerHTML = `<img src="${userAvatar}" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">`; 
   
   document.getElementById("login").classList.add("hidden"); 
   document.getElementById("home").classList.remove("hidden");
-  loadChatList(); 
-  loadEvents();
+  loadChatList(); loadEvents();
 });
+
+// --- NEW: LIVE USERNAME CHECKER ---
+async function checkUsernameAvailability() {
+  const input = document.getElementById("newUsername");
+  const status = document.getElementById("usernameStatus");
+  const btn = document.getElementById("claimBtn");
+  
+  // Force lowercase and remove spaces/special characters
+  let val = input.value.toLowerCase().replace(/[^a-z0-9_]/g, '');
+  input.value = val; 
+
+  if (val.length < 3) {
+    status.innerText = "Too short"; status.style.color = "var(--danger)";
+    btn.style.background = "#cbd5e1"; btn.disabled = true; btn.style.cursor = "not-allowed";
+    return;
+  }
+
+  // Check the Database to see if anyone owns this file
+  const usernameDoc = await db.collection("usernames").doc(val).get();
+  
+  if (usernameDoc.exists) {
+    status.innerText = "Taken 😔"; status.style.color = "var(--danger)";
+    btn.style.background = "#cbd5e1"; btn.disabled = true; btn.style.cursor = "not-allowed";
+  } else {
+    status.innerText = "Available! 🎉"; status.style.color = "var(--success)";
+    btn.style.background = "var(--primary)"; btn.disabled = false; btn.style.cursor = "pointer";
+  }
+}
+
+// --- NEW: CLAIM AND SAVE USERNAME ---
+async function claimUsername() {
+  const chosenName = document.getElementById("newUsername").value;
+  if (!chosenName) return;
+
+  try {
+    // 1. Lock the username in the registry so nobody else can take it
+    await db.collection("usernames").doc(chosenName).set({ email: userEmail });
+    
+    // 2. Add the username to their main profile
+    await db.collection("users").doc(userEmail).set({ username: chosenName }, { merge: true });
+
+    // 3. Close the modal and let them into the app!
+    document.getElementById("usernameModal").classList.add("hidden");
+    
+    // Trigger the auth watcher again to load the app
+    auth.currentUser.reload();
+    const userAuth = auth.currentUser;
+    auth.updateCurrentUser(userAuth); 
+    
+  } catch (error) {
+    alert("Error claiming username. Try another one.");
+  }
+}
 
 function logout() { auth.signOut(); }
 
