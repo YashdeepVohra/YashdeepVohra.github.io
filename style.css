@@ -203,6 +203,7 @@ input[type="datetime-local"] {
 .feed-filters {
   display: flex; gap: 8px; overflow-x: auto; padding-bottom: 12px; margin-bottom: 8px;
   -ms-overflow-style: none; scrollbar-width: none;
+  flex-wrap: wrap; /* NEW: Wraps the tags into a second row so mouse users can reach them */
 }
 .feed-filters::-webkit-scrollbar { display: none; }
 
