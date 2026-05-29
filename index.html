@@ -43,6 +43,23 @@
     </div>
   </div>
 
+  <div id="usernameModal" class="modal-overlay hidden" style="z-index: 3000;">
+  <div class="modal-content" style="max-width: 320px;">
+    <div style="font-size: 40px; margin-bottom: 10px;">👋</div>
+    <h3 style="margin-top:0;">Pick a Username</h3>
+    <p style="font-size:13px; color: var(--text-muted); margin-bottom: 20px;">This will be your unique campus handle.</p>
+    
+    <div style="position: relative;">
+      <span style="position: absolute; left: 16px; top: 14px; color: var(--text-muted); font-weight: 700;">@</span>
+      <input id="newUsername" placeholder="username" style="padding-left: 36px;" onkeyup="checkUsernameAvailability()">
+    </div>
+    
+    <div id="usernameStatus" style="font-size: 12px; font-weight: 600; margin-top: -4px; margin-bottom: 16px; min-height: 16px;"></div>
+    
+    <button id="claimBtn" onclick="claimUsername()" style="background: #cbd5e1; cursor: not-allowed;" disabled>Claim Handle</button>
+  </div>
+</div>
+
   <div class="container hidden" id="home">
     
     <div id="eventsTab">
