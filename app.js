@@ -89,16 +89,18 @@ function selectTag(element, tag) {
   currentSelectedTag = element.innerText;
 }
 
-function setFilter(tag) {
+function setFilter(element, tag) {
   currentFeedFilter = tag;
   
-  // Update the UI to highlight the clicked pill
+  // Update the UI: Strip 'active' from all buttons first
   document.querySelectorAll('.filter-pill').forEach(pill => {
-    if (pill.innerText === tag) pill.classList.add('active');
-    else pill.classList.remove('active');
+    pill.classList.remove('active');
   });
+  
+  // Add 'active' ONLY to the exact button we just clicked
+  element.classList.add('active');
 
-  // Reload the feed to apply the filter!
+  // Reload the feed to apply the filter
   loadEvents();
 }
 
