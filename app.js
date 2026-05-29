@@ -48,33 +48,19 @@ function toggleTime(element) {
 }
 
 // --- NEW: SECURE GOOGLE LOGIN ---
+// --- UPDATED: SECURE GOOGLE LOGIN ---
 function loginWithGoogle() {
-  if (Object.keys(firebaseConfig).length === 0) return alert("Firebase Config is missing in app.js!");
+  if (Object.keys(firebaseConfig).length === 0) return alert("Firebase Config is missing!");
   
   const provider = new firebase.auth.GoogleAuthProvider();
   
-  auth.signInWithPopup(provider).then(async (result) => {
-    const userAuth = result.user;
-    const userEmail = userAuth.email;
-    const userRef = db.collection("users").doc(userEmail);
-    
-    // Check if they are a new user
-    const doc = await userRef.get();
-    if (!doc.exists) {
-      // Create their official profile with the Ban flag set to false
-      await userRef.set({ 
-        name: userAuth.displayName, 
-        avatar: userAuth.photoURL || "👤", // Automatically grabs their Google Photo!
-        banned: false,
-        joinedAt: Date.now()
-      });
-    }
-  }).catch((error) => {
+  // We removed the messy database logic from here so it doesn't race!
+  auth.signInWithPopup(provider).catch((error) => {
     if (error.code !== 'auth/popup-closed-by-user') alert(error.message);
   });
 }
 
-// --- UPDATED: AUTH WATCHER ---
+// --- UPDATED: AUTH WATCHER & USERNAME GATEKEEPER ---
 auth.onAuthStateChanged(async (userAuth) => {
   if (!userAuth) {
     document.getElementById("home").classList.add("hidden"); 
@@ -82,46 +68,54 @@ auth.onAuthStateChanged(async (userAuth) => {
     return;
   }
   
-  userEmail = userAuth.email;
-  const userRef = db.collection("users").doc(userEmail);
-  let doc = await userRef.get();
-  
-  if (doc.exists && doc.data().banned === true) {
-    alert("SECURITY ALERT: Your account has been suspended.");
-    auth.signOut();
-    return;
-  }
-  
-  // Create base profile if they are brand new
-  if (!doc.exists) {
-    await userRef.set({ 
-      name: userAuth.displayName, 
-      avatar: userAuth.photoURL || "👤", 
-      banned: false, 
-      joinedAt: Date.now() 
-    });
-    doc = await userRef.get(); // Re-fetch the fresh document
-  }
+  try {
+    userEmail = userAuth.email;
+    const userRef = db.collection("users").doc(userEmail);
+    let doc = await userRef.get();
+    
+    if (doc.exists && doc.data().banned === true) {
+      alert("SECURITY ALERT: Your account has been suspended.");
+      auth.signOut();
+      return;
+    }
+    
+    // Create base profile if they are brand new
+    if (!doc.exists) {
+      await userRef.set({ 
+        name: userAuth.displayName || userEmail.split('@')[0], 
+        avatar: userAuth.photoURL || "👤", 
+        banned: false, 
+        joinedAt: Date.now() 
+      });
+      doc = await userRef.get(); // Re-fetch the fresh document
+    }
 
-  // NEW: THE USERNAME GATEKEEPER
-  if (!doc.data().username) {
-    // If they don't have a username, trap them in the modal
-    document.getElementById("usernameModal").classList.remove("hidden");
-    return; 
-  }
+    // NEW FIX: Hide the login screen BEFORE showing the username modal
+    if (!doc.data().username) {
+      document.getElementById("login").classList.add("hidden"); 
+      document.getElementById("usernameModal").classList.remove("hidden");
+      return; 
+    }
 
-  // If they have a username, let them into the app normally!
-  user = doc.data().username; // Now we use their @username everywhere!
-  userAvatar = doc.data().avatar || "👤";
-  
-  document.getElementById("topAvatar").innerHTML = `<img src="${userAvatar}" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">`; 
-  
-  document.getElementById("login").classList.add("hidden"); 
-  document.getElementById("home").classList.remove("hidden");
-  loadChatList(); loadEvents();
+    // If they have a username, let them in!
+    user = doc.data().username; 
+    userAvatar = doc.data().avatar || "👤";
+    
+    document.getElementById("topAvatar").innerHTML = `<img src="${userAvatar}" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">`; 
+    
+    document.getElementById("login").classList.add("hidden"); 
+    document.getElementById("home").classList.remove("hidden");
+    loadChatList(); 
+    loadEvents();
+
+  } catch (error) {
+    console.error(error);
+    alert("Database Error: " + error.message + " (Check your Firestore Rules!)");
+  }
 });
 
 // --- NEW: LIVE USERNAME CHECKER ---
+// --- UPDATED: SMARTER USERNAME CHECKER ---
 async function checkUsernameAvailability() {
   const input = document.getElementById("newUsername");
   const status = document.getElementById("usernameStatus");
@@ -131,13 +125,22 @@ async function checkUsernameAvailability() {
   let val = input.value.toLowerCase().replace(/[^a-z0-9_]/g, '');
   input.value = val; 
 
-  if (val.length < 3) {
-    status.innerText = "Too short"; status.style.color = "var(--danger)";
+  // FIX: If the box is totally empty, just reset the text and stop checking
+  if (val.length === 0) {
+    status.innerText = ""; 
     btn.style.background = "#cbd5e1"; btn.disabled = true; btn.style.cursor = "not-allowed";
     return;
   }
 
-  // Check the Database to see if anyone owns this file
+  // Check for the 3 character minimum
+  if (val.length < 3) {
+    status.innerText = "Must be at least 3 characters"; 
+    status.style.color = "var(--text-muted)"; // Changed to gray so it's less aggressive than red!
+    btn.style.background = "#cbd5e1"; btn.disabled = true; btn.style.cursor = "not-allowed";
+    return;
+  }
+
+  // Check the Database to see if anyone owns this handle
   const usernameDoc = await db.collection("usernames").doc(val).get();
   
   if (usernameDoc.exists) {
