@@ -1,9 +1,23 @@
-// PUT YOUR FIREBASE CONFIG HERE
+// ==========================================
+// PASTE YOUR FIREBASE CONFIG KEYS HERE!
+// (If this is empty, you cannot log in!)
+// ==========================================
 const firebaseConfig = {
-
+  apiKey: "AIzaSyBvcJJ2wz2yteRUYdasRUe8oaTt_Vp9kGQ",
+  authDomain: "livesociyaweb.firebaseapp.com",
+  projectId: "livesociyaweb",
+  storageBucket: "livesociyaweb.firebasestorage.app",
+  messagingSenderId: "676740518716",
+  appId: "1:676740518716:web:c552e59b56a93f5a35c439"
 };
 
-firebase.initializeApp(firebaseConfig);
+// Add error handling if config is missing
+try {
+  firebase.initializeApp(firebaseConfig);
+} catch (e) {
+  console.error("Firebase not initialized! Did you add your config keys?");
+}
+
 const auth = firebase.auth();
 const db = firebase.firestore();
 
@@ -16,8 +30,7 @@ let currentSelectedTag = '☕ Chill';
 function formatTime(ms) {
   const messageDate = new Date(ms);
   const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
   const timeString = messageDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   if (messageDate.toDateString() === today.toDateString()) return `Today at ${timeString}`;
   if (messageDate.toDateString() === yesterday.toDateString()) return `Yesterday at ${timeString}`;
@@ -31,9 +44,13 @@ function toggleTime(element) {
 }
 
 function login() {
+  if (Object.keys(firebaseConfig).length === 0) {
+    return alert("CRITICAL ERROR: Firebase Config is missing in app.js! You must paste your keys to log in.");
+  }
   const name = document.getElementById("name").value.trim();
   const password = document.getElementById("password").value;
   if (!name || !password) return alert("Please fill out all identity credentials.");
+  
   const email = name.toLowerCase() + "@livesociya.com";
   auth.signInWithEmailAndPassword(email, password).catch((error) => {
     if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
@@ -108,9 +125,7 @@ function addEvent() {
     startTime: startTimestamp, expiresAt: endTimestamp, participants: [user] 
   });
   
-  document.getElementById("title").value = "";
-  document.getElementById("place").value = "";
-  document.getElementById("description").value = "";
+  document.getElementById("title").value = ""; document.getElementById("place").value = ""; document.getElementById("description").value = "";
   closeCreateModal();
 }
 
@@ -125,14 +140,12 @@ function loadEvents() {
     const oneDayAgo = currentTime - (24 * 60 * 60 * 1000);
 
     snapshot.forEach(doc => {
-      const e = doc.data();
-      const id = doc.id;
+      const e = doc.data(); const id = doc.id;
       const attendeesCount = e.participants ? e.participants.length : 1;
       const attendeeNames = e.participants ? e.participants.join(", ") : e.user;
 
       const displayTag = e.tag ? `<div class="event-tag-badge">${e.tag}</div>` : '';
       const displayDesc = e.description ? `<button class="read-more-btn" onclick="toggleEventDesc('${id}')">Read details...</button><div class="event-desc-box">${e.description}</div>` : '';
-      
       let statusBadge = (currentTime < e.startTime) 
         ? `<span style="background: #fef08a; color: #854d0e; padding: 4px 8px; border-radius: 12px; font-size: 10px; font-weight: 800; text-transform: uppercase;">Upcoming</span>`
         : `<span style="background: #fee2e2; color: #dc2626; padding: 4px 8px; border-radius: 12px; font-size: 10px; font-weight: 800; text-transform: uppercase;"><i class='bx bx-radio-circle-marked bx-burst'></i> Live</span>`;
@@ -142,9 +155,7 @@ function loadEvents() {
         const hasJoined = e.participants && e.participants.includes(user);
         liveList.innerHTML += `
           <div class="event card" id="event-${id}">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-              ${displayTag} ${statusBadge}
-            </div>
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">${displayTag} ${statusBadge}</div>
             <div class="event-title">${e.title}</div>
             <div class="event-meta"><i class='bx bx-map'></i> ${e.place} • hosted by ${e.user}</div>
             ${displayDesc}
@@ -163,7 +174,6 @@ function loadEvents() {
       }
     });
 
-    // NEW: Elegant Empty States if nothing is happening
     if (activeCount === 0) liveList.innerHTML = `<div class="empty-state"><i class='bx bx-ghost'></i><p>Campus is quiet.<br>Be the first to start a hangout!</p></div>`;
     if (recapCount === 0) recapList.innerHTML = `<div class="empty-state"><i class='bx bx-history'></i><p>No recent history.</p></div>`;
   });
@@ -188,11 +198,7 @@ async function startChat() {
     if (!docSnap.exists) return alert(`User "${other}" does not exist.`);
 
     const chatId = [user, other].sort().join("_");
-    
-    // FIX: Using { merge: true } forces Firebase to add lastUpdated to old chats!
-    await db.collection("chats").doc(chatId).set({ 
-      users: [user, other], unreadBy: "", lastUpdated: Date.now() 
-    }, { merge: true });
+    await db.collection("chats").doc(chatId).set({ users: [user, other], unreadBy: "", lastUpdated: Date.now() }, { merge: true });
     
     document.getElementById("chatUser").value = "";
     openChat(chatId, other);
@@ -207,7 +213,6 @@ function openChat(chatId, otherUser) {
   document.querySelector(".topbar").classList.add("hidden");
   document.getElementById("chatScreen").classList.remove("hidden");
   
-  // FIX: Clear unread badge when opening
   db.collection("chats").doc(chatId).set({ unreadBy: "" }, { merge: true });
   loadMessages();
 }
@@ -227,7 +232,6 @@ function sendMessage() {
 
   db.collection("messages").add({ chatId: currentChat, sender: user, text: text, time: Date.now() });
 
-  // FIX: Force updates lastUpdated so chat jumps to the top
   db.collection("chats").doc(currentChat).set({
     unreadBy: otherUser, lastUpdated: Date.now()
   }, { merge: true });
@@ -246,13 +250,10 @@ function loadMessages() {
       let lastDateString = ""; 
 
       snapshot.forEach(doc => {
-        const m = doc.data();
-        const isMe = m.sender === user;
-        
+        const m = doc.data(); const isMe = m.sender === user;
         const msgDate = new Date(m.time).toLocaleDateString();
         if (msgDate !== lastDateString) {
-          let displayDate = "";
-          const today = new Date().toLocaleDateString();
+          let displayDate = ""; const today = new Date().toLocaleDateString();
           const yesterdayObj = new Date(); yesterdayObj.setDate(yesterdayObj.getDate() - 1);
           const yesterday = yesterdayObj.toLocaleDateString();
 
@@ -271,12 +272,10 @@ function loadMessages() {
           </div>`;
       });
       box.scrollTop = box.scrollHeight; 
-      
-      // FIX: Keep unread cleared if we are actively sitting in the chat
-      if (currentChat) db.collection("chats").doc(currentChat).set({ unreadBy: "" }, { merge: true });
     });
 }
 
+// FIX: This function now properly clears the badge ONLY if you are the one receiving the text!
 function loadChatList() {
   db.collection("chats").where("users", "array-contains", user).onSnapshot(snapshot => {
       const list = document.getElementById("chatList");
@@ -285,15 +284,17 @@ function loadChatList() {
       let chatsArray = [];
 
       snapshot.forEach(doc => { chatsArray.push({ id: doc.id, ...doc.data() }); });
-
-      // FIX: Sorts the array. Most recent at the top!
       chatsArray.sort((a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0));
 
-      if (chatsArray.length === 0) {
-        list.innerHTML = `<div class="empty-state" style="padding-top: 20px;"><i class='bx bx-message-square-x'></i><p>No messages yet.</p></div>`;
-      }
+      if (chatsArray.length === 0) list.innerHTML = `<div class="empty-state" style="padding-top: 20px;"><i class='bx bx-message-square-x'></i><p>No messages yet.</p></div>`;
 
       chatsArray.forEach(chat => {
+        // If we are actively sitting inside the chat, instantly tell the database we read it!
+        if (chat.unreadBy === user && currentChat === chat.id) {
+            db.collection("chats").doc(chat.id).set({ unreadBy: "" }, { merge: true });
+            chat.unreadBy = ""; // Clear it on our screen instantly
+        }
+
         const other = chat.users.find(u => u !== user);
         const initial = other.charAt(0);
         const isUnread = chat.unreadBy === user;
@@ -314,19 +315,10 @@ function loadChatList() {
 }
 
 function showTab(tab) {
-  document.getElementById("eventsTab").classList.add("hidden");
-  document.getElementById("recapTab").classList.add("hidden");
-  document.getElementById("chatsTab").classList.add("hidden");
+  document.getElementById("eventsTab").classList.add("hidden"); document.getElementById("recapTab").classList.add("hidden"); document.getElementById("chatsTab").classList.add("hidden");
   document.querySelectorAll(".nav-item").forEach(t => t.classList.remove("active"));
 
-  if (tab === 'events') {
-    document.getElementById("eventsTab").classList.remove("hidden");
-    document.querySelectorAll(".nav-item")[0].classList.add("active");
-  } else if (tab === 'recap') {
-    document.getElementById("recapTab").classList.remove("hidden");
-    document.querySelectorAll(".nav-item")[1].classList.add("active");
-  } else {
-    document.getElementById("chatsTab").classList.remove("hidden");
-    document.querySelectorAll(".nav-item")[2].classList.add("active");
-  }
+  if (tab === 'events') { document.getElementById("eventsTab").classList.remove("hidden"); document.querySelectorAll(".nav-item")[0].classList.add("active"); } 
+  else if (tab === 'recap') { document.getElementById("recapTab").classList.remove("hidden"); document.querySelectorAll(".nav-item")[1].classList.add("active"); } 
+  else { document.getElementById("chatsTab").classList.remove("hidden"); document.querySelectorAll(".nav-item")[2].classList.add("active"); }
 }
