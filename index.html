@@ -2,233 +2,152 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>livesociya</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>livesociya</title>
   
-  <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#4f46e5">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
-
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-
   <link rel="stylesheet" href="style.css">
+  <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
+  
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
 </head>
 <body>
 
-<div class="app-frame">
+  <div class="app-frame">
+    
+    <header class="topbar"> 
+      <div class="title">livesociya</div>
+      <button class="profileBtn" onclick="openProfileScreen()" id="topAvatar">👤</button>
+    </header>
 
-  <!-- GLOBAL TOP NAVIGATION -->
-  <header class="topbar">
-    <div class="title">livesociya</div>
-    <!-- Removed Logout from here, tapping this now opens the Profile! -->
-    <button class="profileBtn" onclick="openProfileScreen()" id="topAvatar">👤</button>
-  </header>
+    <div class="container" id="login">
+      <div class="card" style="margin-top: 40px; text-align: center; padding: 40px 20px;">
+        <div style="font-size: 56px; margin-bottom: 16px; color: var(--primary);"><i class='bx bxs-bolt-circle'></i></div>
+        <h2 style="font-size: 28px; margin-bottom: 8px;">livesociya</h2>
+        <p style="color: var(--text-muted); font-size: 15px; margin-bottom: 32px;">The campus live feed. Verified students only.</p>
+        
+        <button onclick="loginWithGoogle()" style="background: var(--surface); color: var(--text); border: 1px solid var(--border); font-weight: 600; font-size: 16px; padding: 12px; border-radius: 24px; cursor: pointer; width: 100%; display: flex; align-items: center; justify-content: center;">
+          <img src="https://www.svgrepo.com/show/475656/google-color.svg" style="width: 20px; margin-right: 12px;"> Continue with Google
+        </button>
+      </div>
+    </div>
 
-  
-
-  <div class="container" id="login">
-    <div class="card" style="margin-top: 40px; text-align: center; padding: 40px 20px;">
-      <div style="font-size: 56px; margin-bottom: 16px; color: var(--primary);"><i class='bx bxs-bolt-circle'></i></div>
-      <h2 style="font-size: 28px; margin-bottom: 8px;">livesociya</h2>
-      <p style="color: var(--text-muted); font-size: 15px; margin-bottom: 32px;">The campus live feed. Verified students only.</p>
+    <div id="home" class="hidden">
+      <div class="container">
+        <div id="eventsList"></div> 
+      </div>
       
-      <button onclick="loginWithGoogle()" style="background: var(--surface); color: var(--text); border: 1px solid var(--border); font-weight: 600; font-size: 16px; padding: 12px; border-radius: 24px;">
-        <img src="https://www.svgrepo.com/show/475656/google-color.svg" style="width: 20px; margin-right: 12px;"> Continue with Google
-      </button>
+      <button class="fab" onclick="openCreateModal()"><i class='bx bx-plus'></i></button>
     </div>
-  </div>
 
-  <div id="usernameModal" class="modal-overlay hidden" style="z-index: 3000;">
-  <div class="modal-content" style="max-width: 320px;">
-    <div style="font-size: 40px; margin-bottom: 10px;">👋</div>
-    <h3 style="margin-top:0;">Pick a Username</h3>
-    <p style="font-size:13px; color: var(--text-muted); margin-bottom: 20px;">This will be your unique campus handle.</p>
-    
-    <div style="position: relative;">
-      <span style="position: absolute; left: 16px; top: 14px; color: var(--text-muted); font-weight: 700;">@</span>
-      <input id="newUsername" placeholder="username" style="padding-left: 36px;" oninput="checkUsernameAvailability()">
-    </div>
-    
-    <div id="usernameStatus" style="font-size: 12px; font-weight: 600; margin-top: -4px; margin-bottom: 16px; min-height: 16px;"></div>
-    
-    <button id="claimBtn" onclick="claimUsername()" style="background: #cbd5e1; cursor: not-allowed;" disabled>Claim Handle</button>
-  </div>
-</div>
-
-  <div class="container hidden" id="home">
-    
-    <div id="eventsTab">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-        <h3 style="margin: 0; display: flex; align-items: center; gap: 8px;"><i class='bx bx-bolt-circle' style="color: var(--primary);"></i> The Campus Feed</h3>
-        <button onclick="openCreateModal()" style="width: auto; padding: 8px 16px; font-size: 13px; border-radius: 20px; box-shadow: var(--shadow-sm);">+ New Event</button>
+    <div id="chatScreen" class="hidden">
+      <div class="chat-header">
+        <button class="back-btn" onclick="closeChat()"><i class='bx bx-left-arrow-alt'></i></button>
+        <div class="chat-avatar" id="chatHeaderAvatar" style="width: 36px; height: 36px; font-size: 14px;">?</div>
+        <div id="chatWithTitle" style="font-weight: 700; font-size: 18px;">User</div>
       </div>
-
-      <div class="feed-filters" id="liveFilters">
-        <div class="filter-pill active" onclick="setLiveFilter(this, 'All')">All</div>
-        <div class="filter-pill" onclick="setLiveFilter(this, '☕ Chill')">☕ Chill</div>
-        <div class="filter-pill" onclick="setLiveFilter(this, '🍕 Food')">🍕 Food</div>
-        <div class="filter-pill" onclick="setLiveFilter(this, '🎉 Party')">🎉 Party</div>
-        <div class="filter-pill" onclick="setLiveFilter(this, '📚 Study')">📚 Study</div>
-        <div class="filter-pill" onclick="setLiveFilter(this, '🏀 Sports')">🏀 Sports</div>
+      <div id="messages"></div>
+      <div class="chat-footer">
+        <input id="msgInput" placeholder="Message..." onkeydown="if(event.key === 'Enter') sendMessage()" />
+        <button onclick="sendMessage()"><i class='bx bxs-send'></i></button>
       </div>
-
-      <div id="events"></div>
     </div>
 
-    <div id="recapTab" class="hidden">
-      <h3 style="display: flex; align-items: center; gap: 8px;"><i class='bx bx-time-five' style="color: var(--primary);"></i> Campus Recap</h3>
-      <p style="font-size: 14px; color: var(--text-muted); margin-top:-10px; margin-bottom:16px;">Everything that went down on campus in the last 24 hours.</p>
+    <div id="profileScreen" class="hidden">
+      <div class="chat-header">
+        <button class="back-btn" onclick="closeProfileScreen()"><i class='bx bx-left-arrow-alt'></i></button>
+        <div style="font-weight: 700; font-size: 18px;">My Profile</div>
+      </div>
       
-      <div class="feed-filters" id="recapFilters">
-        <div class="filter-pill active" onclick="setRecapFilter(this, 'All')">All</div>
-        <div class="filter-pill" onclick="setRecapFilter(this, '☕ Chill')">☕ Chill</div>
-        <div class="filter-pill" onclick="setRecapFilter(this, '🍕 Food')">🍕 Food</div>
-        <div class="filter-pill" onclick="setRecapFilter(this, '🎉 Party')">🎉 Party</div>
-        <div class="filter-pill" onclick="setRecapFilter(this, '📚 Study')">📚 Study</div>
-        <div class="filter-pill" onclick="setRecapFilter(this, '🏀 Sports')">🏀 Sports</div>
+      <div style="padding: 32px 20px; text-align: center;">
+        <div id="profileLargeAvatar" onclick="openProfileModal()" style="width: 110px; height: 110px; border-radius: 50%; margin: 0 auto 16px; font-size: 56px; display: flex; align-items: center; justify-content: center; background: #e2e8f0; border: 4px solid white; box-shadow: var(--shadow-sm); overflow: hidden; cursor: pointer; position: relative;">
+        </div>
+        <div style="font-size: 12px; color: var(--primary); font-weight: 700; margin-top: -8px; margin-bottom: 16px; cursor: pointer;" onclick="openProfileModal()">EDIT AVATAR</div>
+        
+        <h2 id="profileDisplayName" style="margin-bottom: 4px; font-size: 24px;">Name</h2>
+        <p id="profileUsername" style="color: var(--text-muted); font-weight: 600; font-size: 16px; margin-top: 0; margin-bottom: 24px;">@username</p>
+        
+        <button onclick="logout()" style="background: #fee2e2; color: var(--danger); width: auto; padding: 10px 32px; margin: 0 auto; border-radius: 20px; font-weight: 600; border: none; cursor: pointer;"><i class='bx bx-log-out'></i> Logout</button>
       </div>
-
-      <div id="recapEvents"></div>
-    </div>
-
-    <div id="chatsTab" class="hidden">
-      <h3 style="display: flex; align-items: center; gap: 8px;"><i class='bx bx-message-square-dots' style="color: var(--primary);"></i> Messages</h3>
-      <div style="display: flex; gap: 10px; margin-bottom: 24px;">
-        <input id="chatUser" placeholder="Search exact username..." style="margin-bottom: 0;" onkeydown="if(event.key === 'Enter') startChat()" />
-        <button onclick="startChat()" style="width: auto; white-space: nowrap; padding: 0 20px;">Start</button>
-      </div>
-      <div id="chatList"></div>
-    </div>
-
-    <nav class="bottom-nav">
-      <button class="nav-item active" onclick="showTab('events')">
-        <i class='bx bx-bolt-circle'></i><span>Live Now</span>
-      </button>
-      <button class="nav-item" onclick="showTab('recap')">
-        <i class='bx bx-history'></i><span>Recap</span>
-      </button>
-      <button class="nav-item" onclick="showTab('chats')" style="position: relative;">
-        <div id="chatBadge" class="nav-badge hidden"></div>
-        <i class='bx bx-message-rounded-dots'></i><span>Chats</span>
-      </button>
-    </nav>
-  </div>
-
-  <div id="chatScreen" class="hidden">
-    <div class="chat-header">
-      <button class="back-btn" onclick="closeChat()"><i class='bx bx-left-arrow-alt'></i></button>
-      <div class="chat-avatar" id="chatHeaderAvatar" style="width: 36px; height: 36px; font-size: 14px;">?</div>
-      <div id="chatWithTitle" style="font-weight: 700; font-size: 18px;">User</div>
-    </div>
-    <div id="messages"></div>
-    <div class="chat-footer">
-      <input id="msgInput" placeholder="Message..." onkeydown="if(event.key === 'Enter') sendMessage()" />
-      <button onclick="sendMessage()"><i class='bx bxs-send'></i></button>
-    </div>
-  </div>
-</div>
-
-<!-- FULLSCREEN PROFILE SCREEN -->
-  <div id="profileScreen" class="hidden">
-    <div class="chat-header">
-      <button class="back-btn" onclick="closeProfileScreen()"><i class='bx bx-left-arrow-alt'></i></button>
-      <div style="font-weight: 700; font-size: 18px;">My Profile</div>
-    </div>
-    
-    <div style="padding: 32px 20px; text-align: center;">
-      <!-- Tap this large avatar to change it -->
-      <div id="profileLargeAvatar" onclick="openProfileModal()" style="width: 110px; height: 110px; border-radius: 50%; margin: 0 auto 16px; font-size: 56px; display: flex; align-items: center; justify-content: center; background: #e2e8f0; border: 4px solid white; box-shadow: var(--shadow-sm); overflow: hidden; cursor: pointer; position: relative;">
-      </div>
-      <div style="font-size: 12px; color: var(--primary); font-weight: 700; margin-top: -8px; margin-bottom: 16px; cursor: pointer;" onclick="openProfileModal()">EDIT AVATAR</div>
       
-      <h2 id="profileDisplayName" style="margin-bottom: 4px; font-size: 24px;">Name</h2>
-      <p id="profileUsername" style="color: var(--text-muted); font-weight: 600; font-size: 16px; margin-top: 0; margin-bottom: 24px;">@username</p>
+      <div style="padding: 0 16px; flex: 1; overflow-y: auto;">
+        <h3 style="font-size: 15px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">My Hosted Events</h3>
+        <div id="myProfileEvents"></div>
+      </div>
+    </div>
+
+  </div> <div id="usernameModal" class="modal-overlay hidden" style="z-index: 3000;">
+    <div class="modal-content" style="max-width: 320px;">
+      <div style="font-size: 40px; margin-bottom: 10px;">👋</div>
+      <h3 style="margin-top:0;">Pick a Username</h3>
+      <p style="font-size:13px; color: var(--text-muted); margin-bottom: 20px;">This will be your unique campus handle.</p>
       
-      <button onclick="logout()" style="background: #fee2e2; color: var(--danger); width: auto; padding: 10px 32px; margin: 0 auto; border-radius: 20px;"><i class='bx bx-log-out'></i> Logout</button>
-    </div>
-    
-    <div style="padding: 0 16px; flex: 1; overflow-y: auto;">
-      <h3 style="font-size: 15px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">My Hosted Events</h3>
-      <div id="myProfileEvents"></div>
-    </div>
-  </div>
-
-<div id="deleteModal" class="modal-overlay hidden">
-  <div class="modal-content">
-    <div style="font-size: 40px; color: var(--primary); margin-bottom: 10px;"><i class='bx bx-slider-alt'></i></div>
-    <h3 style="margin-top:0; font-size: 20px;">Manage Live Event</h3>
-    <p style="font-size:14px; color: var(--text-muted); margin-bottom: 24px;">Are you wrapping up early or do you want to completely erase this broadcast?</p>
-    <button onclick="confirmMoveToRecap()" style="background: var(--success);">Send to Campus Recap</button>
-    <button onclick="confirmDeletePermanently()" style="background: var(--danger);">Delete Completely</button>
-    <button onclick="closeDeleteModal()" style="background: #f1f5f9; color: var(--text);">Cancel</button>
-  </div>
-</div>
-
-<div id="profileModal" class="modal-overlay hidden">
-  <div class="modal-content" style="max-width: 320px;">
-    <h3 style="margin-top:0;">Choose Your Avatar</h3>
-    <p style="font-size:13px; color: var(--text-muted); margin-bottom: 20px;">This is how campus will see you.</p>
-    
-    <div class="avatar-grid" id="avatarGrid">
-      <div class="avatar-option" onclick="selectAvatar(this, '🦊')">🦊</div>
-      <div class="avatar-option" onclick="selectAvatar(this, '🐼')">🐼</div>
-      <div class="avatar-option" onclick="selectAvatar(this, '🐯')">🐯</div>
-      <div class="avatar-option" onclick="selectAvatar(this, '🐸')">🐸</div>
-      <div class="avatar-option" onclick="selectAvatar(this, '🐶')">🐶</div>
-      <div class="avatar-option" onclick="selectAvatar(this, '🐱')">🐱</div>
-      <div class="avatar-option" onclick="selectAvatar(this, '🦄')">🦄</div>
-      <div class="avatar-option" onclick="selectAvatar(this, '👽')">👽</div>
-      <div class="avatar-option" onclick="selectAvatar(this, '👻')">👻</div>
-    </div>
-
-    <!-- NEW: Reset to Google Photo Button -->
-    <button onclick="selectAvatar(this, 'google')" style="background: #e0e7ff; color: var(--primary); margin-bottom: 12px;"><i class='bx bxl-google'></i> Use Google Photo</button>
-    <button onclick="closeProfileModal()" style="background: #f1f5f9; color: var(--text);">Cancel</button>
-    
-    <button onclick="closeProfileModal()" style="background: #f1f5f9; color: var(--text);">Looks Good</button>
-  </div>
-</div>
-
-<div id="createModal" class="modal-overlay hidden">
-  <div class="modal-content" style="text-align: left; max-width: 400px;">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-      <h3 style="margin: 0; font-size: 18px;">Broadcast Event</h3>
-      <button onclick="closeCreateModal()" style="background: #f1f5f9; color: var(--text-muted); width: 32px; height: 32px; padding: 0; border-radius: 50%; font-size: 20px;"><i class='bx bx-x'></i></button>
-    </div>
-    
-    <div class="tag-selector" id="tagSelector">
-      <div class="tag active" onclick="selectTag(this, '☕ Chill')">☕ Chill</div>
-      <div class="tag" onclick="selectTag(this, '🍕 Food')">🍕 Food</div>
-      <div class="tag" onclick="selectTag(this, '🎉 Party')">🎉 Party</div>
-      <div class="tag" onclick="selectTag(this, '📚 Study')">📚 Study</div>
-      <div class="tag" onclick="selectTag(this, '🏀 Sports')">🏀 Sports</div>
-    </div>
-
-    <input id="title" placeholder="What's happening?">
-    <input id="place" placeholder="Where is it?">
-    <textarea id="description" placeholder="Add a short note or vibe check (optional)..." rows="2"></textarea>
-
-    <div class="time-stack">
-      <div>
-        <label style="font-size: 11px; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Start Time</label>
-        <input type="datetime-local" id="startTime">
+      <div style="position: relative;">
+        <span style="position: absolute; left: 16px; top: 14px; color: var(--text-muted); font-weight: 700;">@</span>
+        <input id="newUsername" placeholder="username" style="padding-left: 36px; width: 100%; box-sizing: border-box;" oninput="checkUsernameAvailability()">
       </div>
-      <div>
-        <label style="font-size: 11px; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">End Time</label>
-        <input type="datetime-local" id="endTime">
+      
+      <div id="usernameStatus" style="font-size: 12px; font-weight: 600; margin-top: -4px; margin-bottom: 16px; min-height: 16px;"></div>
+      
+      <button id="claimBtn" onclick="claimUsername()" style="background: #cbd5e1; cursor: not-allowed; width: 100%; border: none; padding: 12px; border-radius: 8px; color: white; font-weight: bold;" disabled>Claim Handle</button>
+    </div>
+  </div>
+
+  <div id="profileModal" class="modal-overlay hidden" style="z-index: 3001;">
+    <div class="modal-content" style="max-width: 320px;">
+      <h3 style="margin-top:0;">Choose Avatar</h3>
+      <div class="avatar-grid" id="avatarGrid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 20px;">
+        <div class="avatar-option" onclick="selectAvatar(this, '🦊')" style="font-size: 32px; cursor: pointer; text-align: center; padding: 10px; background: #f1f5f9; border-radius: 8px;">🦊</div>
+        <div class="avatar-option" onclick="selectAvatar(this, '🐼')" style="font-size: 32px; cursor: pointer; text-align: center; padding: 10px; background: #f1f5f9; border-radius: 8px;">🐼</div>
+        <div class="avatar-option" onclick="selectAvatar(this, '🐯')" style="font-size: 32px; cursor: pointer; text-align: center; padding: 10px; background: #f1f5f9; border-radius: 8px;">🐯</div>
+        <div class="avatar-option" onclick="selectAvatar(this, '🐸')" style="font-size: 32px; cursor: pointer; text-align: center; padding: 10px; background: #f1f5f9; border-radius: 8px;">🐸</div>
+        <div class="avatar-option" onclick="selectAvatar(this, '🐶')" style="font-size: 32px; cursor: pointer; text-align: center; padding: 10px; background: #f1f5f9; border-radius: 8px;">🐶</div>
+        <div class="avatar-option" onclick="selectAvatar(this, '🐱')" style="font-size: 32px; cursor: pointer; text-align: center; padding: 10px; background: #f1f5f9; border-radius: 8px;">🐱</div>
+        <div class="avatar-option" onclick="selectAvatar(this, '🦄')" style="font-size: 32px; cursor: pointer; text-align: center; padding: 10px; background: #f1f5f9; border-radius: 8px;">🦄</div>
+        <div class="avatar-option" onclick="selectAvatar(this, '👽')" style="font-size: 32px; cursor: pointer; text-align: center; padding: 10px; background: #f1f5f9; border-radius: 8px;">👽</div>
+        <div class="avatar-option" onclick="selectAvatar(this, '👻')" style="font-size: 32px; cursor: pointer; text-align: center; padding: 10px; background: #f1f5f9; border-radius: 8px;">👻</div>
+      </div>
+      <button onclick="selectAvatar(this, 'google')" style="background: #e0e7ff; color: var(--primary); margin-bottom: 12px; width: 100%; border: none; padding: 10px; border-radius: 8px; font-weight: bold; cursor: pointer;"><i class='bx bxl-google'></i> Use Google Photo</button>
+      <button onclick="closeProfileModal()" style="background: #f1f5f9; color: var(--text); width: 100%; border: none; padding: 10px; border-radius: 8px; font-weight: bold; cursor: pointer;">Cancel</button>
+    </div>
+  </div>
+
+  <div id="createModal" class="modal-overlay hidden" style="z-index: 3001;">
+    <div class="modal-content">
+      <h3 style="margin-top:0;">Host an Event</h3>
+      <input id="evTitle" placeholder="Event Title (e.g., Midnight Basketball)" style="width: 100%; box-sizing: border-box;" />
+      <input id="evPlace" placeholder="Location (e.g., Rec Center)" style="width: 100%; box-sizing: border-box;" />
+      
+      <select id="evTag" style="width:100%; padding: 12px; margin-bottom: 12px; border: 1px solid var(--border); border-radius: 12px; font-family: inherit;">
+        <option value="🏀 Sports">🏀 Sports</option>
+        <option value="📚 Study">📚 Study</option>
+        <option value="🎉 Party">🎉 Party</option>
+        <option value="🍔 Food">🍔 Food</option>
+        <option value="🎮 Gaming">🎮 Gaming</option>
+        <option value="💬 Chill">💬 Chill</option>
+      </select>
+
+      <div style="display:flex; gap:10px;">
+        <button onclick="createEvent()" style="flex:1; border:none; padding:12px; border-radius:8px; cursor:pointer;">Post Event</button>
+        <button onclick="closeCreateModal()" style="background:var(--surface); color:var(--text); flex:1; border:none; padding:12px; border-radius:8px; cursor:pointer;">Cancel</button>
       </div>
     </div>
-
-    <button onclick="addEvent()">Publish to Campus <i class='bx bx-send'></i></button>
   </div>
-</div>
 
-<script src="app.js"></script>
+  <div id="deleteModal" class="modal-overlay hidden" style="z-index: 3001;">
+    <div class="modal-content">
+      <div style="font-size: 40px; color: var(--primary); margin-bottom: 10px;"><i class='bx bx-slider-alt'></i></div>
+      <h3 style="margin-top:0; font-size: 20px;">Manage Live Event</h3>
+      <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 20px;">If this event is over or cancelled, you can remove it from the campus feed.</p>
+      <input type="hidden" id="deleteEventId">
+      <div style="display:flex; flex-direction: column; gap:10px;">
+        <button onclick="confirmDeleteEvent()" style="background: #fee2e2; color: var(--danger); font-weight: bold; border:none; padding:12px; border-radius:8px; cursor:pointer;">End Event</button>
+        <button onclick="closeDeleteModal()" style="background: #f1f5f9; color: var(--text); font-weight: bold; border:none; padding:12px; border-radius:8px; cursor:pointer;">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
 </body>
 </html>
