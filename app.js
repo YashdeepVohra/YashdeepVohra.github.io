@@ -370,6 +370,7 @@ async function checkCrossedPaths(user1, user2) {
 }
 
 // UPDATED: Now handles both the Search Bar AND clicking a name
+// UPDATED: Checks the real username registry!
 async function startChat(clickedUsername = null) {
   // If they clicked a name, use it. Otherwise, use the search bar.
   const other = clickedUsername || document.getElementById("chatUser").value.trim();
@@ -378,10 +379,9 @@ async function startChat(clickedUsername = null) {
   if (other === user) return alert("You can't start a chat with yourself!");
 
   try {
-    const otherEmail = other.toLowerCase() + "@livesociya.com";
-    const userRef = db.collection("users").doc(otherEmail);
-    const docSnap = await userRef.get();
-    if (!docSnap.exists) return alert(`User "@${other}" does not exist on campus.`);
+    // 🐛 BUG FIX: Check the 'usernames' database collection, not the 'users' collection!
+    const usernameDoc = await db.collection("usernames").doc(other.toLowerCase()).get();
+    if (!usernameDoc.exists) return alert(`User "@${other}" does not exist on campus.`);
 
     const chatId = [user, other].sort().join("_");
     const chatDoc = await db.collection("chats").doc(chatId).get();
@@ -400,7 +400,10 @@ async function startChat(clickedUsername = null) {
     
     if(!clickedUsername) document.getElementById("chatUser").value = ""; 
     openChat(chatId, other);
-  } catch (error) { alert("Error finding user."); }
+  } catch (error) { 
+    console.error(error);
+    alert("Error finding user."); 
+  }
 }
 
 function openChat(chatId, otherUser) {
