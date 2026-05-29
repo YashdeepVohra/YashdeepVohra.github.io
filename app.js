@@ -47,42 +47,69 @@ function toggleTime(element) {
   element.classList.toggle('show-time');
 }
 
-function login() {
-  if (Object.keys(firebaseConfig).length === 0) return alert("Firebase Config is missing!");
-  const name = document.getElementById("name").value.trim();
-  const password = document.getElementById("password").value;
-  if (!name || !password) return alert("Please fill out all identity credentials.");
+// --- NEW: SECURE GOOGLE LOGIN ---
+function loginWithGoogle() {
+  if (Object.keys(firebaseConfig).length === 0) return alert("Firebase Config is missing in app.js!");
   
-  const email = name.toLowerCase() + "@livesociya.com";
-  auth.signInWithEmailAndPassword(email, password).catch((error) => {
-    if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
-      if (error.code === 'auth/wrong-password') return alert("Incorrect password.");
-      return auth.createUserWithEmailAndPassword(email, password).then(() => db.collection("users").doc(email).set({ name: name, avatar: "👤" }));
-    } else alert(error.message);
+  const provider = new firebase.auth.GoogleAuthProvider();
+  
+  auth.signInWithPopup(provider).then(async (result) => {
+    const userAuth = result.user;
+    const userEmail = userAuth.email;
+    const userRef = db.collection("users").doc(userEmail);
+    
+    // Check if they are a new user
+    const doc = await userRef.get();
+    if (!doc.exists) {
+      // Create their official profile with the Ban flag set to false
+      await userRef.set({ 
+        name: userAuth.displayName, 
+        avatar: userAuth.photoURL || "👤", // Automatically grabs their Google Photo!
+        banned: false,
+        joinedAt: Date.now()
+      });
+    }
+  }).catch((error) => {
+    if (error.code !== 'auth/popup-closed-by-user') alert(error.message);
   });
 }
 
+// --- NEW: AUTH WATCHER WITH BAN CHECKER ---
 auth.onAuthStateChanged(async (userAuth) => {
   if (!userAuth) {
-    document.getElementById("home").classList.add("hidden"); document.getElementById("login").classList.remove("hidden");
+    document.getElementById("home").classList.add("hidden"); 
+    document.getElementById("login").classList.remove("hidden");
     return;
   }
+  
   userEmail = userAuth.email;
   const userRef = db.collection("users").doc(userEmail);
   let doc = await userRef.get();
   
-  if (!doc.exists) {
-    user = userEmail.replace("@livesociya.com", "");
-    await userRef.set({ name: user, avatar: "👤" });
-  } else {
-    user = doc.data().name;
-    // NEW: Load their saved avatar!
-    userAvatar = doc.data().avatar || "👤";
+  // SECURITY CHECK: Is this user banned?
+  if (doc.exists && doc.data().banned === true) {
+    alert("SECURITY ALERT: Your account has been permanently suspended for violating community guidelines.");
+    auth.signOut();
+    return;
   }
   
-  document.getElementById("topAvatar").innerText = userAvatar; // Set Topbar Icon
-  document.getElementById("login").classList.add("hidden"); document.getElementById("home").classList.remove("hidden");
-  loadChatList(); loadEvents();
+  if (doc.exists) {
+    user = doc.data().name;
+    userAvatar = doc.data().avatar || "👤";
+  } else {
+    // Failsafe just in case
+    user = userAuth.displayName || userEmail.split('@')[0];
+    userAvatar = userAuth.photoURL || "👤";
+    await userRef.set({ name: user, avatar: userAvatar, banned: false, joinedAt: Date.now() });
+  }
+  
+  // Since we use Google Photos now, we can hide the Emoji picker!
+  document.getElementById("topAvatar").innerHTML = `<img src="${userAvatar}" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">`; 
+  
+  document.getElementById("login").classList.add("hidden"); 
+  document.getElementById("home").classList.remove("hidden");
+  loadChatList(); 
+  loadEvents();
 });
 
 function logout() { auth.signOut(); }
