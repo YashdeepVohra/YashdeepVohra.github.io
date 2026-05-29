@@ -16,29 +16,24 @@
 </head>
 <body>
 
-<!-- NEW: Wraps the entire app to center it on Desktop monitors -->
 <div class="app-frame">
 
-  <!-- GLOBAL TOP NAVIGATION -->
   <header class="topbar">
     <div class="title">livesociya</div>
     <button class="logoutBtn" onclick="logout()">Logout</button>
   </header>
 
-  <!-- AUTHENTICATION SCREEN -->
   <div class="container" id="login">
     <div class="card" style="margin-top: 40px; text-align: center;">
       <div style="font-size: 48px; margin-bottom: 16px; color: var(--primary);"><i class='bx bxs-bolt-circle'></i></div>
       <h2 style="font-size: 24px; margin-bottom:24px;">Welcome to livesociya</h2>
       <input id="name" placeholder="Enter username">
-      <input id="password" type="password" placeholder="Password">
+      <input id="password" type="password" placeholder="Password" onkeydown="if(event.key === 'Enter') login()">
       <button onclick="login()">Continue <i class='bx bx-right-arrow-alt'></i></button>
     </div>
   </div>
 
-  <!-- MAIN APP PLATFORM -->
   <div class="container hidden" id="home">
-
     <div id="eventsTab">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
         <h3 style="margin: 0; display: flex; align-items: center; gap: 8px;"><i class='bx bx-bolt-circle' style="color: var(--primary);"></i> The Campus Feed</h3>
@@ -56,32 +51,26 @@
     <div id="chatsTab" class="hidden">
       <h3 style="display: flex; align-items: center; gap: 8px;"><i class='bx bx-message-square-dots' style="color: var(--primary);"></i> Messages</h3>
       <div style="display: flex; gap: 10px; margin-bottom: 24px;">
-        <input id="chatUser" placeholder="Search exact username..." style="margin-bottom: 0;" />
+        <input id="chatUser" placeholder="Search exact username..." style="margin-bottom: 0;" onkeydown="if(event.key === 'Enter') startChat()" />
         <button onclick="startChat()" style="width: auto; white-space: nowrap; padding: 0 20px;">Start</button>
       </div>
       <div id="chatList"></div>
     </div>
 
-    <!-- STICKY BOTTOM NAVIGATION BAR -->
     <nav class="bottom-nav">
       <button class="nav-item active" onclick="showTab('events')">
-        <i class='bx bx-bolt-circle'></i>
-        <span>Live Now</span>
+        <i class='bx bx-bolt-circle'></i><span>Live Now</span>
       </button>
       <button class="nav-item" onclick="showTab('recap')">
-        <i class='bx bx-history'></i>
-        <span>Recap</span>
+        <i class='bx bx-history'></i><span>Recap</span>
       </button>
       <button class="nav-item" onclick="showTab('chats')" style="position: relative;">
         <div id="chatBadge" class="nav-badge hidden"></div>
-        <i class='bx bx-message-rounded-dots'></i>
-        <span>Chats</span>
+        <i class='bx bx-message-rounded-dots'></i><span>Chats</span>
       </button>
     </nav>
-
   </div>
 
-  <!-- FULLSCREEN DIRECT MESSENGER -->
   <div id="chatScreen" class="hidden">
     <div class="chat-header">
       <button class="back-btn" onclick="closeChat()"><i class='bx bx-left-arrow-alt'></i></button>
@@ -90,15 +79,12 @@
     </div>
     <div id="messages"></div>
     <div class="chat-footer">
-      <!-- FIX: Bulletproof onkeydown for the Enter key -->
       <input id="msgInput" placeholder="Message..." onkeydown="if(event.key === 'Enter') sendMessage()" />
       <button onclick="sendMessage()"><i class='bx bxs-send'></i></button>
     </div>
   </div>
+</div>
 
-</div> <!-- /app-frame -->
-
-<!-- MODALS (Rendered outside the frame so backgrounds blur correctly) -->
 <div id="deleteModal" class="modal-overlay hidden">
   <div class="modal-content">
     <div style="font-size: 40px; color: var(--primary); margin-bottom: 10px;"><i class='bx bx-slider-alt'></i></div>
@@ -129,7 +115,7 @@
     <input id="place" placeholder="Where is it?">
     <textarea id="description" placeholder="Add a short note or vibe check (optional)..." rows="2"></textarea>
 
-    <div class="time-grid">
+    <div class="time-stack">
       <div>
         <label style="font-size: 11px; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Start Time</label>
         <input type="datetime-local" id="startTime">
