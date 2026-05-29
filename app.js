@@ -409,18 +409,27 @@ function renderAvatar(avatarCode) {
 
 // --- NEW: PROFILE SCREEN LOGIC ---
 function openProfileScreen() {
-  // Fill in the text
-  document.getElementById("profileDisplayName").innerText = realName;
-  document.getElementById("profileUsername").innerText = "@" + user;
-  document.getElementById("profileLargeAvatar").innerHTML = renderAvatar(userAvatar);
-  
-  // Hide main app, show profile
-  document.getElementById("home").classList.add("hidden");
-  document.querySelector(".topbar").classList.add("hidden");
-  document.getElementById("profileScreen").classList.remove("hidden");
+  try {
+    // 1. Fill in the text (with fallbacks just in case the variables are empty!)
+    document.getElementById("profileDisplayName").innerText = typeof realName !== 'undefined' ? realName : "Student";
+    document.getElementById("profileUsername").innerText = "@" + (typeof user !== 'undefined' ? user : "username");
+    
+    // 2. Set the avatar
+    document.getElementById("profileLargeAvatar").innerHTML = renderAvatar(typeof userAvatar !== 'undefined' ? userAvatar : "👤");
+    
+    // 3. Hide main app, show profile
+    document.getElementById("home").classList.add("hidden");
+    const topbar = document.querySelector(".topbar");
+    if(topbar) topbar.classList.add("hidden");
+    document.getElementById("profileScreen").classList.remove("hidden");
 
-  // Load their personal events
-  loadMyEvents();
+    // 4. Load their personal events
+    loadMyEvents();
+
+  } catch (error) {
+    // If anything fails, it will pop up an alert telling you exactly what broke!
+    alert("Profile Screen Error: " + error.message);
+  }
 }
 
 function closeProfileScreen() {
