@@ -279,10 +279,11 @@ async function startChat() {
 
     const chatId = [user, other].sort().join("_");
     
-    // Create chat if it doesn't exist, initializing unread state
+    // NEW: Added lastUpdated to track sorting
     await db.collection("chats").doc(chatId).set({ 
       users: [user, other],
-      unreadBy: "" 
+      unreadBy: "",
+      lastUpdated: Date.now() 
     }, { merge: true });
     
     document.getElementById("chatUser").value = "";
@@ -299,9 +300,7 @@ function openChat(chatId, otherUser) {
   document.querySelector(".topbar").classList.add("hidden");
   document.getElementById("chatScreen").classList.remove("hidden");
   
-  // Clear the unread badge for this chat when opened
   db.collection("chats").doc(chatId).update({ unreadBy: "" });
-  
   loadMessages();
 }
 
@@ -313,13 +312,20 @@ function closeChat() {
   document.getElementById("home").classList.remove("hidden");
 }
 
+// NEW: Captures the Enter key to send messages
+function handleEnter(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    sendMessage();
+  }
+}
+
 function sendMessage() {
   const text = document.getElementById("msgInput").value.trim();
   if (!text || !currentChat) return;
 
   const otherUser = currentChat.split("_").find(u => u !== user);
 
-  // Send message
   db.collection("messages").add({
     chatId: currentChat,
     sender: user,
@@ -327,9 +333,10 @@ function sendMessage() {
     time: Date.now()
   });
 
-  // Update chat doc so the OTHER user gets a notification dot
+  // NEW: Updates lastUpdated so this chat jumps to the top of the list!
   db.collection("chats").doc(currentChat).update({
-    unreadBy: otherUser
+    unreadBy: otherUser,
+    lastUpdated: Date.now()
   });
 
   document.getElementById("msgInput").value = "";
@@ -345,10 +352,31 @@ function loadMessages() {
     .orderBy("time", "asc")
     .onSnapshot(snapshot => {
       box.innerHTML = "";
+      
+      let lastDateString = ""; // NEW: Tracks the day to add separators
+
       snapshot.forEach(doc => {
         const m = doc.data();
         const isMe = m.sender === user;
         
+        // --- NEW: DATE SEPARATOR LOGIC ---
+        const msgDate = new Date(m.time).toLocaleDateString();
+        if (msgDate !== lastDateString) {
+          let displayDate = "";
+          const today = new Date().toLocaleDateString();
+          const yesterdayObj = new Date();
+          yesterdayObj.setDate(yesterdayObj.getDate() - 1);
+          const yesterday = yesterdayObj.toLocaleDateString();
+
+          if (msgDate === today) displayDate = "Today";
+          else if (msgDate === yesterday) displayDate = "Yesterday";
+          else displayDate = new Date(m.time).toLocaleDateString([], { month: 'short', day: 'numeric' });
+
+          box.innerHTML += `<div class="date-separator">${displayDate}</div>`;
+          lastDateString = msgDate; // Update the tracker
+        }
+        // ---------------------------------
+
         box.innerHTML += `
           <div class="msg-wrapper" style="align-items: ${isMe ? 'flex-end' : 'flex-start'};" onclick="toggleTime(this)">
             <div class="msg-bubble ${isMe ? 'msg-sent' : 'msg-received'}">
@@ -360,16 +388,16 @@ function loadMessages() {
           </div>
         `;
       });
+      
+      // Auto-scroll to the bottom when new message arrives
       box.scrollTop = box.scrollHeight; 
       
-      // If we are actively in the chat, instantly clear any unread flags sent to us
       if (currentChat) {
         db.collection("chats").doc(currentChat).update({ unreadBy: "" });
       }
     });
 }
 
-// NEW: loadChatList now checks for Unread Badges!
 function loadChatList() {
   db.collection("chats")
     .where("users", "array-contains", user)
@@ -378,18 +406,25 @@ function loadChatList() {
       list.innerHTML = "";
       
       let hasGlobalUnread = false;
+      let chatsArray = [];
 
+      // Collect all chats into an array first
       snapshot.forEach(doc => {
-        const chat = doc.data();
+        chatsArray.push({ id: doc.id, ...doc.data() });
+      });
+
+      // NEW: Sort the array so the most recently updated chat is at the top (Index 0)
+      chatsArray.sort((a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0));
+
+      // Render the sorted list
+      chatsArray.forEach(chat => {
         const other = chat.users.find(u => u !== user);
         const initial = other.charAt(0);
-        
-        // Check if this chat has unread messages for ME
         const isUnread = chat.unreadBy === user;
         if (isUnread) hasGlobalUnread = true;
         
         list.innerHTML += `
-          <div class="chat-item" onclick="openChat('${doc.id}', '${other}')" style="${isUnread ? 'background: #e0e7ff; border-color: var(--primary);' : ''}">
+          <div class="chat-item" onclick="openChat('${chat.id}', '${other}')" style="${isUnread ? 'background: #e0e7ff; border-color: var(--primary);' : ''}">
             <div class="chat-avatar">${initial}</div>
             <div class="chat-name" style="${isUnread ? 'font-weight: 800;' : ''}">${other}</div>
             ${isUnread ? `<div class="chat-unread-dot"></div>` : ''}
@@ -397,16 +432,13 @@ function loadChatList() {
         `;
       });
 
-      // Show or hide the red dot on the bottom nav bar
       const badge = document.getElementById("chatBadge");
-      if (hasGlobalUnread) {
-        badge.classList.remove("hidden");
-      } else {
-        badge.classList.add("hidden");
-      }
+      if (hasGlobalUnread) badge.classList.remove("hidden");
+      else badge.classList.add("hidden");
     });
 }
 
+// UI NAVIGATION CONTROL LAYER
 function showTab(tab) {
   document.getElementById("eventsTab").classList.add("hidden");
   document.getElementById("recapTab").classList.add("hidden");
