@@ -5,6 +5,11 @@
   <title>livesociya</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#4f46e5">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
 
@@ -20,7 +25,10 @@
 
   <header class="topbar">
     <div class="title">livesociya</div>
-    <button class="logoutBtn" onclick="logout()">Logout</button>
+    <div style="display: flex; gap: 8px;">
+      <button class="profileBtn" onclick="openProfileModal()" id="topAvatar">👤</button>
+      <button class="logoutBtn" onclick="logout()">Logout</button>
+    </div>
   </header>
 
   <div class="container" id="login">
@@ -34,19 +42,20 @@
   </div>
 
   <div class="container hidden" id="home">
+    
     <div id="eventsTab">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
         <h3 style="margin: 0; display: flex; align-items: center; gap: 8px;"><i class='bx bx-bolt-circle' style="color: var(--primary);"></i> The Campus Feed</h3>
         <button onclick="openCreateModal()" style="width: auto; padding: 8px 16px; font-size: 13px; border-radius: 20px; box-shadow: var(--shadow-sm);">+ New Event</button>
       </div>
 
-      <div class="feed-filters" id="feedFilters">
-        <div class="filter-pill active" onclick="setFilter(this, 'All')">All</div>
-        <div class="filter-pill" onclick="setFilter(this, '☕ Chill')">☕ Chill</div>
-        <div class="filter-pill" onclick="setFilter(this, '🍕 Food')">🍕 Food</div>
-        <div class="filter-pill" onclick="setFilter(this, '🎉 Party')">🎉 Party</div>
-        <div class="filter-pill" onclick="setFilter(this, '📚 Study')">📚 Study</div>
-        <div class="filter-pill" onclick="setFilter(this, '🏀 Sports')">🏀 Sports</div>
+      <div class="feed-filters" id="liveFilters">
+        <div class="filter-pill active" onclick="setLiveFilter(this, 'All')">All</div>
+        <div class="filter-pill" onclick="setLiveFilter(this, '☕ Chill')">☕ Chill</div>
+        <div class="filter-pill" onclick="setLiveFilter(this, '🍕 Food')">🍕 Food</div>
+        <div class="filter-pill" onclick="setLiveFilter(this, '🎉 Party')">🎉 Party</div>
+        <div class="filter-pill" onclick="setLiveFilter(this, '📚 Study')">📚 Study</div>
+        <div class="filter-pill" onclick="setLiveFilter(this, '🏀 Sports')">🏀 Sports</div>
       </div>
 
       <div id="events"></div>
@@ -54,7 +63,17 @@
 
     <div id="recapTab" class="hidden">
       <h3 style="display: flex; align-items: center; gap: 8px;"><i class='bx bx-time-five' style="color: var(--primary);"></i> Campus Recap</h3>
-      <p style="font-size: 14px; color: var(--text-muted); margin-top:-10px; margin-bottom:20px;">Everything that went down on campus in the last 24 hours.</p>
+      <p style="font-size: 14px; color: var(--text-muted); margin-top:-10px; margin-bottom:16px;">Everything that went down on campus in the last 24 hours.</p>
+      
+      <div class="feed-filters" id="recapFilters">
+        <div class="filter-pill active" onclick="setRecapFilter(this, 'All')">All</div>
+        <div class="filter-pill" onclick="setRecapFilter(this, '☕ Chill')">☕ Chill</div>
+        <div class="filter-pill" onclick="setRecapFilter(this, '🍕 Food')">🍕 Food</div>
+        <div class="filter-pill" onclick="setRecapFilter(this, '🎉 Party')">🎉 Party</div>
+        <div class="filter-pill" onclick="setRecapFilter(this, '📚 Study')">📚 Study</div>
+        <div class="filter-pill" onclick="setRecapFilter(this, '🏀 Sports')">🏀 Sports</div>
+      </div>
+
       <div id="recapEvents"></div>
     </div>
 
@@ -103,6 +122,27 @@
     <button onclick="confirmMoveToRecap()" style="background: var(--success);">Send to Campus Recap</button>
     <button onclick="confirmDeletePermanently()" style="background: var(--danger);">Delete Completely</button>
     <button onclick="closeDeleteModal()" style="background: #f1f5f9; color: var(--text);">Cancel</button>
+  </div>
+</div>
+
+<div id="profileModal" class="modal-overlay hidden">
+  <div class="modal-content" style="max-width: 320px;">
+    <h3 style="margin-top:0;">Choose Your Avatar</h3>
+    <p style="font-size:13px; color: var(--text-muted); margin-bottom: 20px;">This is how campus will see you.</p>
+    
+    <div class="avatar-grid" id="avatarGrid">
+      <div class="avatar-option" onclick="selectAvatar(this, '🦊')">🦊</div>
+      <div class="avatar-option" onclick="selectAvatar(this, '🐼')">🐼</div>
+      <div class="avatar-option" onclick="selectAvatar(this, '🐯')">🐯</div>
+      <div class="avatar-option" onclick="selectAvatar(this, '🐸')">🐸</div>
+      <div class="avatar-option" onclick="selectAvatar(this, '🐶')">🐶</div>
+      <div class="avatar-option" onclick="selectAvatar(this, '🐱')">🐱</div>
+      <div class="avatar-option" onclick="selectAvatar(this, '🦄')">🦄</div>
+      <div class="avatar-option" onclick="selectAvatar(this, '👽')">👽</div>
+      <div class="avatar-option" onclick="selectAvatar(this, '👻')">👻</div>
+    </div>
+    
+    <button onclick="closeProfileModal()" style="background: #f1f5f9; color: var(--text);">Looks Good</button>
   </div>
 </div>
 
