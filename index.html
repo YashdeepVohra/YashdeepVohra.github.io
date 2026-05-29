@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>livesociya</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
@@ -16,11 +16,16 @@
 </head>
 <body>
 
+<!-- NEW: Wraps the entire app to center it on Desktop monitors -->
+<div class="app-frame">
+
+  <!-- GLOBAL TOP NAVIGATION -->
   <header class="topbar">
     <div class="title">livesociya</div>
     <button class="logoutBtn" onclick="logout()">Logout</button>
   </header>
 
+  <!-- AUTHENTICATION SCREEN -->
   <div class="container" id="login">
     <div class="card" style="margin-top: 40px; text-align: center;">
       <div style="font-size: 48px; margin-bottom: 16px; color: var(--primary);"><i class='bx bxs-bolt-circle'></i></div>
@@ -31,6 +36,7 @@
     </div>
   </div>
 
+  <!-- MAIN APP PLATFORM -->
   <div class="container hidden" id="home">
 
     <div id="eventsTab">
@@ -56,6 +62,7 @@
       <div id="chatList"></div>
     </div>
 
+    <!-- STICKY BOTTOM NAVIGATION BAR -->
     <nav class="bottom-nav">
       <button class="nav-item active" onclick="showTab('events')">
         <i class='bx bx-bolt-circle'></i>
@@ -74,6 +81,7 @@
 
   </div>
 
+  <!-- FULLSCREEN DIRECT MESSENGER -->
   <div id="chatScreen" class="hidden">
     <div class="chat-header">
       <button class="back-btn" onclick="closeChat()"><i class='bx bx-left-arrow-alt'></i></button>
@@ -82,56 +90,60 @@
     </div>
     <div id="messages"></div>
     <div class="chat-footer">
-      <input id="msgInput" placeholder="Message..." onkeypress="handleEnter(event)" />
+      <!-- FIX: Bulletproof onkeydown for the Enter key -->
+      <input id="msgInput" placeholder="Message..." onkeydown="if(event.key === 'Enter') sendMessage()" />
       <button onclick="sendMessage()"><i class='bx bxs-send'></i></button>
     </div>
   </div>
 
-  <div id="deleteModal" class="modal-overlay hidden">
-    <div class="modal-content">
-      <div style="font-size: 40px; color: var(--primary); margin-bottom: 10px;"><i class='bx bx-slider-alt'></i></div>
-      <h3 style="margin-top:0; font-size: 20px;">Manage Live Event</h3>
-      <p style="font-size:14px; color: var(--text-muted); margin-bottom: 24px;">Are you wrapping up early or do you want to completely erase this broadcast?</p>
-      <button onclick="confirmMoveToRecap()" style="background: var(--success);">Send to Campus Recap</button>
-      <button onclick="confirmDeletePermanently()" style="background: var(--danger);">Delete Completely</button>
-      <button onclick="closeDeleteModal()" style="background: #f3f4f6; color: var(--text);">Cancel</button>
-    </div>
+</div> <!-- /app-frame -->
+
+<!-- MODALS (Rendered outside the frame so backgrounds blur correctly) -->
+<div id="deleteModal" class="modal-overlay hidden">
+  <div class="modal-content">
+    <div style="font-size: 40px; color: var(--primary); margin-bottom: 10px;"><i class='bx bx-slider-alt'></i></div>
+    <h3 style="margin-top:0; font-size: 20px;">Manage Live Event</h3>
+    <p style="font-size:14px; color: var(--text-muted); margin-bottom: 24px;">Are you wrapping up early or do you want to completely erase this broadcast?</p>
+    <button onclick="confirmMoveToRecap()" style="background: var(--success);">Send to Campus Recap</button>
+    <button onclick="confirmDeletePermanently()" style="background: var(--danger);">Delete Completely</button>
+    <button onclick="closeDeleteModal()" style="background: #f1f5f9; color: var(--text);">Cancel</button>
   </div>
+</div>
 
-  <div id="createModal" class="modal-overlay hidden">
-    <div class="modal-content" style="text-align: left; max-width: 400px;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-        <h3 style="margin: 0; font-size: 18px;">Broadcast Event</h3>
-        <button onclick="closeCreateModal()" style="background: #f1f5f9; color: var(--text-muted); width: 32px; height: 32px; padding: 0; border-radius: 50%; font-size: 20px;"><i class='bx bx-x'></i></button>
-      </div>
-      
-      <div class="tag-selector" id="tagSelector">
-        <div class="tag active" onclick="selectTag(this, '☕ Chill')">☕ Chill</div>
-        <div class="tag" onclick="selectTag(this, '🍕 Food')">🍕 Food</div>
-        <div class="tag" onclick="selectTag(this, '🎉 Party')">🎉 Party</div>
-        <div class="tag" onclick="selectTag(this, '📚 Study')">📚 Study</div>
-        <div class="tag" onclick="selectTag(this, '🏀 Sports')">🏀 Sports</div>
-      </div>
-
-      <input id="title" placeholder="What's happening?">
-      <input id="place" placeholder="Where is it?">
-      <textarea id="description" placeholder="Add a short note or vibe check (optional)..." rows="2"></textarea>
-
-      <div class="time-grid">
-        <div>
-          <label style="font-size: 11px; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Start Time</label>
-          <input type="datetime-local" id="startTime">
-        </div>
-        <div>
-          <label style="font-size: 11px; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">End Time</label>
-          <input type="datetime-local" id="endTime">
-        </div>
-      </div>
-
-      <button onclick="addEvent()">Publish to Campus <i class='bx bx-send'></i></button>
+<div id="createModal" class="modal-overlay hidden">
+  <div class="modal-content" style="text-align: left; max-width: 400px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+      <h3 style="margin: 0; font-size: 18px;">Broadcast Event</h3>
+      <button onclick="closeCreateModal()" style="background: #f1f5f9; color: var(--text-muted); width: 32px; height: 32px; padding: 0; border-radius: 50%; font-size: 20px;"><i class='bx bx-x'></i></button>
     </div>
-  </div>
+    
+    <div class="tag-selector" id="tagSelector">
+      <div class="tag active" onclick="selectTag(this, '☕ Chill')">☕ Chill</div>
+      <div class="tag" onclick="selectTag(this, '🍕 Food')">🍕 Food</div>
+      <div class="tag" onclick="selectTag(this, '🎉 Party')">🎉 Party</div>
+      <div class="tag" onclick="selectTag(this, '📚 Study')">📚 Study</div>
+      <div class="tag" onclick="selectTag(this, '🏀 Sports')">🏀 Sports</div>
+    </div>
 
-  <script src="app.js"></script>
+    <input id="title" placeholder="What's happening?">
+    <input id="place" placeholder="Where is it?">
+    <textarea id="description" placeholder="Add a short note or vibe check (optional)..." rows="2"></textarea>
+
+    <div class="time-grid">
+      <div>
+        <label style="font-size: 11px; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Start Time</label>
+        <input type="datetime-local" id="startTime">
+      </div>
+      <div>
+        <label style="font-size: 11px; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">End Time</label>
+        <input type="datetime-local" id="endTime">
+      </div>
+    </div>
+
+    <button onclick="addEvent()">Publish to Campus <i class='bx bx-send'></i></button>
+  </div>
+</div>
+
+<script src="app.js"></script>
 </body>
 </html>
