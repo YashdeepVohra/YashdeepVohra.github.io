@@ -282,7 +282,10 @@ function loadEvents() {
       const e = doc.data(); 
       const id = doc.id;
       const attendeesCount = e.participants ? e.participants.length : 1;
-      const attendeeNames = e.participants ? e.participants.join(", ") : e.user;
+      // This makes every username a clickable link that opens the chat!
+      const attendeeNames = e.participants 
+        ? e.participants.map(p => `<span onclick="event.stopPropagation(); startChat('${p}')" style="color: var(--primary); cursor: pointer;">@${p}</span>`).join(", ") 
+        : `<span onclick="event.stopPropagation(); startChat('${e.user}')" style="color: var(--primary); cursor: pointer;">@${e.user}</span>`;
 
       const displayTag = e.tag ? `<div class="event-tag-badge">${e.tag}</div>` : '';
       const displayDesc = e.description ? `<button class="read-more-btn" onclick="toggleEventDesc('${id}')">Read details...</button><div class="event-desc-box">${e.description}</div>` : '';
@@ -344,8 +347,33 @@ function closeDeleteModal() { eventIdToManage = null; document.getElementById("d
 function confirmMoveToRecap() { if (!eventIdToManage) return; db.collection("events").doc(eventIdToManage).update({ expiresAt: Date.now() - 1 }).then(() => closeDeleteModal()); }
 function confirmDeletePermanently() { if (!eventIdToManage) return; db.collection("events").doc(eventIdToManage).delete().then(() => closeDeleteModal()); }
 
-async function startChat() {
-  const other = document.getElementById("chatUser").value.trim();
+// ==========================================
+// 💬 HYBRID CHAT ENGINE (Crossed Paths & Icebreakers)
+// ==========================================
+
+let chatDocUnsubscribe = null;
+let currentChatStatus = "unlocked";
+let currentChatInitiator = "";
+let myMessageCount = 0;
+
+// NEW: Checks if two users shared an event in the last 24 hours
+async function checkCrossedPaths(user1, user2) {
+  const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
+  const snap = await db.collection("events").where("participants", "array-contains", user1).get();
+  for (let doc of snap.docs) {
+    const e = doc.data();
+    if (e.participants.includes(user2) && e.expiresAt > oneDayAgo) {
+      return true; // They crossed paths!
+    }
+  }
+  return false;
+}
+
+// UPDATED: Now handles both the Search Bar AND clicking a name
+async function startChat(clickedUsername = null) {
+  // If they clicked a name, use it. Otherwise, use the search bar.
+  const other = clickedUsername || document.getElementById("chatUser").value.trim();
+  
   if (!other) return alert("Please enter a username.");
   if (other === user) return alert("You can't start a chat with yourself!");
 
@@ -353,41 +381,101 @@ async function startChat() {
     const otherEmail = other.toLowerCase() + "@livesociya.com";
     const userRef = db.collection("users").doc(otherEmail);
     const docSnap = await userRef.get();
-    if (!docSnap.exists) return alert(`User "${other}" does not exist.`);
+    if (!docSnap.exists) return alert(`User "@${other}" does not exist on campus.`);
 
     const chatId = [user, other].sort().join("_");
-    await db.collection("chats").doc(chatId).set({ users: [user, other], unreadBy: "", lastUpdated: Date.now() }, { merge: true });
+    const chatDoc = await db.collection("chats").doc(chatId).get();
     
-    document.getElementById("chatUser").value = ""; openChat(chatId, other);
+    // If this is a brand new chat, figure out if it should be Locked or Unlocked
+    if (!chatDoc.exists) {
+      const crossedPaths = await checkCrossedPaths(user, other);
+      await db.collection("chats").doc(chatId).set({ 
+        users: [user, other], 
+        unreadBy: "", 
+        lastUpdated: Date.now(),
+        status: crossedPaths ? "unlocked" : "icebreaker", // The Magic Gatekeeper
+        initiatedBy: user
+      });
+    }
+    
+    if(!clickedUsername) document.getElementById("chatUser").value = ""; 
+    openChat(chatId, other);
   } catch (error) { alert("Error finding user."); }
 }
 
 function openChat(chatId, otherUser) {
-  currentChat = chatId; document.getElementById("chatHeaderAvatar").innerText = otherUser.charAt(0); document.getElementById("chatWithTitle").innerText = otherUser;
-  document.getElementById("home").classList.add("hidden"); document.querySelector(".topbar").classList.add("hidden"); document.getElementById("chatScreen").classList.remove("hidden");
-  db.collection("chats").doc(chatId).set({ unreadBy: "" }, { merge: true }); loadMessages();
+  currentChat = chatId; 
+  document.getElementById("chatHeaderAvatar").innerText = otherUser.charAt(0); 
+  document.getElementById("chatWithTitle").innerText = otherUser;
+  
+  document.getElementById("home").classList.add("hidden"); 
+  document.querySelector(".topbar").classList.add("hidden"); 
+  document.getElementById("chatScreen").classList.remove("hidden");
+  
+  db.collection("chats").doc(chatId).set({ unreadBy: "" }, { merge: true }); 
+  
+  // Listen to the Chat's Status (Locked or Unlocked)
+  if(chatDocUnsubscribe) chatDocUnsubscribe();
+  chatDocUnsubscribe = db.collection("chats").doc(chatId).onSnapshot(doc => {
+     if(doc.exists) {
+         currentChatStatus = doc.data().status || "unlocked";
+         currentChatInitiator = doc.data().initiatedBy || "";
+         updateChatFooterUI();
+     }
+  });
+
+  loadMessages();
 }
 
 function closeChat() {
-  currentChat = null; if (messagesUnsubscribe) messagesUnsubscribe();
-  document.getElementById("chatScreen").classList.add("hidden"); document.querySelector(".topbar").classList.remove("hidden"); document.getElementById("home").classList.remove("hidden");
+  currentChat = null; 
+  if (messagesUnsubscribe) messagesUnsubscribe();
+  if (chatDocUnsubscribe) chatDocUnsubscribe();
+  document.getElementById("chatScreen").classList.add("hidden"); 
+  document.querySelector(".topbar").classList.remove("hidden"); 
+  document.getElementById("home").classList.remove("hidden");
 }
 
-function sendMessage() {
-  const text = document.getElementById("msgInput").value.trim(); if (!text || !currentChat) return;
+async function sendMessage() {
+  const input = document.getElementById("msgInput");
+  if(!input) return; // If locked, input doesn't exist!
+  
+  const text = input.value.trim(); 
+  if (!text || !currentChat) return;
+  
   const otherUser = currentChat.split("_").find(u => u !== user);
-  db.collection("messages").add({ chatId: currentChat, sender: user, text: text, time: Date.now() });
-  db.collection("chats").doc(currentChat).set({ unreadBy: otherUser, lastUpdated: Date.now() }, { merge: true });
-  document.getElementById("msgInput").value = "";
+  
+  // 1. Send the message
+  await db.collection("messages").add({ chatId: currentChat, sender: user, text: text, time: Date.now() });
+  
+  // 2. If I am replying to an Icebreaker they sent, SHATTER THE LOCK!
+  let newStatus = currentChatStatus;
+  if (currentChatStatus === "icebreaker" && currentChatInitiator === otherUser) {
+      newStatus = "unlocked";
+  }
+
+  await db.collection("chats").doc(currentChat).set({ 
+      unreadBy: otherUser, 
+      lastUpdated: Date.now(),
+      status: newStatus 
+  }, { merge: true });
+  
+  input.value = "";
 }
 
 function loadMessages() {
   if (messagesUnsubscribe) messagesUnsubscribe();
   const box = document.getElementById("messages");
+  
   messagesUnsubscribe = db.collection("messages").where("chatId", "==", currentChat).orderBy("time", "asc").onSnapshot(snapshot => {
       box.innerHTML = ""; let lastDateString = ""; 
+      myMessageCount = 0;
+      let theirMessageCount = 0;
+
       snapshot.forEach(doc => {
         const m = doc.data(); const isMe = m.sender === user;
+        if(isMe) myMessageCount++; else theirMessageCount++;
+        
         const msgDate = new Date(m.time).toLocaleDateString();
         if (msgDate !== lastDateString) {
           let displayDate = ""; const today = new Date().toLocaleDateString();
@@ -397,8 +485,28 @@ function loadMessages() {
         }
         box.innerHTML += `<div class="msg-wrapper" style="align-items: ${isMe ? 'flex-end' : 'flex-start'};" onclick="toggleTime(this)"><div class="msg-bubble ${isMe ? 'msg-sent' : 'msg-received'}">${m.text}</div><div class="msg-time" style="text-align: ${isMe ? 'right' : 'left'}">${formatTime(m.time)}</div></div>`;
       });
+      
+      // Auto-Unlock if they replied to my Icebreaker
+      if (currentChatStatus === "icebreaker" && theirMessageCount > 0 && currentChatInitiator === user) {
+          db.collection("chats").doc(currentChat).update({ status: "unlocked" });
+      }
+
       box.scrollTop = box.scrollHeight; 
+      updateChatFooterUI();
     });
+}
+
+// NEW: Dynamically changes the bottom bar to a lock or an input field
+function updateChatFooterUI() {
+  const footer = document.querySelector(".chat-footer");
+  if (currentChatStatus === "icebreaker" && currentChatInitiator === user && myMessageCount >= 1) {
+      // 🔒 LOCK IT DOWN!
+      footer.innerHTML = `<div style="width: 100%; text-align: center; color: var(--text-muted); font-size: 13px; font-weight: bold; padding: 10px;"><i class='bx bxs-lock-alt'></i> Icebreaker sent! Waiting for reply...</div>`;
+  } else {
+      // 🔓 KEEP IT OPEN!
+      footer.innerHTML = `<input id="msgInput" placeholder="Message..." onkeydown="if(event.key === 'Enter') sendMessage()" />
+                          <button onclick="sendMessage()"><i class='bx bxs-send'></i></button>`;
+  }
 }
 
 function loadChatList() {
