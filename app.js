@@ -27,6 +27,8 @@ let userAvatar = "👤"; // Default Avatar
 let messagesUnsubscribe = null; 
 let eventIdToManage = null;
 let currentSelectedTag = '☕ Chill'; 
+let googlePfp = ""; 
+let realName = "";
 
 // NEW: INDEPENDENT FILTERS
 let currentLiveFilter = 'All';
@@ -75,42 +77,40 @@ auth.onAuthStateChanged(async (userAuth) => {
     
     if (doc.exists && doc.data().banned === true) {
       alert("SECURITY ALERT: Your account has been suspended.");
-      auth.signOut();
-      return;
+      auth.signOut(); return;
     }
     
-    // Create base profile if they are brand new
     if (!doc.exists) {
       await userRef.set({ 
         name: userAuth.displayName || userEmail.split('@')[0], 
+        googlePfp: userAuth.photoURL || "", // Safely store their real photo forever
         avatar: userAuth.photoURL || "👤", 
-        banned: false, 
-        joinedAt: Date.now() 
+        banned: false, joinedAt: Date.now() 
       });
-      doc = await userRef.get(); // Re-fetch the fresh document
+      doc = await userRef.get();
     }
 
-    // NEW FIX: Hide the login screen BEFORE showing the username modal
     if (!doc.data().username) {
       document.getElementById("login").classList.add("hidden"); 
       document.getElementById("usernameModal").classList.remove("hidden");
       return; 
     }
 
-    // If they have a username, let them in!
+    // Set all global data
     user = doc.data().username; 
+    realName = doc.data().name;
     userAvatar = doc.data().avatar || "👤";
+    googlePfp = doc.data().googlePfp || userAuth.photoURL;
     
-    document.getElementById("topAvatar").innerHTML = `<img src="${userAvatar}" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">`; 
+    // Safely render the avatar using our new helper!
+    document.getElementById("topAvatar").innerHTML = renderAvatar(userAvatar); 
     
     document.getElementById("login").classList.add("hidden"); 
     document.getElementById("home").classList.remove("hidden");
-    loadChatList(); 
-    loadEvents();
+    loadChatList(); loadEvents();
 
   } catch (error) {
-    console.error(error);
-    alert("Database Error: " + error.message + " (Check your Firestore Rules!)");
+    console.error(error); alert("Database Error: " + error.message);
   }
 });
 
@@ -183,15 +183,18 @@ function logout() { auth.signOut(); }
 function openProfileModal() { document.getElementById("profileModal").classList.remove("hidden"); }
 function closeProfileModal() { document.getElementById("profileModal").classList.add("hidden"); }
 
-function selectAvatar(element, emoji) {
-  // Update Database
-  db.collection("users").doc(userEmail).set({ avatar: emoji }, { merge: true });
-  userAvatar = emoji;
-  document.getElementById("topAvatar").innerText = emoji; // Update Navbar
-
-  // Highlight selection in modal
-  document.querySelectorAll('.avatar-option').forEach(opt => opt.classList.remove('selected'));
-  element.classList.add('selected');
+function selectAvatar(element, type) {
+  // If they click google, use their saved googlePfp. Otherwise, use the emoji.
+  let newAvatar = (type === 'google') ? googlePfp : type;
+  
+  db.collection("users").doc(userEmail).set({ avatar: newAvatar }, { merge: true });
+  userAvatar = newAvatar;
+  
+  // Update both the top bar and the profile screen instantly
+  document.getElementById("topAvatar").innerHTML = renderAvatar(userAvatar);
+  document.getElementById("profileLargeAvatar").innerHTML = renderAvatar(userAvatar);
+  
+  closeProfileModal();
 }
 // --------------------------------
 
@@ -394,4 +397,56 @@ function showTab(tab) {
   if (tab === 'events') { document.getElementById("eventsTab").classList.remove("hidden"); document.querySelectorAll(".nav-item")[0].classList.add("active"); } 
   else if (tab === 'recap') { document.getElementById("recapTab").classList.remove("hidden"); document.querySelectorAll(".nav-item")[1].classList.add("active"); } 
   else { document.getElementById("chatsTab").classList.remove("hidden"); document.querySelectorAll(".nav-item")[2].classList.add("active"); }
+}
+
+// Smart function to render either an image tag or an emoji string
+function renderAvatar(avatarCode) {
+  if (avatarCode && avatarCode.startsWith("http")) {
+    return `<img src="${avatarCode}" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">`;
+  }
+  return avatarCode || "👤";
+}
+
+// --- NEW: PROFILE SCREEN LOGIC ---
+function openProfileScreen() {
+  // Fill in the text
+  document.getElementById("profileDisplayName").innerText = realName;
+  document.getElementById("profileUsername").innerText = "@" + user;
+  document.getElementById("profileLargeAvatar").innerHTML = renderAvatar(userAvatar);
+  
+  // Hide main app, show profile
+  document.getElementById("home").classList.add("hidden");
+  document.querySelector(".topbar").classList.add("hidden");
+  document.getElementById("profileScreen").classList.remove("hidden");
+
+  // Load their personal events
+  loadMyEvents();
+}
+
+function closeProfileScreen() {
+  document.getElementById("profileScreen").classList.add("hidden");
+  document.querySelector(".topbar").classList.remove("hidden");
+  document.getElementById("home").classList.remove("hidden");
+}
+
+function loadMyEvents() {
+  const myEventsBox = document.getElementById("myProfileEvents");
+  myEventsBox.innerHTML = "<p style='text-align:center; color:gray;'>Loading...</p>";
+  
+  db.collection("events").where("user", "==", user).orderBy("startTime", "desc").get().then(snapshot => {
+    myEventsBox.innerHTML = "";
+    if (snapshot.empty) {
+      myEventsBox.innerHTML = `<div class="empty-state"><i class='bx bx-ghost'></i><p>You haven't hosted any events yet.</p></div>`;
+      return;
+    }
+    snapshot.forEach(doc => {
+      const e = doc.data();
+      myEventsBox.innerHTML += `
+        <div class="event card" style="padding: 16px;">
+          <div class="event-title" style="font-size: 16px;">${e.title}</div>
+          <div class="event-meta" style="font-size: 13px;">${e.tag || ''} • ${e.place}</div>
+        </div>
+      `;
+    });
+  });
 }
