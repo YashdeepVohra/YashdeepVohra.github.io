@@ -12,7 +12,12 @@
 
 html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; overscroll-behavior-y: none; }
 body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--desktop-bg); color: var(--text); -webkit-font-smoothing: antialiased; display: flex; justify-content: center; align-items: flex-start; }
-.app-frame { width: 100%; max-width: 500px; height: 100dvh; overflow-y: auto; background: var(--bg); position: relative; box-shadow: var(--shadow-lg); margin: 0 auto; }
+.app-frame { 
+  width: 100%; max-width: 500px; height: 100dvh; 
+  overflow-y: auto; 
+  -webkit-overflow-scrolling: touch; /* THIS FIXES THE LAG! */
+  background: var(--bg); position: relative; box-shadow: var(--shadow-lg); margin: 0 auto; 
+}
 
 .topbar { background: rgba(248, 250, 252, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 900; }
 .title { font-weight: 800; font-size: 22px; letter-spacing: -0.5px; background: linear-gradient(135deg, var(--primary), #818cf8); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
