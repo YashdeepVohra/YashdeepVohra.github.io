@@ -26,6 +26,7 @@ let user = "";
 let messagesUnsubscribe = null; 
 let eventIdToManage = null;
 let currentSelectedTag = '☕ Chill'; 
+let currentFeedFilter = 'All';
 
 function formatTime(ms) {
   const messageDate = new Date(ms);
@@ -86,6 +87,19 @@ function selectTag(element, tag) {
   document.querySelectorAll('.tag').forEach(t => t.classList.remove('active'));
   element.classList.add('active');
   currentSelectedTag = element.innerText;
+}
+
+function setFilter(tag) {
+  currentFeedFilter = tag;
+  
+  // Update the UI to highlight the clicked pill
+  document.querySelectorAll('.filter-pill').forEach(pill => {
+    if (pill.innerText === tag) pill.classList.add('active');
+    else pill.classList.remove('active');
+  });
+
+  // Reload the feed to apply the filter!
+  loadEvents();
 }
 
 function toggleEventDesc(eventId) {
@@ -150,27 +164,34 @@ function loadEvents() {
         ? `<span style="background: #fef08a; color: #854d0e; padding: 4px 8px; border-radius: 12px; font-size: 10px; font-weight: 800; text-transform: uppercase;">Upcoming</span>`
         : `<span style="background: #fee2e2; color: #dc2626; padding: 4px 8px; border-radius: 12px; font-size: 10px; font-weight: 800; text-transform: uppercase;"><i class='bx bx-radio-circle-marked bx-burst'></i> Live</span>`;
 
+      // NEW: Check if the event matches the current filter
+      const matchesFilter = (currentFeedFilter === 'All' || e.tag === currentFeedFilter);
+
       if (e.expiresAt > currentTime) {
-        activeCount++;
-        const hasJoined = e.participants && e.participants.includes(user);
-        liveList.innerHTML += `
-          <div class="event card" id="event-${id}">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start;">${displayTag} ${statusBadge}</div>
-            <div class="event-title">${e.title}</div>
-            <div class="event-meta"><i class='bx bx-map'></i> ${e.place} • hosted by ${e.user}</div>
-            ${displayDesc}
-            <div class="attendees"><i class='bx bx-group'></i> Going (${attendeesCount}): ${attendeeNames}</div>
-            ${e.user === user ? `<button class="delete-btn" onclick="openDeleteModal('${id}')"><i class='bx bx-slider'></i> Manage Event</button>` : (hasJoined ? `<button class="leave-btn" onclick="leaveEvent('${id}')"><i class='bx bx-exit'></i> Leave Hangout</button>` : `<button class="join" onclick="joinEvent('${id}')">Join Hangout</button>`)}
-          </div>`;
+        if (matchesFilter) {
+          activeCount++;
+          const hasJoined = e.participants && e.participants.includes(user);
+          liveList.innerHTML += `
+            <div class="event card" id="event-${id}">
+              <div style="display: flex; justify-content: space-between; align-items: flex-start;">${displayTag} ${statusBadge}</div>
+              <div class="event-title">${e.title}</div>
+              <div class="event-meta"><i class='bx bx-map'></i> ${e.place} • hosted by ${e.user}</div>
+              ${displayDesc}
+              <div class="attendees"><i class='bx bx-group'></i> Going (${attendeesCount}): ${attendeeNames}</div>
+              ${e.user === user ? `<button class="delete-btn" onclick="openDeleteModal('${id}')"><i class='bx bx-slider'></i> Manage Event</button>` : (hasJoined ? `<button class="leave-btn" onclick="leaveEvent('${id}')"><i class='bx bx-exit'></i> Leave Hangout</button>` : `<button class="join" onclick="joinEvent('${id}')">Join Hangout</button>`)}
+            </div>`;
+        }
       } else if (e.expiresAt > oneDayAgo) {
-        recapCount++;
-        recapList.innerHTML += `
-          <div class="event card" style="background: #f9fafb; border: none; box-shadow: none;">
-            ${displayTag}
-            <div class="event-title" style="color: #4b5563;">${e.title}</div>
-            <div class="event-meta"><i class='bx bx-map'></i> ${e.place} • hosted by ${e.user}</div>
-            <div class="attendees" style="background:#f3f4f6; color: var(--text-muted);"><i class='bx bx-check-double'></i> Attended (${attendeesCount}): ${attendeeNames}</div>
-          </div>`;
+        if (matchesFilter) {
+          recapCount++;
+          recapList.innerHTML += `
+            <div class="event card" style="background: #f9fafb; border: none; box-shadow: none;">
+              ${displayTag}
+              <div class="event-title" style="color: #4b5563;">${e.title}</div>
+              <div class="event-meta"><i class='bx bx-map'></i> ${e.place} • hosted by ${e.user}</div>
+              <div class="attendees" style="background:#f3f4f6; color: var(--text-muted);"><i class='bx bx-check-double'></i> Attended (${attendeesCount}): ${attendeeNames}</div>
+            </div>`;
+        }
       }
     });
 
