@@ -1,187 +1,152 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>livesociya — show up, together</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <style>
-    * {
-      box-sizing: border-box;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    }
+  <meta charset="UTF-8">
+  <title>livesociya</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <!-- Premium Font & Modern Icons -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
 
-    body {
-      margin: 0;
-      background: #f7f9fc;
-      color: #111;
-    }
+  <!-- Firebase Core Architecture (Compat) -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
-    header {
-      background: white;
-      padding: 24px 16px;
-      border-bottom: 1px solid #e5e7eb;
-    }
-
-    .logo {
-      font-size: 22px;
-      font-weight: 700;
-    }
-
-    .container {
-      max-width: 900px;
-      margin: auto;
-      padding: 24px 16px;
-    }
-
-    .hero {
-      padding: 60px 0;
-      text-align: center;
-    }
-
-    .hero h1 {
-      font-size: 42px;
-      margin-bottom: 16px;
-    }
-
-    .hero p {
-      font-size: 18px;
-      color: #555;
-      max-width: 600px;
-      margin: auto;
-    }
-
-    .cta {
-      margin-top: 32px;
-    }
-
-    .cta a {
-      display: inline-block;
-      background: #2563eb;
-      color: white;
-      padding: 14px 28px;
-      border-radius: 10px;
-      text-decoration: none;
-      font-size: 16px;
-      font-weight: 600;
-    }
-
-    .section {
-      margin-top: 60px;
-    }
-
-    .section h2 {
-      font-size: 28px;
-      margin-bottom: 16px;
-    }
-
-    .features {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 24px;
-    }
-
-    @media (min-width: 700px) {
-      .features {
-        grid-template-columns: 1fr 1fr 1fr;
-      }
-    }
-
-    .card {
-      background: white;
-      padding: 24px;
-      border-radius: 16px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-    }
-
-    .card h3 {
-      margin-top: 0;
-    }
-
-    footer {
-      margin-top: 80px;
-      padding: 40px 16px;
-      text-align: center;
-      color: #777;
-    }
-  </style>
+  <!-- Link to External Stylesheet -->
+  <link rel="stylesheet" href="style.css">
 </head>
-
 <body>
 
-<header>
-  <div class="container">
-    <div class="logo">livesociya</div>
+  <!-- GLOBAL TOP NAVIGATION -->
+  <header class="topbar">
+    <div class="title">livesociya</div>
+    <button class="logoutBtn" onclick="logout()">Logout</button>
+  </header>
+
+  <!-- AUTHENTICATION SCREEN -->
+  <div class="container" id="login">
+    <div class="card" style="margin-top: 40px; text-align: center;">
+      <div style="font-size: 48px; margin-bottom: 16px; color: var(--primary);"><i class='bx bxs-bolt-circle'></i></div>
+      <h2 style="font-size: 24px; margin-bottom:24px;">Welcome to livesociya</h2>
+      <input id="name" placeholder="Enter username">
+      <input id="password" type="password" placeholder="Password">
+      <button onclick="login()">Continue <i class='bx bx-right-arrow-alt'></i></button>
+    </div>
   </div>
-</header>
 
-<div class="container">
+  <!-- MAIN APP PLATFORM -->
+  <div class="container hidden" id="home">
 
-  <section class="hero">
-    <h1>Not everything needs a DM.</h1>
-    <p>
-      livesociya helps students do things together —
-      study, walk, chill, play, or just be around people —
-      without awkward messages or pressure.
-    </p>
-    <div class="cta">
-      <a href="YashdeepVohra.github.io\app">Join livesociya</a>
+    <!-- TAB 1: LIVE BROADCASTS -->
+    <div id="eventsTab">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h3 style="margin: 0; display: flex; align-items: center; gap: 8px;"><i class='bx bx-bolt-circle' style="color: var(--primary);"></i> The Campus Feed</h3>
+        <button onclick="openCreateModal()" style="width: auto; padding: 8px 16px; font-size: 13px; border-radius: 20px; box-shadow: var(--shadow-sm);">+ New Event</button>
+      </div>
+      <div id="events"></div>
     </div>
-  </section>
 
-  <section class="section">
-    <h2>What is livesociya?</h2>
-    <p>
-      livesociya is a social platform for real life.
-      Instead of posting for attention, you post what you're actually doing —
-      and people around you can join.
-    </p>
-  </section>
-
-  <section class="section">
-    <h2>How it works</h2>
-    <div class="features">
-      <div class="card">
-        <h3>Post what you're doing</h3>
-        <p>Studying in the library? Walking after class? Sitting in the canteen? Just post it.</p>
-      </div>
-      <div class="card">
-        <h3>People join</h3>
-        <p>Others nearby see it and can join without awkward DMs or pressure.</p>
-      </div>
-      <div class="card">
-        <h3>Do it together</h3>
-        <p>You meet, talk, work, walk, or just be around each other. That’s it.</p>
-      </div>
+    <!-- TAB 2: CAMPUS RECAP -->
+    <div id="recapTab" class="hidden">
+      <h3 style="display: flex; align-items: center; gap: 8px;"><i class='bx bx-time-five' style="color: var(--primary);"></i> Campus Recap</h3>
+      <p style="font-size: 14px; color: var(--text-muted); margin-top:-10px; margin-bottom:20px;">Everything that went down on campus in the last 24 hours.</p>
+      <div id="recapEvents"></div>
     </div>
-  </section>
 
-  <section class="section">
-    <h2>Why we’re building this</h2>
-    <p>
-      College is full of people — but starting conversations is hard.
-      livesociya makes it easy to just show up and be part of something.
-    </p>
-  </section>
+    <!-- TAB 3: DIRECT MESSAGES -->
+    <div id="chatsTab" class="hidden">
+      <h3 style="display: flex; align-items: center; gap: 8px;"><i class='bx bx-message-square-dots' style="color: var(--primary);"></i> Messages</h3>
+      <div style="display: flex; gap: 10px; margin-bottom: 24px;">
+        <input id="chatUser" placeholder="Search exact username..." style="margin-bottom: 0;" />
+        <button onclick="startChat()" style="width: auto; white-space: nowrap; padding: 0 20px;">Start</button>
+      </div>
+      <div id="chatList"></div>
+    </div>
 
-  <section class="section" id="join">
-    <h2>Join livesociya</h2>
-    <p>
-      We’re launching this inside colleges first.
-      If you want to try it early, leave your email and we’ll invite you.
-    </p>
+    <!-- STICKY BOTTOM NAVIGATION BAR -->
+    <!-- STICKY BOTTOM NAVIGATION BAR (UPDATED) -->
+    <nav class="bottom-nav">
+      <button class="nav-item active" onclick="showTab('events')">
+        <i class='bx bx-bolt-circle'></i>
+        <span>Live Now</span>
+      </button>
+      <button class="nav-item" onclick="showTab('recap')">
+        <i class='bx bx-history'></i>
+        <span>Recap</span>
+      </button>
+      <button class="nav-item" onclick="showTab('chats')" style="position: relative;">
+        <!-- NEW: Notification Badge -->
+        <div id="chatBadge" class="nav-badge hidden"></div>
+        <i class='bx bx-message-rounded-dots'></i>
+        <span>Chats</span>
+      </button>
+    </nav>
 
-    <form>
-      <input type="email" placeholder="your email" style="padding:12px;width:260px;border-radius:8px;border:1px solid #ddd;">
-      <button type="submit" style="padding:12px 20px;border-radius:8px;border:none;background:#2563eb;color:white;margin-left:8px;">Notify me</button>
-    </form>
-  </section>
+  </div>
 
-</div>
+  <!-- FULLSCREEN DIRECT MESSENGER -->
+  <div id="chatScreen" class="hidden">
+    <div class="chat-header">
+      <button class="back-btn" onclick="closeChat()"><i class='bx bx-left-arrow-alt'></i></button>
+      <div class="chat-avatar" id="chatHeaderAvatar" style="width: 36px; height: 36px; font-size: 14px;">?</div>
+      <div id="chatWithTitle" style="font-weight: 700; font-size: 18px;">User</div>
+    </div>
+    <div id="messages"></div>
+    <div class="chat-footer">
+      <input id="msgInput" placeholder="Message..." />
+      <button onclick="sendMessage()"><i class='bx bxs-send'></i></button>
+    </div>
+  </div>
 
-<footer>
-  © 2026 livesociya — show up, together.
-</footer>
+  <!-- BROADCAST MANAGEMENT SYSTEM MODAL -->
+  <div id="createModal" class="modal-overlay hidden">
+    <div class="modal-content" style="text-align: left; max-width: 400px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+        <h3 style="margin: 0; font-size: 18px;">Broadcast Event</h3>
+        <button onclick="closeCreateModal()" style="background: #f3f4f6; color: var(--text-muted); width: 32px; height: 32px; padding: 0; border-radius: 50%; font-size: 20px;"><i class='bx bx-x'></i></button>
+      </div>
+      
+      <div class="tag-selector" id="tagSelector">
+        <div class="tag active" onclick="selectTag(this, '☕ Chill')">☕ Chill</div>
+        <div class="tag" onclick="selectTag(this, '🍕 Food')">🍕 Food</div>
+        <div class="tag" onclick="selectTag(this, '🎉 Party')">🎉 Party</div>
+        <div class="tag" onclick="selectTag(this, '📚 Study')">📚 Study</div>
+        <div class="tag" onclick="selectTag(this, '🏀 Sports')">🏀 Sports</div>
+      </div>
 
+      <input id="title" placeholder="What's happening?">
+      <input id="place" placeholder="Where is it?">
+      <textarea id="description" placeholder="Add a short note or vibe check (optional)..." rows="2"></textarea>
+
+      <div style="display: flex; gap: 12px; margin-bottom: 16px;">
+        <div style="flex: 1;">
+          <label style="font-size: 11px; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Start Time</label>
+          <input type="datetime-local" id="startTime" style="margin-bottom: 0; padding: 10px;">
+        </div>
+        <div style="flex: 1;">
+          <label style="font-size: 11px; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">End Time</label>
+          <input type="datetime-local" id="endTime" style="margin-bottom: 0; padding: 10px;">
+        </div>
+      </div>
+
+      <button onclick="addEvent()">Publish to Campus <i class='bx bx-send'></i></button>
+    </div>
+  </div>
+  
+  <div id="deleteModal" class="modal-overlay hidden">
+    <div class="modal-content">
+      <div style="font-size: 40px; color: var(--primary); margin-bottom: 10px;"><i class='bx bx-slider-alt'></i></div>
+      <h3 style="margin-top:0; font-size: 20px;">Manage Live Event</h3>
+      <p style="font-size:14px; color: var(--text-muted); margin-bottom: 24px;">Are you wrapping up early or do you want to completely erase this broadcast?</p>
+      <button onclick="confirmMoveToRecap()" style="background: var(--success);">Send to Campus Recap</button>
+      <button onclick="confirmDeletePermanently()" style="background: var(--danger);">Delete Completely</button>
+      <button onclick="closeDeleteModal()" style="background: #f3f4f6; color: var(--text);">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Link to External Application Logic -->
+  <script src="app.js"></script>
 </body>
 </html>
-
