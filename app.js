@@ -94,7 +94,7 @@ function toggleTime(element) {
 }
 
 // ==========================================
-// 🔐 BULLETPROOF AUTHENTICATION (THE TUNNEL METHOD)
+// 🔐 BULLETPROOF AUTHENTICATION (THE SESSION LOCK)
 // ==========================================
 
 function switchScreen(screenId) {
@@ -107,10 +107,19 @@ function switchScreen(screenId) {
   if (screenId) document.getElementById(screenId)?.classList.remove("hidden");
 }
 
-// 1. Force the loading screen to stay ON during the entire trip
-document.getElementById("loading-screen")?.classList.remove("hidden");
+// 1. THE LOCK: Check if we just bounced back from Google
+const isAuthPending = sessionStorage.getItem("authPending") === "true";
 
+if (isAuthPending) {
+  // We are returning from Google! Lock the loading screen ON. 
+  document.getElementById("loading-screen")?.classList.remove("hidden");
+}
+
+// 2. The Login Trigger
 function loginWithGoogle() {
+  // ENGAGE THE LOCK: Tell the browser we are leaving for Google
+  sessionStorage.setItem("authPending", "true");
+  
   const loader = document.getElementById("loading-screen");
   if (loader) loader.classList.remove("hidden");
 
@@ -120,33 +129,38 @@ function loginWithGoogle() {
       return auth.signInWithRedirect(provider);
     })
     .catch((error) => {
-      console.error("Auth Error:", error);
+      sessionStorage.removeItem("authPending"); // Unlock if it fails immediately
       if (loader) loader.classList.add("hidden"); 
       alert("Login Error: " + error.message);
     });
 }
 
-// 2. THE REDIRECT LATCH: Wait for Firebase to finish unpacking the ticket!
+// 3. The Redirect Catcher (Waits patiently for Firebase to finish)
 auth.getRedirectResult().then((result) => {
-  // If the ticket is empty AND they aren't logged in, it is finally safe to show the login screen
+  // FIREBASE IS DONE! Remove the lock.
+  sessionStorage.removeItem("authPending");
+  
+  // If Firebase finished but found no ticket, ONLY THEN do we show the login screen.
   if ((!result || !result.user) && !auth.currentUser) {
     switchScreen("login");
     document.getElementById("topAvatar")?.classList.add("hidden");
     document.getElementById("loading-screen")?.classList.add("hidden");
   }
 }).catch((error) => {
+  sessionStorage.removeItem("authPending"); // Remove lock on error
   console.error("Redirect Error:", error);
-  alert("Login Error: " + error.message);
   switchScreen("login");
   document.getElementById("loading-screen")?.classList.add("hidden");
+  alert("Authentication failed: " + error.message);
 });
 
-// 3. THE STRICT UI GATEKEEPER
+// 4. The Strict UI Gatekeeper
 auth.onAuthStateChanged(async (userAuth) => {
   document.querySelector(".topbar")?.classList.remove("hidden"); 
 
   if (userAuth) {
-    // Keep loader on while we fetch their campus data
+    // WE HAVE A USER! Remove the lock and boot the app.
+    sessionStorage.removeItem("authPending");
     document.getElementById("loading-screen")?.classList.remove("hidden");
     
     try {
@@ -184,6 +198,15 @@ auth.onAuthStateChanged(async (userAuth) => {
     } catch (error) {
       console.error("Gatekeeper Error:", error); 
       switchScreen("login"); 
+      document.getElementById("loading-screen")?.classList.add("hidden");
+    }
+  } else {
+    // NO USER FOUND.
+    // THE MAGIC RULE: If the lock is engaged, ignore this and DO NOT show the login screen. 
+    // Only show the login screen if we are completely sure we aren't waiting for Google.
+    if (sessionStorage.getItem("authPending") !== "true") {
+      switchScreen("login");
+      document.getElementById("topAvatar")?.classList.add("hidden");
       document.getElementById("loading-screen")?.classList.add("hidden");
     }
   }
