@@ -131,17 +131,33 @@ function loginWithGoogle() {
       console.error(error);
     }
   });
+
+  // Inside your login button click listener:
+  document.getElementById('login-btn').addEventListener('click', () => {
+    document.getElementById('loading-screen').classList.remove('hidden'); // Show spinner
+    
+    signInWithPopup(auth, provider)
+      .then((result) => {
+        // Login successful! Your existing redirect code goes here
+      })
+      .catch((error) => {
+        document.getElementById('loading-screen').classList.add('hidden'); // Hide spinner if error
+        console.error(error);
+      });
+  });
 }
 
 // 2. THE UI GATEKEEPER
 auth.onAuthStateChanged(async (userAuth) => {
   if (!userAuth) {
-    // 🎨 UI FIX: Show the top bar, but HIDE the profile avatar!
+    // UI FIX: Show top bar, hide avatar, show login page
     document.querySelector(".topbar").classList.remove("hidden");
     document.getElementById("topAvatar").classList.add("hidden"); 
-
     document.getElementById("home").classList.add("hidden"); 
     document.getElementById("login").classList.remove("hidden");
+    
+    // Hide loading screen if it's running
+    document.getElementById("loading-screen")?.classList.add("hidden");
     return;
   }
   
@@ -152,7 +168,8 @@ auth.onAuthStateChanged(async (userAuth) => {
     
     if (doc.exists && doc.data().banned === true) {
       alert("SECURITY ALERT: Your account has been suspended.");
-      auth.signOut(); return;
+      auth.signOut(); 
+      return;
     }
     
     if (!doc.exists) {
@@ -165,32 +182,49 @@ auth.onAuthStateChanged(async (userAuth) => {
       doc = await userRef.get();
     }
 
+    // Checking if they need to choose a username
     if (!doc.data().username) {
       document.getElementById("login").classList.add("hidden"); 
       document.getElementById("usernameModal").classList.remove("hidden");
+      
+      // Hide the loading spinner so they can see and type into the modal
+      document.getElementById("loading-screen")?.classList.add("hidden");
       return; 
     }
 
-    // Set all global data
-    user = doc.data().username; 
-    realName = doc.data().name;
-    userAvatar = doc.data().avatar || "👤";
-    googlePfp = doc.data().googlePfp || userAuth.photoURL;
-    
-    document.getElementById("topAvatar").innerHTML = renderAvatar(userAvatar); 
-    
-    // 🎨 UI FIX: They are logged in, so reveal the profile avatar!
-    document.getElementById("login").classList.add("hidden"); 
-    document.querySelector(".topbar").classList.remove("hidden");
-    document.getElementById("topAvatar").classList.remove("hidden"); 
-    document.getElementById("home").classList.remove("hidden");
-    
-    loadChatList(); loadEvents();
+    // RETURNING USER: Launch the app immediately
+    initializeUserApp(doc.data());
 
   } catch (error) {
-    console.error(error); alert("Database Error: " + error.message);
+    console.error(error); 
+    alert("Database Error: " + error.message);
+    document.getElementById("loading-screen")?.classList.add("hidden");
   }
 });
+
+function initializeUserApp(userData) {
+  // Set all global data
+  user = userData.username; 
+  realName = userData.name;
+  userAvatar = userData.avatar || "👤";
+  googlePfp = userData.googlePfp || "";
+  
+  document.getElementById("topAvatar").innerHTML = renderAvatar(userAvatar); 
+  
+  // Make sure the setup UI pieces are hidden/shown correctly
+  document.getElementById("login").classList.add("hidden"); 
+  document.getElementById("usernameModal").classList.add("hidden"); // Closes the modal safely!
+  document.querySelector(".topbar").classList.remove("hidden");
+  document.getElementById("topAvatar").classList.remove("hidden"); 
+  document.getElementById("home").classList.remove("hidden");
+  
+  // Fire off data loading functions
+  loadChatList(); 
+  loadEvents();
+  
+  // Turn off the loading screen since the app is completely ready!
+  document.getElementById("loading-screen")?.classList.add("hidden");
+}
 
 // --- NEW: LIVE USERNAME CHECKER ---
 // --- UPDATED: SMARTER USERNAME CHECKER ---
@@ -254,6 +288,23 @@ async function claimUsername() {
     alert("Error claiming username. Try another one.");
   }
 }
+
+// --- STEP 3: THE MISSING MODAL SUBMIT LISTENER ---
+// Wait for the HTML to load, then attach the click event to the claim button
+document.addEventListener("DOMContentLoaded", () => {
+  const claimBtn = document.getElementById("claimBtn");
+  
+  if (claimBtn) {
+    claimBtn.addEventListener("click", async () => {
+      // 1. Turn on the loading spinner so they know it's working
+      const loadingScreen = document.getElementById("loading-screen");
+      if (loadingScreen) loadingScreen.classList.remove("hidden");
+      
+      // 2. Run your existing claim function
+      await claimUsername();
+    });
+  }
+});
 
 // --- UPDATED: MEMORY-WIPE LOGOUT ---
 function logout() { 
@@ -448,24 +499,13 @@ async function startChat(clickedUsername = null) {
   if (other === user) return alert("You can't start a chat with yourself!");
 
   try {
-    // 🐛 BUG FIX: Check the 'usernames' database collection, not the 'users' collection!
     const usernameDoc = await db.collection("usernames").doc(other.toLowerCase()).get();
     if (!usernameDoc.exists) return alert(`User "@${other}" does not exist on campus.`);
 
     const chatId = [user, other].sort().join("_");
-    const chatDoc = await db.collection("chats").doc(chatId).get();
     
-    // If this is a brand new chat, figure out if it should be Locked or Unlocked
-    if (!chatDoc.exists) {
-      const crossedPaths = await checkCrossedPaths(user, other);
-      await db.collection("chats").doc(chatId).set({ 
-        users: [user, other], 
-        unreadBy: "", 
-        lastUpdated: Date.now(),
-        status: crossedPaths ? "unlocked" : "icebreaker", // The Magic Gatekeeper
-        initiatedBy: user
-      });
-    }
+    // 🚨 FIX: We removed the chat creation code from here!
+    // Now, this function ONLY opens the UI screen. It doesn't touch the database yet.
     
     if(!clickedUsername) document.getElementById("chatUser").value = ""; 
     openChat(chatId, other);
@@ -517,20 +557,47 @@ async function sendMessage() {
   
   const otherUser = currentChat.split("_").find(u => u !== user);
   
-  // 1. Send the message
-  await db.collection("messages").add({ chatId: currentChat, sender: user, text: text, time: Date.now() });
+  // --- 🛑 LAZY CREATION LOGIC ---
+  // 1. Check if this chat room actually exists in the database yet
+  const chatRef = db.collection("chats").doc(currentChat);
+  const chatDoc = await chatRef.get();
   
-  // 2. If I am replying to an Icebreaker they sent, SHATTER THE LOCK!
   let newStatus = currentChatStatus;
-  if (currentChatStatus === "icebreaker" && currentChatInitiator === otherUser) {
-      newStatus = "unlocked";
-  }
 
-  await db.collection("chats").doc(currentChat).set({ 
-      unreadBy: otherUser, 
-      lastUpdated: Date.now(),
-      status: newStatus 
-  }, { merge: true });
+  if (!chatDoc.exists) {
+      // 2. If it DOES NOT exist, create it right now because this is the first message!
+      const crossedPaths = await checkCrossedPaths(user, otherUser);
+      newStatus = crossedPaths ? "unlocked" : "icebreaker";
+      
+      await chatRef.set({ 
+        users: [user, otherUser], 
+        unreadBy: otherUser, 
+        lastUpdated: Date.now(),
+        status: newStatus,
+        initiatedBy: user
+      });
+  } else {
+      // 3. If it DOES exist, check if we need to shatter the icebreaker lock
+      if (currentChatStatus === "icebreaker" && currentChatInitiator === otherUser) {
+          newStatus = "unlocked";
+      }
+      
+      // Just update the existing chat's timestamp and unread badge
+      await chatRef.set({ 
+          unreadBy: otherUser, 
+          lastUpdated: Date.now(),
+          status: newStatus 
+      }, { merge: true });
+  }
+  // --- 🛑 END LAZY CREATION ---
+
+  // Finally, actually save the message text to the database!
+  await db.collection("messages").add({ 
+    chatId: currentChat, 
+    sender: user, 
+    text: text, 
+    time: Date.now() 
+  });
   
   input.value = "";
 }
