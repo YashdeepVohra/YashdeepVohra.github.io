@@ -3,8 +3,7 @@
 // ==========================================
 const firebaseConfig = {
   apiKey: "AIzaSyBvcJJ2wz2yteRUYdasRUe8oaTt_Vp9kGQ",
-  // 🔥 THE ENTERPRISE FIX: This matches your exact domain so Apple leaves cookies alone
-  authDomain: window.location.hostname, 
+  authDomain: window.location.hostname, // Enterprise Fix
   projectId: "livesociyaweb",
   storageBucket: "livesociyaweb.firebasestorage.app",
   messagingSenderId: "676740518716",
@@ -19,9 +18,7 @@ const db = firebase.firestore();
 // 🚨 EMERGENCY FIX: KILL THE ROGUE SERVICE WORKER
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations().then(function(registrations) {
-    for(let registration of registrations) {
-      registration.unregister().then(() => console.log("Service Worker successfully killed!"));
-    }
+    for(let registration of registrations) { registration.unregister(); }
   });
 }
 
@@ -37,7 +34,7 @@ function renderAvatar(avatarCode) {
 }
 
 // ==========================================
-// 🔔 IN-APP NOTIFICATION SYSTEM (DESKTOP PROOF)
+// 🔔 IN-APP NOTIFICATION SYSTEM (GOD-TIER DESKTOP)
 // ==========================================
 function showNotification(senderUsername, chatId) {
   if (currentChat === chatId) return;
@@ -46,16 +43,14 @@ function showNotification(senderUsername, chatId) {
   if (!toastBox) {
     toastBox = document.createElement("div");
     toastBox.id = "toastBox";
-    // 🔥 FIXED position, God-Tier z-index, and pointer-events: none so it doesn't block clicks underneath
     toastBox.style.cssText = "position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 999999; width: 90%; max-width: 400px; display: flex; flex-direction: column; align-items: center; pointer-events: none;";
     document.body.appendChild(toastBox);
   }
 
-  // 🔥 Clear the box! This instantly deletes the old notification so they NEVER stack.
+  // Clear previous notifications so they never stack
   toastBox.innerHTML = "";
 
   const toast = document.createElement("div");
-  // Re-enable pointer events on the actual toast so you can click it
   toast.style.cssText = "background: var(--primary); color: white; padding: 14px 20px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); font-size: 14px; font-weight: 600; cursor: pointer; transform: translateY(-150%); transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); display: flex; align-items: center; gap: 10px; width: 100%; pointer-events: auto;";
   toast.innerHTML = `<i class='bx bxs-message-rounded-dots' style="font-size: 20px;"></i> New message from @${senderUsername}`;
 
@@ -67,7 +62,6 @@ function showNotification(senderUsername, chatId) {
 
   toastBox.appendChild(toast);
   
-  // Force the browser to render before animating
   void toast.offsetWidth;
   toast.style.transform = "translateY(0)";
   
@@ -104,29 +98,32 @@ function switchScreen(screenId) {
   if (screenId) document.getElementById(screenId)?.classList.remove("hidden");
 }
 
-// 1. SURVIVAL LOCK: Check if we are waiting for a redirect using unbreakable localStorage
 const isRedirecting = localStorage.getItem("isRedirecting");
 if (isRedirecting) {
   document.getElementById("loading-screen")?.classList.remove("hidden");
+  
+  // ESCAPE HATCH: Break lock if Firebase hangs for 8 seconds
+  setTimeout(() => {
+    if (!auth.currentUser) {
+      localStorage.removeItem("isRedirecting");
+      document.getElementById("loading-screen")?.classList.add("hidden");
+      switchScreen("login");
+    }
+  }, 8000);
 }
 
-// 2. THE LOGIN TRIGGER
 function loginWithGoogle() {
   const loader = document.getElementById("loading-screen");
   if (loader) loader.classList.remove("hidden");
   
-  // Set the survival lock right before we leave
   localStorage.setItem("isRedirecting", "true");
   
   const provider = new firebase.auth.GoogleAuthProvider();
   auth.signInWithRedirect(provider);
 }
 
-// 3. THE REDIRECT CATCHER
 auth.getRedirectResult().then((result) => {
-  localStorage.removeItem("isRedirecting"); // Remove lock, we are back!
-  
-  // If the redirect finished but there is NO user, drop to the login screen
+  localStorage.removeItem("isRedirecting"); 
   if (!result?.user && !auth.currentUser) {
     switchScreen("login");
     document.getElementById("topAvatar")?.classList.add("hidden");
@@ -135,17 +132,14 @@ auth.getRedirectResult().then((result) => {
 }).catch((error) => {
   localStorage.removeItem("isRedirecting");
   console.error("Auth Error:", error);
-  alert("Login Error: " + error.message);
   switchScreen("login");
   document.getElementById("loading-screen")?.classList.add("hidden");
 });
 
-// 4. THE UI GATEKEEPER
 auth.onAuthStateChanged(async (userAuth) => {
   document.querySelector(".topbar")?.classList.remove("hidden"); 
 
   if (userAuth) {
-    // 🚨 YOU ARE LOGGED IN! 🚨 
     localStorage.removeItem("isRedirecting"); 
     document.getElementById("loading-screen")?.classList.remove("hidden");
     
@@ -177,8 +171,6 @@ auth.onAuthStateChanged(async (userAuth) => {
       document.getElementById("loading-screen")?.classList.add("hidden");
     }
   } else {
-    // NO USER DETECTED.
-    // MAGIC RULE: Only show the login screen if we are NOT waiting for the redirect to finish.
     if (!localStorage.getItem("isRedirecting")) {
       switchScreen("login");
       document.getElementById("topAvatar")?.classList.add("hidden");
@@ -303,7 +295,7 @@ function confirmMoveToRecap() { if (!eventIdToManage) return; db.collection("eve
 function confirmDeletePermanently() { if (!eventIdToManage) return; db.collection("events").doc(eventIdToManage).delete().then(() => closeDeleteModal()); }
 
 // ==========================================
-// 💬 HYBRID CHAT ENGINE
+// 💬 CHAT ENGINE (WITH DESKTOP NOTIFICATIONS)
 // ==========================================
 let chatDocUnsubscribe = null, currentChatStatus = "unlocked", currentChatInitiator = "", myMessageCount = 0;
 
@@ -327,7 +319,7 @@ async function startChat(clickedUsername = null) {
 function openChat(chatId, otherUser) {
   currentChat = chatId; 
   const hAvatar = document.getElementById("chatHeaderAvatar"); const hTitle = document.getElementById("chatWithTitle");
-  if(hAvatar) hAvatar.innerText = otherUser.charAt(0); if(hTitle) hTitle.innerText = otherUser;
+  if(hAvatar) hAvatar.innerText = otherUser.charAt(0).toUpperCase(); if(hTitle) hTitle.innerText = otherUser;
   document.querySelector(".topbar")?.classList.add("hidden"); switchScreen("chatScreen");
   db.collection("chats").doc(chatId).set({ unreadBy: "" }, { merge: true }); 
   if(chatDocUnsubscribe) chatDocUnsubscribe();
@@ -380,60 +372,40 @@ function updateChatFooterUI() {
 
 function loadChatList() {
   db.collection("chats").where("users", "array-contains", user).onSnapshot(snapshot => {
-      const list = document.getElementById("chatList"); 
-      if(!list) return;
+      const list = document.getElementById("chatList"); if(!list) return;
+      list.innerHTML = ""; let hasGlobalUnread = false; let chatsArray = [];
       
-      list.innerHTML = ""; 
-      let hasGlobalUnread = false; 
-      let chatsArray = [];
-
-      snapshot.docChanges().forEach(change => {
-         if (change.type === "modified") {
-             const chatData = change.doc.data();
-             if (chatData.unreadBy === user && currentChat !== change.doc.id) {
-                 const otherUser = chatData.users.find(u => u !== user);
-                 showNotification(otherUser, change.doc.id);
-             }
-         }
+      snapshot.docChanges().forEach(change => { 
+        if (change.type === "modified") { 
+          const chatData = change.doc.data(); 
+          if (chatData.unreadBy === user && currentChat !== change.doc.id) { 
+            const otherUser = chatData.users.find(u => u !== user); 
+            showNotification(otherUser, change.doc.id); 
+          } 
+        } 
       });
-
-      snapshot.forEach(doc => { chatsArray.push({ id: doc.id, ...doc.data() }); });
+      
+      snapshot.forEach(doc => { chatsArray.push({ id: doc.id, ...doc.data() }); }); 
       chatsArray.sort((a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0));
-
-      if (chatsArray.length === 0) {
-        list.innerHTML = `<div class="empty-state" style="padding-top: 20px;"><i class='bx bx-message-square-x'></i><p>No messages yet.</p></div>`;
-      }
-
+      
+      if (chatsArray.length === 0) list.innerHTML = `<div class="empty-state" style="padding-top: 20px;"><i class='bx bx-message-square-x'></i><p>No messages yet.</p></div>`;
+      
       chatsArray.forEach(chat => {
-        if (chat.unreadBy === user && currentChat === chat.id) { 
-          db.collection("chats").doc(chat.id).set({ unreadBy: "" }, { merge: true }); 
-          chat.unreadBy = ""; 
-        }
-
-        // ... (Keep the chatsArray.forEach loop exactly as it is) ...
+        if (chat.unreadBy === user && currentChat === chat.id) { db.collection("chats").doc(chat.id).set({ unreadBy: "" }, { merge: true }); chat.unreadBy = ""; }
+        const other = chat.users.find(u => u !== user); const initial = other.charAt(0).toUpperCase(); const isUnread = chat.unreadBy === user; if (isUnread) hasGlobalUnread = true;
+        list.innerHTML += `<div class="chat-item" onclick="openChat('${chat.id}', '${other}')" style="${isUnread ? 'background: #e0e7ff; border-left: 4px solid var(--primary);' : ''}"><div class="chat-avatar">${initial}</div><div class="chat-name" style="${isUnread ? 'font-weight: 800;' : ''}">${other}</div>${isUnread ? `<div style="width:10px; height:10px; background:#ef4444; border-radius:50%; margin-left:auto;"></div>` : ''}</div>`;
+      });
       
       const badge = document.getElementById("chatBadge"); 
-      const topAvatar = document.getElementById("topAvatar"); // Grab the top profile icon
+      const topAvatar = document.getElementById("topAvatar");
       
       if (hasGlobalUnread) {
-        // 1. Show Bottom Badge (Mobile)
         if (badge) { badge.classList.remove("hidden"); badge.style.display = "block"; }
-        
-        // 2. 🔥 Show Top Badge (Desktop-Friendly!)
-        if (topAvatar) { 
-          topAvatar.style.border = "2px solid #ef4444"; 
-          topAvatar.style.boxShadow = "0 0 12px rgba(239, 68, 68, 0.6)"; 
-        }
-        
-        // 3. Tab Notification
+        if (topAvatar) { topAvatar.style.border = "2px solid #ef4444"; topAvatar.style.boxShadow = "0 0 12px rgba(239, 68, 68, 0.6)"; }
         document.title = "(1) New Message - livesociya";
       } else {
-        // Hide all badges
         if (badge) { badge.classList.add("hidden"); badge.style.display = "none"; }
-        if (topAvatar) { 
-          topAvatar.style.border = "none"; 
-          topAvatar.style.boxShadow = "none"; 
-        }
+        if (topAvatar) { topAvatar.style.border = "none"; topAvatar.style.boxShadow = "none"; }
         document.title = "livesociya";
       }
     });
