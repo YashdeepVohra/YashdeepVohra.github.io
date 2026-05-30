@@ -107,22 +107,40 @@ function toggleTime(element) {
 // --- NEW: SECURE GOOGLE LOGIN ---
 // --- UPDATED: SECURE GOOGLE LOGIN ---
 // --- UPDATED: MOBILE-SAFE GOOGLE LOGIN ---
+// ==========================================
+// 🔐 BULLETPROOF AUTHENTICATION
+// ==========================================
+
+// 1. THIS IS THE MISSING PIECE FOR MOBILE!
+// It catches the user when Google redirects them back to your app.
+auth.getRedirectResult().catch((error) => {
+  console.error("Redirect Login Error:", error);
+  alert("Login failed. If you are on an iPhone, ensure 'Prevent Cross-Site Tracking' is disabled in Safari settings.");
+});
+
 function loginWithGoogle() {
   if (Object.keys(firebaseConfig).length === 0) return alert("Firebase Config is missing!");
   
   const provider = new firebase.auth.GoogleAuthProvider();
   
-  // CHANGED: Redirect is 100x more reliable on mobile apps and PWAs than Popups!
-  auth.signInWithRedirect(provider);
+  // Try popup first (for desktop), fallback to redirect (for mobile PWAs)
+  auth.signInWithPopup(provider).catch((error) => {
+    if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user') {
+      auth.signInWithRedirect(provider);
+    } else {
+      console.error(error);
+    }
+  });
 }
 
-// --- UPDATED: AUTH WATCHER & USERNAME GATEKEEPER ---
-// --- UPDATED: BULLETPROOF UI GATEKEEPER ---
+// 2. THE UI GATEKEEPER
 auth.onAuthStateChanged(async (userAuth) => {
   if (!userAuth) {
-    // LOCKDOWN: Hide the app AND the Topbar if they aren't logged in
+    // 🎨 UI FIX: Show the top bar, but HIDE the profile avatar!
+    document.querySelector(".topbar").classList.remove("hidden");
+    document.getElementById("topAvatar").classList.add("hidden"); 
+
     document.getElementById("home").classList.add("hidden"); 
-    document.querySelector(".topbar").classList.add("hidden"); 
     document.getElementById("login").classList.remove("hidden");
     return;
   }
@@ -148,9 +166,7 @@ auth.onAuthStateChanged(async (userAuth) => {
     }
 
     if (!doc.data().username) {
-      // STILL LOCKED: Hide everything while they pick a username
       document.getElementById("login").classList.add("hidden"); 
-      document.querySelector(".topbar").classList.add("hidden");
       document.getElementById("usernameModal").classList.remove("hidden");
       return; 
     }
@@ -163,9 +179,10 @@ auth.onAuthStateChanged(async (userAuth) => {
     
     document.getElementById("topAvatar").innerHTML = renderAvatar(userAvatar); 
     
-    // UNLOCK: Show the app and the Topbar only after everything is ready!
+    // 🎨 UI FIX: They are logged in, so reveal the profile avatar!
     document.getElementById("login").classList.add("hidden"); 
     document.querySelector(".topbar").classList.remove("hidden");
+    document.getElementById("topAvatar").classList.remove("hidden"); 
     document.getElementById("home").classList.remove("hidden");
     
     loadChatList(); loadEvents();
