@@ -114,36 +114,32 @@ function toggleTime(element) {
 // 1. THIS IS THE MISSING PIECE FOR MOBILE!
 // It catches the user when Google redirects them back to your app.
 // ==========================================
-// 🔐 BULLETPROOF AUTHENTICATION (MOBILE SAFE)
+// 🔐 BULLETPROOF AUTHENTICATION (POPUP FIX)
 // ==========================================
 
-// 1. This catches the user when Google redirects them back to your app
-auth.getRedirectResult().catch((error) => {
-  console.error("Redirect Login Error:", error);
-  const loader = document.getElementById("loading-screen");
-  if (loader) loader.classList.add("hidden"); // Turn off spinner on error
-  
-  alert("Login failed. If you are on an iPhone, ensure 'Prevent Cross-Site Tracking' is disabled in Safari settings.");
-});
-
-// 2. The function attached to your HTML Login button
 function loginWithGoogle() {
   if (Object.keys(firebaseConfig).length === 0) return alert("Firebase Config is missing!");
   
-  // IMMEDIATELY show the loading spinner!
   const loader = document.getElementById("loading-screen");
   if (loader) loader.classList.remove("hidden");
 
   const provider = new firebase.auth.GoogleAuthProvider();
   
-  // CRITICAL FIX: Use Redirect instead of Popup. 
-  auth.signInWithRedirect(provider).catch((error) => {
-    console.error("Failed to start redirect:", error);
+  // We MUST use Popup. Redirect gets destroyed by mobile anti-tracking blockers.
+  auth.signInWithPopup(provider).catch((error) => {
+    console.error("Popup Login Error:", error);
     if (loader) loader.classList.add("hidden"); 
+
+    // If the browser strictly blocks the popup, tell the user exactly how to allow it.
+    if (error.code === 'auth/popup-blocked') {
+       alert("Your phone blocked the Google login window! Please click 'Allow' if prompted, or allow popups for this site in your browser settings.");
+    } else {
+       alert("Login failed: " + error.message);
+    }
   });
 }
 
-// 3. THE UI GATEKEEPER
+// 2. THE UI GATEKEEPER
 auth.onAuthStateChanged(async (userAuth) => {
   if (!userAuth) {
     // UI FIX: Show top bar, hide avatar, show login page
