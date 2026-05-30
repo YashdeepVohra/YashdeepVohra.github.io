@@ -791,3 +791,28 @@ function loadMyEvents() {
   });
 }
 
+// ==========================================
+// 🔌 THE MASTER BUTTON WIRING
+// ==========================================
+document.addEventListener("DOMContentLoaded", () => {
+  
+  // 1. Wire up the Google Login Button
+  const loginBtn = document.getElementById("login-btn");
+  if (loginBtn) {
+    // This tells JS to listen for the click directly, bypassing the invisible wall!
+    loginBtn.addEventListener("click", () => {
+      loginWithGoogle();
+    });
+  }
+
+  // 2. Wire up the Username Claim Button
+  const claimBtn = document.getElementById("claimBtn");
+  if (claimBtn) {
+    claimBtn.addEventListener("click", async () => {
+      const loadingScreen = document.getElementById("loading-screen");
+      if (loadingScreen) loadingScreen.classList.remove("hidden");
+      await claimUsername();
+    });
+  }
+});
+
