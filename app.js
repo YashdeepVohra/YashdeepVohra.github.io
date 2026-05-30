@@ -16,7 +16,6 @@ const auth = firebase.auth();
 const db = firebase.firestore();
 
 // 🚨 EMERGENCY FIX: KILL THE ROGUE SERVICE WORKER
-// This unregisters the PWA so it stops blocking Firebase's hidden login URLs.
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations().then(function(registrations) {
     for(let registration of registrations) {
@@ -36,11 +35,9 @@ let eventIdToManage = null;
 let currentSelectedTag = '☕ Chill'; 
 let googlePfp = ""; 
 let realName = "";
-
 let currentLiveFilter = 'All';
 let currentRecapFilter = 'All';
 
-// Smart function to render either an image tag or an emoji string
 function renderAvatar(avatarCode) {
   if (!avatarCode) return "👤";
   if (typeof avatarCode === 'string' && avatarCode.startsWith("http")) {
@@ -100,7 +97,7 @@ function toggleTime(element) {
 // 🔐 BULLETPROOF AUTHENTICATION (THE TUNNEL METHOD)
 // ==========================================
 
-// Helper function to absolutely guarantee no screens overlap
+// 🔥 THE MASTER SWITCH: Guarantees screens never overlap
 function switchScreen(screenId) {
   document.getElementById("login")?.classList.add("hidden");
   document.getElementById("home")?.classList.add("hidden");
@@ -113,7 +110,6 @@ function switchScreen(screenId) {
 
 auth.getRedirectResult().catch((error) => {
   console.error("Redirect Login Error:", error);
-  // We DO NOT hide the loading screen here anymore. We let the Gatekeeper handle it!
 });
 
 function loginWithGoogle() {
@@ -128,9 +124,6 @@ function loginWithGoogle() {
   });
 }
 
-// ==========================================
-// 3. THE STRICT UI GATEKEEPER
-// ==========================================
 auth.onAuthStateChanged(async (userAuth) => {
   document.getElementById("loading-screen")?.classList.remove("hidden");
   
@@ -138,8 +131,8 @@ auth.onAuthStateChanged(async (userAuth) => {
   document.querySelector(".topbar")?.classList.remove("hidden"); 
 
   if (!userAuth) {
-    switchScreen("login"); // Show ONLY login screen
-    document.getElementById("topAvatar")?.classList.add("hidden"); // Hide the profile avatar
+    switchScreen("login"); 
+    document.getElementById("topAvatar")?.classList.add("hidden"); 
     document.getElementById("loading-screen")?.classList.add("hidden");
     return;
   }
@@ -171,7 +164,7 @@ auth.onAuthStateChanged(async (userAuth) => {
     // CHECK IF THEY NEED TO CLAIM A USERNAME
     if (!doc.data().username) {
       document.getElementById("topAvatar")?.classList.add("hidden");
-      switchScreen("usernameModal"); // Show ONLY username modal
+      switchScreen("usernameModal"); 
       document.getElementById("loading-screen")?.classList.add("hidden");
       return; 
     }
@@ -181,7 +174,7 @@ auth.onAuthStateChanged(async (userAuth) => {
 
   } catch (error) {
     console.error("Gatekeeper Error:", error); 
-    switchScreen("login"); // Drop back to login safely if database crashes
+    switchScreen("login"); 
     document.getElementById("loading-screen")?.classList.add("hidden");
   }
 });
@@ -195,11 +188,10 @@ function initializeUserApp(userData) {
   const topAvatarEl = document.getElementById("topAvatar");
   if(topAvatarEl) {
     topAvatarEl.innerHTML = renderAvatar(userAvatar); 
-    topAvatarEl.classList.remove("hidden"); // Reveal the profile avatar!
+    topAvatarEl.classList.remove("hidden"); 
   }
   
-  switchScreen("home"); // Show ONLY the campus feed
-  
+  switchScreen("home"); 
   loadChatList(); 
   loadEvents();
   
@@ -252,7 +244,6 @@ async function claimUsername() {
     await db.collection("usernames").doc(chosenName).set({ email: userEmail });
     await db.collection("users").doc(userEmail).set({ username: chosenName }, { merge: true });
     
-    // Safely pull the fresh data and boot the app!
     const updatedDoc = await db.collection("users").doc(userEmail).get();
     initializeUserApp(updatedDoc.data());
     
@@ -264,14 +255,11 @@ async function claimUsername() {
 function logout() { 
   const loader = document.getElementById("loading-screen");
   if (loader) loader.classList.remove("hidden");
-  document.getElementById("home")?.classList.add("hidden");
+  switchScreen(null);
 
   auth.signOut().then(() => {
-    // 1. Nuke the browser's local memory completely
     localStorage.clear();
     sessionStorage.clear();
-    
-    // 2. Force a hard server reload (bypasses Apple's stubborn cache)
     window.location.href = window.location.origin + "?refresh=" + new Date().getTime();
   }).catch((err) => {
     console.error("Logout Error:", err);
@@ -442,7 +430,6 @@ function confirmDeletePermanently() { if (!eventIdToManage) return; db.collectio
 // ==========================================
 // 💬 HYBRID CHAT ENGINE
 // ==========================================
-
 let chatDocUnsubscribe = null;
 let currentChatStatus = "unlocked";
 let currentChatInitiator = "";
@@ -460,7 +447,6 @@ async function checkCrossedPaths(user1, user2) {
 
 async function startChat(clickedUsername = null) {
   const other = clickedUsername || document.getElementById("chatUser")?.value.trim();
-  
   if (!other) return alert("Please enter a username.");
   if (other === user) return alert("You can't start a chat with yourself!");
 
@@ -478,6 +464,7 @@ async function startChat(clickedUsername = null) {
   }
 }
 
+// 🔥 OPEN CHAT FIXED WITH MASTER SWITCH
 function openChat(chatId, otherUser) {
   currentChat = chatId; 
   
@@ -486,9 +473,8 @@ function openChat(chatId, otherUser) {
   if(hAvatar) hAvatar.innerText = otherUser.charAt(0); 
   if(hTitle) hTitle.innerText = otherUser;
   
-  document.getElementById("home")?.classList.add("hidden"); 
   document.querySelector(".topbar")?.classList.add("hidden"); 
-  document.getElementById("chatScreen")?.classList.remove("hidden");
+  switchScreen("chatScreen");
   
   db.collection("chats").doc(chatId).set({ unreadBy: "" }, { merge: true }); 
   
@@ -504,13 +490,14 @@ function openChat(chatId, otherUser) {
   loadMessages();
 }
 
+// 🔥 CLOSE CHAT FIXED WITH MASTER SWITCH
 function closeChat() {
   currentChat = null; 
   if (messagesUnsubscribe) messagesUnsubscribe();
   if (chatDocUnsubscribe) chatDocUnsubscribe();
-  document.getElementById("chatScreen")?.classList.add("hidden"); 
+  
   document.querySelector(".topbar")?.classList.remove("hidden"); 
-  document.getElementById("home")?.classList.remove("hidden");
+  switchScreen("home");
 }
 
 async function sendMessage() {
@@ -521,16 +508,13 @@ async function sendMessage() {
   if (!text || !currentChat) return;
   
   const otherUser = currentChat.split("_").find(u => u !== user);
-  
   const chatRef = db.collection("chats").doc(currentChat);
   const chatDoc = await chatRef.get();
-  
   let newStatus = currentChatStatus;
 
   if (!chatDoc.exists) {
       const crossedPaths = await checkCrossedPaths(user, otherUser);
       newStatus = crossedPaths ? "unlocked" : "icebreaker";
-      
       await chatRef.set({ 
         users: [user, otherUser], 
         unreadBy: otherUser, 
@@ -549,13 +533,7 @@ async function sendMessage() {
       }, { merge: true });
   }
 
-  await db.collection("messages").add({ 
-    chatId: currentChat, 
-    sender: user, 
-    text: text, 
-    time: Date.now() 
-  });
-  
+  await db.collection("messages").add({ chatId: currentChat, sender: user, text: text, time: Date.now() });
   input.value = "";
 }
 
@@ -566,8 +544,7 @@ function loadMessages() {
 
   messagesUnsubscribe = db.collection("messages").where("chatId", "==", currentChat).orderBy("time", "asc").onSnapshot(snapshot => {
       box.innerHTML = ""; let lastDateString = ""; 
-      myMessageCount = 0;
-      let theirMessageCount = 0;
+      myMessageCount = 0; let theirMessageCount = 0;
 
       snapshot.forEach(doc => {
         const m = doc.data(); const isMe = m.sender === user;
@@ -587,8 +564,7 @@ function loadMessages() {
           db.collection("chats").doc(currentChat).update({ status: "unlocked" });
       }
 
-      box.scrollTop = box.scrollHeight; 
-      updateChatFooterUI();
+      box.scrollTop = box.scrollHeight; updateChatFooterUI();
     });
 }
 
@@ -613,8 +589,7 @@ function loadChatList() {
       if(!list) return;
       
       list.innerHTML = ""; 
-      let hasGlobalUnread = false; 
-      let chatsArray = [];
+      let hasGlobalUnread = false; let chatsArray = [];
 
       snapshot.docChanges().forEach(change => {
          if (change.type === "modified") {
@@ -629,24 +604,14 @@ function loadChatList() {
       snapshot.forEach(doc => { chatsArray.push({ id: doc.id, ...doc.data() }); });
       chatsArray.sort((a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0));
 
-      if (chatsArray.length === 0) {
-          list.innerHTML = `<div class="empty-state" style="padding-top: 20px;"><i class='bx bx-message-square-x'></i><p>No messages yet.</p></div>`;
-      }
+      if (chatsArray.length === 0) list.innerHTML = `<div class="empty-state" style="padding-top: 20px;"><i class='bx bx-message-square-x'></i><p>No messages yet.</p></div>`;
 
       chatsArray.forEach(chat => {
-        if (chat.unreadBy === user && currentChat === chat.id) { 
-            db.collection("chats").doc(chat.id).set({ unreadBy: "" }, { merge: true }); 
-            chat.unreadBy = ""; 
-        }
-
-        const other = chat.users.find(u => u !== user); 
-        const initial = other.charAt(0).toUpperCase(); 
-        const isUnread = chat.unreadBy === user;
-        
+        if (chat.unreadBy === user && currentChat === chat.id) { db.collection("chats").doc(chat.id).set({ unreadBy: "" }, { merge: true }); chat.unreadBy = ""; }
+        const other = chat.users.find(u => u !== user); const initial = other.charAt(0).toUpperCase(); const isUnread = chat.unreadBy === user;
         if (isUnread) hasGlobalUnread = true;
 
-        list.innerHTML += `
-          <div class="chat-item" onclick="openChat('${chat.id}', '${other}')" style="${isUnread ? 'background: #e0e7ff; border-left: 4px solid var(--primary);' : ''}">
+        list.innerHTML += `<div class="chat-item" onclick="openChat('${chat.id}', '${other}')" style="${isUnread ? 'background: #e0e7ff; border-left: 4px solid var(--primary);' : ''}">
             <div class="chat-avatar">${initial}</div>
             <div class="chat-name" style="${isUnread ? 'font-weight: 800;' : ''}">${other}</div>
             ${isUnread ? `<div style="width:10px; height:10px; background:#ef4444; border-radius:50%; margin-left:auto;"></div>` : ''}
@@ -654,10 +619,7 @@ function loadChatList() {
       });
       
       const badge = document.getElementById("chatBadge"); 
-      if (badge) {
-          if (hasGlobalUnread) badge.classList.remove("hidden"); 
-          else badge.classList.add("hidden");
-      }
+      if (badge) { if (hasGlobalUnread) badge.classList.remove("hidden"); else badge.classList.add("hidden"); }
     });
 }
 
@@ -680,6 +642,7 @@ function showTab(tab) {
   }
 }
 
+// 🔥 OPEN PROFILE FIXED WITH MASTER SWITCH
 function openProfileScreen() {
   try {
     const dName = document.getElementById("profileDisplayName");
@@ -690,10 +653,8 @@ function openProfileScreen() {
     if(uName) uName.innerText = "@" + (typeof user !== 'undefined' ? user : "username");
     if(pAvatar) pAvatar.innerHTML = renderAvatar(typeof userAvatar !== 'undefined' ? userAvatar : "👤");
     
-    document.getElementById("home")?.classList.add("hidden");
     document.querySelector(".topbar")?.classList.add("hidden");
-    document.getElementById("profileScreen")?.classList.remove("hidden");
-
+    switchScreen("profileScreen");
     loadMyEvents();
 
   } catch (error) {
@@ -701,10 +662,10 @@ function openProfileScreen() {
   }
 }
 
+// 🔥 CLOSE PROFILE FIXED WITH MASTER SWITCH
 function closeProfileScreen() {
-  document.getElementById("profileScreen")?.classList.add("hidden");
   document.querySelector(".topbar")?.classList.remove("hidden");
-  document.getElementById("home")?.classList.remove("hidden");
+  switchScreen("home");
 }
 
 function loadMyEvents() {
@@ -731,15 +692,10 @@ function loadMyEvents() {
   });
 }
 
-// ==========================================
-// 🔌 THE MASTER BUTTON WIRING
-// ==========================================
 document.addEventListener("DOMContentLoaded", () => {
   const loginBtn = document.getElementById("login-btn");
   if (loginBtn) {
-    loginBtn.addEventListener("click", () => {
-      loginWithGoogle();
-    });
+    loginBtn.addEventListener("click", () => loginWithGoogle());
   }
 
   const claimBtn = document.getElementById("claimBtn");
