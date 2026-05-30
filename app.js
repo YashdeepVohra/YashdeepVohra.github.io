@@ -106,21 +106,23 @@ function toggleTime(element) {
 
 // --- NEW: SECURE GOOGLE LOGIN ---
 // --- UPDATED: SECURE GOOGLE LOGIN ---
+// --- UPDATED: MOBILE-SAFE GOOGLE LOGIN ---
 function loginWithGoogle() {
   if (Object.keys(firebaseConfig).length === 0) return alert("Firebase Config is missing!");
   
   const provider = new firebase.auth.GoogleAuthProvider();
   
-  // We removed the messy database logic from here so it doesn't race!
-  auth.signInWithPopup(provider).catch((error) => {
-    if (error.code !== 'auth/popup-closed-by-user') alert(error.message);
-  });
+  // CHANGED: Redirect is 100x more reliable on mobile apps and PWAs than Popups!
+  auth.signInWithRedirect(provider);
 }
 
 // --- UPDATED: AUTH WATCHER & USERNAME GATEKEEPER ---
+// --- UPDATED: BULLETPROOF UI GATEKEEPER ---
 auth.onAuthStateChanged(async (userAuth) => {
   if (!userAuth) {
+    // LOCKDOWN: Hide the app AND the Topbar if they aren't logged in
     document.getElementById("home").classList.add("hidden"); 
+    document.querySelector(".topbar").classList.add("hidden"); 
     document.getElementById("login").classList.remove("hidden");
     return;
   }
@@ -138,7 +140,7 @@ auth.onAuthStateChanged(async (userAuth) => {
     if (!doc.exists) {
       await userRef.set({ 
         name: userAuth.displayName || userEmail.split('@')[0], 
-        googlePfp: userAuth.photoURL || "", // Safely store their real photo forever
+        googlePfp: userAuth.photoURL || "", 
         avatar: userAuth.photoURL || "👤", 
         banned: false, joinedAt: Date.now() 
       });
@@ -146,7 +148,9 @@ auth.onAuthStateChanged(async (userAuth) => {
     }
 
     if (!doc.data().username) {
+      // STILL LOCKED: Hide everything while they pick a username
       document.getElementById("login").classList.add("hidden"); 
+      document.querySelector(".topbar").classList.add("hidden");
       document.getElementById("usernameModal").classList.remove("hidden");
       return; 
     }
@@ -157,11 +161,13 @@ auth.onAuthStateChanged(async (userAuth) => {
     userAvatar = doc.data().avatar || "👤";
     googlePfp = doc.data().googlePfp || userAuth.photoURL;
     
-    // Safely render the avatar using our new helper!
     document.getElementById("topAvatar").innerHTML = renderAvatar(userAvatar); 
     
+    // UNLOCK: Show the app and the Topbar only after everything is ready!
     document.getElementById("login").classList.add("hidden"); 
+    document.querySelector(".topbar").classList.remove("hidden");
     document.getElementById("home").classList.remove("hidden");
+    
     loadChatList(); loadEvents();
 
   } catch (error) {
@@ -232,7 +238,13 @@ async function claimUsername() {
   }
 }
 
-function logout() { auth.signOut(); }
+// --- UPDATED: MEMORY-WIPE LOGOUT ---
+function logout() { 
+  auth.signOut().then(() => {
+    // Forces the browser to hard-refresh, wiping all ghost data!
+    window.location.reload(); 
+  }); 
+}
 
 // --- NEW: AVATAR SYSTEM LOGIC ---
 function openProfileModal() { document.getElementById("profileModal").classList.remove("hidden"); }
