@@ -39,7 +39,7 @@ function renderAvatar(avatarCode) {
 // I am replacing ONLY the Auth section below to keep it clean. 
 
 // ==========================================
-// 🔐 THE APPLE-PROOF POPUP AUTHENTICATION
+// 🔐 THE HYBRID AUTH (POPUP + IOS CHROME FALLBACK)
 // ==========================================
 
 function switchScreen(screenId) {
@@ -51,32 +51,58 @@ function switchScreen(screenId) {
   if (screenId) document.getElementById(screenId)?.classList.remove("hidden");
 }
 
-// 1. Instantly check if we are already logged in
 document.getElementById("loading-screen")?.classList.remove("hidden");
 
-// 2. THE POPUP TRIGGER (Instant execution for Mobile Safari/Chrome)
+// 1. Catch the user if they are returning from the Chrome Fallback
+const isChromeFallback = sessionStorage.getItem("chromeFallback") === "true";
+
+if (isChromeFallback) {
+  // We are returning from Google! Patiently wait for the ticket to unpack.
+  auth.getRedirectResult().then((result) => {
+    sessionStorage.removeItem("chromeFallback");
+    if (!result || (!result.user && !auth.currentUser)) {
+      switchScreen("login");
+      document.getElementById("topAvatar")?.classList.add("hidden");
+      document.getElementById("loading-screen")?.classList.add("hidden");
+    }
+  }).catch((error) => {
+    sessionStorage.removeItem("chromeFallback");
+    switchScreen("login");
+    document.getElementById("loading-screen")?.classList.add("hidden");
+  });
+}
+
+// 2. The Hybrid Login Trigger
 function loginWithGoogle() {
   const loader = document.getElementById("loading-screen");
   if (loader) loader.classList.remove("hidden");
 
   const provider = new firebase.auth.GoogleAuthProvider();
   
-  // 🔥 NO AWAIT, NO DELAY. Fire the popup in the exact millisecond of the click.
+  // Try the fast Popup first (Works flawlessly on Mac, Android, Safari)
   auth.signInWithPopup(provider).catch((error) => {
-    if (loader) loader.classList.add("hidden");
-    // Ignore the error if the user just closed the popup manually
-    if (error.code !== 'auth/popup-closed-by-user') {
-      alert("Login Error: " + error.message);
+    
+    // If the user manually closed the popup, just stop loading.
+    if (error.code === 'auth/popup-closed-by-user') {
+      if (loader) loader.classList.add("hidden");
+      return;
     }
+    
+    // 🚨 CHROME IOS DETECTED! 🚨
+    // The browser blocked the popup. We seamlessly catch it and execute a Redirect instead!
+    console.warn("Popup blocked. Engaging iOS Chrome Fallback...");
+    sessionStorage.setItem("chromeFallback", "true");
+    auth.signInWithRedirect(provider);
   });
 }
 
-// 3. The Ultimate Gatekeeper (Massively simplified because there are no redirects!)
+// 3. The Ultimate Gatekeeper
 auth.onAuthStateChanged(async (userAuth) => {
   document.querySelector(".topbar")?.classList.remove("hidden"); 
 
   if (userAuth) {
     // 🚨 YOU ARE LOGGED IN! 🚨 
+    sessionStorage.removeItem("chromeFallback"); // Clear the lock
     document.getElementById("loading-screen")?.classList.remove("hidden");
     
     try {
@@ -112,10 +138,13 @@ auth.onAuthStateChanged(async (userAuth) => {
     }
   } else {
     // NO USER DETECTED.
-    // Because we aren't using redirects anymore, if there is no user, we can instantly show the login screen! No waiting!
-    switchScreen("login");
-    document.getElementById("topAvatar")?.classList.add("hidden");
-    document.getElementById("loading-screen")?.classList.add("hidden");
+    // If we are waiting for the Chrome fallback, do nothing! Just leave the loading screen spinning.
+    // Otherwise, drop instantly to the login screen.
+    if (!isChromeFallback) {
+      switchScreen("login");
+      document.getElementById("topAvatar")?.classList.add("hidden");
+      document.getElementById("loading-screen")?.classList.add("hidden");
+    }
   }
 });
 
