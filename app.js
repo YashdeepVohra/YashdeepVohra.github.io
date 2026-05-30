@@ -97,7 +97,6 @@ function toggleTime(element) {
 // 🔐 BULLETPROOF AUTHENTICATION (THE TUNNEL METHOD)
 // ==========================================
 
-// 🔥 THE MASTER SWITCH: Guarantees screens never overlap
 function switchScreen(screenId) {
   document.getElementById("login")?.classList.add("hidden");
   document.getElementById("home")?.classList.add("hidden");
@@ -108,15 +107,13 @@ function switchScreen(screenId) {
   if (screenId) document.getElementById(screenId)?.classList.remove("hidden");
 }
 
-auth.getRedirectResult().catch((error) => {
-  console.error("Redirect Login Error:", error);
-});
+// 1. Force the loading screen to stay ON during the entire trip
+document.getElementById("loading-screen")?.classList.remove("hidden");
 
 function loginWithGoogle() {
   const loader = document.getElementById("loading-screen");
   if (loader) loader.classList.remove("hidden");
 
-  // 🔥 STRIKE 1: Force the browser to save the ticket to permanent local storage
   auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
     .then(() => {
       const provider = new firebase.auth.GoogleAuthProvider();
@@ -129,58 +126,66 @@ function loginWithGoogle() {
     });
 }
 
+// 2. THE REDIRECT LATCH: Wait for Firebase to finish unpacking the ticket!
+auth.getRedirectResult().then((result) => {
+  // If the ticket is empty AND they aren't logged in, it is finally safe to show the login screen
+  if ((!result || !result.user) && !auth.currentUser) {
+    switchScreen("login");
+    document.getElementById("topAvatar")?.classList.add("hidden");
+    document.getElementById("loading-screen")?.classList.add("hidden");
+  }
+}).catch((error) => {
+  console.error("Redirect Error:", error);
+  alert("Login Error: " + error.message);
+  switchScreen("login");
+  document.getElementById("loading-screen")?.classList.add("hidden");
+});
+
+// 3. THE STRICT UI GATEKEEPER
 auth.onAuthStateChanged(async (userAuth) => {
-  document.getElementById("loading-screen")?.classList.remove("hidden");
-  
-  // ALWAYS keep the topbar visible so the logo shows!
   document.querySelector(".topbar")?.classList.remove("hidden"); 
 
-  if (!userAuth) {
-    switchScreen("login"); 
-    document.getElementById("topAvatar")?.classList.add("hidden"); 
-    document.getElementById("loading-screen")?.classList.add("hidden");
-    return;
-  }
-  
-  try {
-    userEmail = userAuth.email || userAuth.uid; 
-    const userRef = db.collection("users").doc(userEmail);
-    let doc = await userRef.get();
+  if (userAuth) {
+    // Keep loader on while we fetch their campus data
+    document.getElementById("loading-screen")?.classList.remove("hidden");
     
-    if (doc.exists && doc.data().banned === true) {
-      alert("SECURITY ALERT: Your account has been suspended.");
-      auth.signOut(); 
-      return;
-    }
-    
-    // CREATE NEW USER PROFILE IF MISSING
-    if (!doc.exists) {
-      let defaultName = userAuth.displayName || (userAuth.email ? userAuth.email.split('@')[0] : "Student");
-      await userRef.set({ 
-        name: defaultName, 
-        googlePfp: userAuth.photoURL || "", 
-        avatar: userAuth.photoURL || "👤", 
-        banned: false, 
-        joinedAt: Date.now() 
-      });
-      doc = await userRef.get();
-    }
+    try {
+      userEmail = userAuth.email || userAuth.uid; 
+      const userRef = db.collection("users").doc(userEmail);
+      let doc = await userRef.get();
+      
+      if (doc.exists && doc.data().banned === true) {
+        alert("SECURITY ALERT: Your account has been suspended.");
+        auth.signOut(); 
+        return;
+      }
+      
+      if (!doc.exists) {
+        let defaultName = userAuth.displayName || (userAuth.email ? userAuth.email.split('@')[0] : "Student");
+        await userRef.set({ 
+          name: defaultName, 
+          googlePfp: userAuth.photoURL || "", 
+          avatar: userAuth.photoURL || "👤", 
+          banned: false, 
+          joinedAt: Date.now() 
+        });
+        doc = await userRef.get();
+      }
 
-    // CHECK IF THEY NEED TO CLAIM A USERNAME
-    if (!doc.data().username) {
-      document.getElementById("topAvatar")?.classList.add("hidden");
-      switchScreen("usernameModal"); 
+      if (!doc.data().username) {
+        document.getElementById("topAvatar")?.classList.add("hidden");
+        switchScreen("usernameModal"); 
+        document.getElementById("loading-screen")?.classList.add("hidden");
+        return; 
+      }
+
+      initializeUserApp(doc.data());
+
+    } catch (error) {
+      console.error("Gatekeeper Error:", error); 
+      switchScreen("login"); 
       document.getElementById("loading-screen")?.classList.add("hidden");
-      return; 
     }
-
-    // EVERYTHING IS GOOD: BOOT UP THE APP
-    initializeUserApp(doc.data());
-
-  } catch (error) {
-    console.error("Gatekeeper Error:", error); 
-    switchScreen("login"); 
-    document.getElementById("loading-screen")?.classList.add("hidden");
   }
 });
 
@@ -650,7 +655,7 @@ function showTab(tab) {
 // 🔥 OPEN PROFILE FIXED WITH MASTER SWITCH
 function openProfileScreen() {
   if (!user || user === "") return;
-  
+
   try {
     const dName = document.getElementById("profileDisplayName");
     const uName = document.getElementById("profileUsername");
