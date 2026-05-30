@@ -100,25 +100,27 @@ function toggleTime(element) {
 // 🔐 BULLETPROOF AUTHENTICATION (THE TUNNEL METHOD)
 // ==========================================
 
-// 1. Catch the user when they bounce back from Google
-auth.getRedirectResult().then((result) => {
-  if (result && result.user) {
-    console.log("Successfully logged in through the tunnel!");
-  }
-}).catch((error) => {
+// Helper function to absolutely guarantee no screens overlap
+function switchScreen(screenId) {
+  document.getElementById("login")?.classList.add("hidden");
+  document.getElementById("home")?.classList.add("hidden");
+  document.getElementById("usernameModal")?.classList.add("hidden");
+  document.getElementById("profileScreen")?.classList.add("hidden");
+  document.getElementById("chatScreen")?.classList.add("hidden");
+
+  if (screenId) document.getElementById(screenId)?.classList.remove("hidden");
+}
+
+auth.getRedirectResult().catch((error) => {
   console.error("Redirect Login Error:", error);
-  document.getElementById("loading-screen")?.classList.add("hidden");
+  // We DO NOT hide the loading screen here anymore. We let the Gatekeeper handle it!
 });
 
-// 2. The Login Trigger
 function loginWithGoogle() {
   const loader = document.getElementById("loading-screen");
   if (loader) loader.classList.remove("hidden");
 
   const provider = new firebase.auth.GoogleAuthProvider();
-  
-  // 🔥 Trigger the redirect! 
-  // Because of our Vercel tunnel, this is now 100% immune to Apple's blockers.
   auth.signInWithRedirect(provider).catch((error) => {
     console.error("Auth Error:", error);
     if (loader) loader.classList.add("hidden"); 
@@ -130,19 +132,14 @@ function loginWithGoogle() {
 // 3. THE STRICT UI GATEKEEPER
 // ==========================================
 auth.onAuthStateChanged(async (userAuth) => {
-  // 1. Immediately cover the screen so the user doesn't see glitchy UI switching
   document.getElementById("loading-screen")?.classList.remove("hidden");
+  
+  // ALWAYS keep the topbar visible so the logo shows!
+  document.querySelector(".topbar")?.classList.remove("hidden"); 
 
   if (!userAuth) {
-    // STATE: LOGGED OUT - Hide absolutely everything except the login screen
-    document.getElementById("home")?.classList.add("hidden");
-    document.getElementById("topAvatar")?.classList.add("hidden");
-    document.getElementById("profileScreen")?.classList.add("hidden");
-    document.getElementById("chatScreen")?.classList.add("hidden");
-    document.getElementById("usernameModal")?.classList.add("hidden");
-    document.querySelector(".topbar")?.classList.add("hidden"); 
-
-    document.getElementById("login")?.classList.remove("hidden");
+    switchScreen("login"); // Show ONLY login screen
+    document.getElementById("topAvatar")?.classList.add("hidden"); // Hide the profile avatar
     document.getElementById("loading-screen")?.classList.add("hidden");
     return;
   }
@@ -173,11 +170,8 @@ auth.onAuthStateChanged(async (userAuth) => {
 
     // CHECK IF THEY NEED TO CLAIM A USERNAME
     if (!doc.data().username) {
-      document.getElementById("login")?.classList.add("hidden"); 
-      document.getElementById("home")?.classList.add("hidden");
-      document.querySelector(".topbar")?.classList.add("hidden");
-      
-      document.getElementById("usernameModal")?.classList.remove("hidden");
+      document.getElementById("topAvatar")?.classList.add("hidden");
+      switchScreen("usernameModal"); // Show ONLY username modal
       document.getElementById("loading-screen")?.classList.add("hidden");
       return; 
     }
@@ -187,33 +181,25 @@ auth.onAuthStateChanged(async (userAuth) => {
 
   } catch (error) {
     console.error("Gatekeeper Error:", error); 
-    alert("Database Error: " + error.message);
+    switchScreen("login"); // Drop back to login safely if database crashes
     document.getElementById("loading-screen")?.classList.add("hidden");
   }
 });
 
 function initializeUserApp(userData) {
-  // Safe fallbacks to prevent Javascript from crashing
   user = userData?.username || "Student"; 
   realName = userData?.name || "Student";
   userAvatar = userData?.avatar || "👤";
   googlePfp = userData?.googlePfp || "";
   
   const topAvatarEl = document.getElementById("topAvatar");
-  if(topAvatarEl) topAvatarEl.innerHTML = renderAvatar(userAvatar); 
+  if(topAvatarEl) {
+    topAvatarEl.innerHTML = renderAvatar(userAvatar); 
+    topAvatarEl.classList.remove("hidden"); // Reveal the profile avatar!
+  }
   
-  // THE MASTER WIPE: Force-hide every other screen so they don't overlap
-  document.getElementById("login")?.classList.add("hidden"); 
-  document.getElementById("usernameModal")?.classList.add("hidden"); 
-  document.getElementById("profileScreen")?.classList.add("hidden");
-  document.getElementById("chatScreen")?.classList.add("hidden");
-
-  // REVEAL ONLY THE LIVE FEED
-  document.querySelector(".topbar")?.classList.remove("hidden");
-  document.getElementById("topAvatar")?.classList.remove("hidden"); 
-  document.getElementById("home")?.classList.remove("hidden");
+  switchScreen("home"); // Show ONLY the campus feed
   
-  // Start loading data
   loadChatList(); 
   loadEvents();
   
@@ -266,11 +252,9 @@ async function claimUsername() {
     await db.collection("usernames").doc(chosenName).set({ email: userEmail });
     await db.collection("users").doc(userEmail).set({ username: chosenName }, { merge: true });
     
-    document.getElementById("usernameModal")?.classList.add("hidden");
-    
-    auth.currentUser.reload();
-    const userAuth = auth.currentUser;
-    auth.updateCurrentUser(userAuth); 
+    // Safely pull the fresh data and boot the app!
+    const updatedDoc = await db.collection("users").doc(userEmail).get();
+    initializeUserApp(updatedDoc.data());
     
   } catch (error) {
     alert("Error claiming username. Try another one.");
