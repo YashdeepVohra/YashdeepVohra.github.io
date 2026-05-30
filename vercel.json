@@ -1,8 +1,8 @@
 {
   "rewrites": [
     {
-      "source": "/__/auth/:path*",
-      "destination": "https://livesociyaweb.firebaseapp.com/__/auth/:path*"
+      "source": "/__/auth/:match*",
+      "destination": "https://livesociyaweb.firebaseapp.com/__/auth/:match*"
     }
   ]
 }
