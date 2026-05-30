@@ -97,29 +97,33 @@ function toggleTime(element) {
 }
 
 // ==========================================
-// 🔐 BULLETPROOF AUTHENTICATION
+// 🔐 BULLETPROOF AUTHENTICATION (THE TUNNEL METHOD)
 // ==========================================
 
+// 1. Catch the user when they bounce back from Google
+auth.getRedirectResult().then((result) => {
+  if (result && result.user) {
+    console.log("Successfully logged in through the tunnel!");
+  }
+}).catch((error) => {
+  console.error("Redirect Login Error:", error);
+  document.getElementById("loading-screen")?.classList.add("hidden");
+});
+
+// 2. The Login Trigger
 function loginWithGoogle() {
   const loader = document.getElementById("loading-screen");
   if (loader) loader.classList.remove("hidden");
 
   const provider = new firebase.auth.GoogleAuthProvider();
   
-  // 🔥 FIRING INSTANTLY: No promises, no delays. 
-  // This bypasses Apple's strict async popup blockers completely.
-  auth.signInWithPopup(provider)
-    .catch((error) => {
-      console.error("Auth Error:", error);
-      if (loader) loader.classList.add("hidden"); 
-      
-      // Give the user specific instructions if their browser is stubborn
-      if (error.code === 'auth/popup-blocked') {
-          alert("Your browser blocked the login window! Please click 'Allow Popups' in your URL bar or browser settings.");
-      } else {
-          alert("Login Error: " + error.message);
-      }
-    });
+  // 🔥 Trigger the redirect! 
+  // Because of our Vercel tunnel, this is now 100% immune to Apple's blockers.
+  auth.signInWithRedirect(provider).catch((error) => {
+    console.error("Auth Error:", error);
+    if (loader) loader.classList.add("hidden"); 
+    alert("Login Error: " + error.message);
+  });
 }
 
 // 3. THE UI GATEKEEPER
