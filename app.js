@@ -113,24 +113,36 @@ function toggleTime(element) {
 
 // 1. THIS IS THE MISSING PIECE FOR MOBILE!
 // It catches the user when Google redirects them back to your app.
+// ==========================================
+// 🔐 BULLETPROOF AUTHENTICATION (MOBILE SAFE)
+// ==========================================
+
+// 1. This catches the user when Google redirects them back to your app
 auth.getRedirectResult().catch((error) => {
   console.error("Redirect Login Error:", error);
+  const loader = document.getElementById("loading-screen");
+  if (loader) loader.classList.add("hidden"); // Turn off spinner on error
+  
   alert("Login failed. If you are on an iPhone, ensure 'Prevent Cross-Site Tracking' is disabled in Safari settings.");
 });
 
+// 2. The function attached to your HTML Login button
 function loginWithGoogle() {
   if (Object.keys(firebaseConfig).length === 0) return alert("Firebase Config is missing!");
   
+  // IMMEDIATELY show the loading spinner!
+  const loader = document.getElementById("loading-screen");
+  if (loader) loader.classList.remove("hidden");
+
   const provider = new firebase.auth.GoogleAuthProvider();
   
-  // Try popup first (for desktop), fallback to redirect (for mobile PWAs)
-  auth.signInWithPopup(provider).catch((error) => {
-    if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user') {
-      auth.signInWithRedirect(provider);
-    } else {
-      console.error(error);
-    }
+  // CRITICAL FIX: Use Redirect instead of Popup. 
+  // This completely bypasses the strict mobile popup blockers!
+  auth.signInWithRedirect(provider).catch((error) => {
+    console.error("Failed to start redirect:", error);
+    if (loader) loader.classList.add("hidden"); // Turn off spinner if it fails to start
   });
+}
 
   // Inside your login button click listener:
   document.getElementById('login-btn').addEventListener('click', () => {
