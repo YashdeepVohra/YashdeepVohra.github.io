@@ -3,7 +3,7 @@
 // ==========================================
 const firebaseConfig = {
   apiKey: "AIzaSyBvcJJ2wz2yteRUYdasRUe8oaTt_Vp9kGQ",
-  authDomain: "livesociyaweb.firebaseapp.com",
+  authDomain: "livesociya.com",
   projectId: "livesociyaweb",
   storageBucket: "livesociyaweb.firebasestorage.app",
   messagingSenderId: "676740518716",
