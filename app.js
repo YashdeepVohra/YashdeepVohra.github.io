@@ -305,10 +305,15 @@ async function checkCrossedPaths(user1, user2) {
 }
 
 async function startChat(clickedUsername = null) {
-  const other = clickedUsername || document.getElementById("chatUser")?.value.trim();
-  if (!other) return alert("Please enter a username."); if (other === user) return alert("You can't start a chat with yourself!");
+  // 🔥 FIX 1: Force the username to lowercase immediately
+  let rawOther = clickedUsername || document.getElementById("chatUser")?.value.trim();
+  if (!rawOther) return alert("Please enter a username.");
+  
+  const other = rawOther.toLowerCase(); 
+  if (other === user) return alert("You can't start a chat with yourself!");
+  
   try {
-    const usernameDoc = await db.collection("usernames").doc(other.toLowerCase()).get();
+    const usernameDoc = await db.collection("usernames").doc(other).get();
     if (!usernameDoc.exists) return alert(`User "@${other}" does not exist on campus.`);
     const chatId = [user, other].sort().join("_");
     if(!clickedUsername && document.getElementById("chatUser")) document.getElementById("chatUser").value = ""; 
@@ -349,25 +354,50 @@ async function sendMessage() {
 }
 
 function loadMessages() {
-  if (messagesUnsubscribe) messagesUnsubscribe(); const box = document.getElementById("messages"); if(!box) return;
-  messagesUnsubscribe = db.collection("messages").where("chatId", "==", currentChat).orderBy("time", "asc").onSnapshot(snapshot => {
+  if (messagesUnsubscribe) messagesUnsubscribe(); 
+  const box = document.getElementById("messages"); if(!box) return;
+  
+  // 🔥 FIX 2: Removed orderBy() from Firebase query to stop the silent crash!
+  messagesUnsubscribe = db.collection("messages").where("chatId", "==", currentChat).onSnapshot(snapshot => {
       box.innerHTML = ""; let lastDateString = ""; myMessageCount = 0; let theirMessageCount = 0;
-      snapshot.forEach(doc => {
-        const m = doc.data(); const isMe = m.sender === user; if(isMe) myMessageCount++; else theirMessageCount++;
+      
+      // Pull messages into a Javascript array and sort them locally 
+      let msgs = [];
+      snapshot.forEach(doc => msgs.push(doc.data()));
+      msgs.sort((a, b) => a.time - b.time); 
+
+      msgs.forEach(m => {
+        const isMe = m.sender === user; if(isMe) myMessageCount++; else theirMessageCount++;
         const msgDate = new Date(m.time).toLocaleDateString();
-        if (msgDate !== lastDateString) { let displayDate = ""; const today = new Date().toLocaleDateString(); const yesterdayObj = new Date(); yesterdayObj.setDate(yesterdayObj.getDate() - 1); const yesterday = yesterdayObj.toLocaleDateString(); if (msgDate === today) displayDate = "Today"; else if (msgDate === yesterday) displayDate = "Yesterday"; else displayDate = new Date(m.time).toLocaleDateString([], { month: 'short', day: 'numeric' }); box.innerHTML += `<div class="date-separator">${displayDate}</div>`; lastDateString = msgDate; }
+        
+        if (msgDate !== lastDateString) { 
+            let displayDate = ""; const today = new Date().toLocaleDateString(); const yesterdayObj = new Date(); yesterdayObj.setDate(yesterdayObj.getDate() - 1); const yesterday = yesterdayObj.toLocaleDateString(); 
+            if (msgDate === today) displayDate = "Today"; else if (msgDate === yesterday) displayDate = "Yesterday"; else displayDate = new Date(m.time).toLocaleDateString([], { month: 'short', day: 'numeric' }); 
+            box.innerHTML += `<div class="date-separator">${displayDate}</div>`; lastDateString = msgDate; 
+        }
         box.innerHTML += `<div class="msg-wrapper" style="align-items: ${isMe ? 'flex-end' : 'flex-start'};" onclick="toggleTime(this)"><div class="msg-bubble ${isMe ? 'msg-sent' : 'msg-received'}">${m.text}</div><div class="msg-time" style="text-align: ${isMe ? 'right' : 'left'}">${formatTime(m.time)}</div></div>`;
       });
+      
       if (currentChatStatus === "icebreaker" && theirMessageCount > 0 && currentChatInitiator === user) { db.collection("chats").doc(currentChat).update({ status: "unlocked" }); }
       box.scrollTop = box.scrollHeight; updateChatFooterUI();
     });
 }
 
 function updateChatFooterUI() {
-  const footer = document.querySelector(".chat-footer"); if(!footer) return;
+  const footer = document.querySelector(".chat-footer"); 
+  if(!footer) return;
+  
   if (currentChatStatus === "icebreaker" && currentChatInitiator === user && myMessageCount >= 1) {
+      // Locked State: Waiting for reply
       footer.innerHTML = `<div style="width: 100%; text-align: center; color: var(--text-muted); font-size: 13px; font-weight: bold; padding: 10px;"><i class='bx bxs-lock-alt'></i> Icebreaker sent! Waiting for reply...</div>`;
-  } else { footer.innerHTML = `<input id="msgInput" placeholder="Message..." onkeydown="if(event.key === 'Enter') sendMessage()" /><button onclick="sendMessage()"><i class='bx bxs-send'></i></button>`; }
+  } else { 
+      // Unlocked State: Free to type
+      // 🔥 THE FIX: Only draw the text box if it doesn't already exist! 
+      // This prevents the app from deleting what the user is currently typing.
+      if (!document.getElementById("msgInput")) {
+          footer.innerHTML = `<input id="msgInput" placeholder="Message..." autocomplete="off" onkeydown="if(event.key === 'Enter') sendMessage()" /><button onclick="sendMessage()"><i class='bx bxs-send'></i></button>`; 
+      }
+  }
 }
 
 function loadChatList() {
@@ -432,10 +462,19 @@ function closeProfileScreen() { document.querySelector(".topbar")?.classList.rem
 function loadMyEvents() {
   const myEventsBox = document.getElementById("myProfileEvents"); if(!myEventsBox) return;
   myEventsBox.innerHTML = "<p style='text-align:center; color:gray;'>Loading...</p>";
-  db.collection("events").where("user", "==", user).orderBy("startTime", "desc").get().then(snapshot => {
+  
+  // 🔥 FIX 3: Removed orderBy() here as well to prevent the Profile screen from crashing
+  db.collection("events").where("user", "==", user).get().then(snapshot => {
     myEventsBox.innerHTML = "";
     if (snapshot.empty) { myEventsBox.innerHTML = `<div class="empty-state"><i class='bx bx-ghost'></i><p>You haven't hosted any events yet.</p></div>`; return; }
-    snapshot.forEach(doc => { const e = doc.data(); myEventsBox.innerHTML += `<div class="event card" style="padding: 16px;"><div class="event-title" style="font-size: 16px;">${e.title}</div><div class="event-meta" style="font-size: 13px;">${e.tag || ''} • ${e.place}</div></div>`; });
+    
+    let evts = [];
+    snapshot.forEach(doc => evts.push(doc.data()));
+    evts.sort((a, b) => b.startTime - a.startTime); // Sorted locally
+
+    evts.forEach(e => { 
+        myEventsBox.innerHTML += `<div class="event card" style="padding: 16px;"><div class="event-title" style="font-size: 16px;">${e.title}</div><div class="event-meta" style="font-size: 13px;">${e.tag || ''} • ${e.place}</div></div>`; 
+    });
   });
 }
 
