@@ -94,8 +94,10 @@ function toggleTime(element) {
 }
 
 // ==========================================
-// 🔐 BULLETPROOF AUTHENTICATION (THE SESSION LOCK)
+// 🔐 BULLETPROOF AUTHENTICATION (THE PROMISE SYNC)
 // ==========================================
+
+let isRedirectCheckComplete = false; // THE NEW MASTER LOCK
 
 function switchScreen(screenId) {
   document.getElementById("login")?.classList.add("hidden");
@@ -107,19 +109,11 @@ function switchScreen(screenId) {
   if (screenId) document.getElementById(screenId)?.classList.remove("hidden");
 }
 
-// 1. THE LOCK: Check if we just bounced back from Google
-const isAuthPending = sessionStorage.getItem("authPending") === "true";
-
-if (isAuthPending) {
-  // We are returning from Google! Lock the loading screen ON. 
-  document.getElementById("loading-screen")?.classList.remove("hidden");
-}
+// 1. Instantly lock the screen on "Loading" when the app boots up
+document.getElementById("loading-screen")?.classList.remove("hidden");
 
 // 2. The Login Trigger
 function loginWithGoogle() {
-  // ENGAGE THE LOCK: Tell the browser we are leaving for Google
-  sessionStorage.setItem("authPending", "true");
-  
   const loader = document.getElementById("loading-screen");
   if (loader) loader.classList.remove("hidden");
 
@@ -129,82 +123,81 @@ function loginWithGoogle() {
       return auth.signInWithRedirect(provider);
     })
     .catch((error) => {
-      sessionStorage.removeItem("authPending"); // Unlock if it fails immediately
-      if (loader) loader.classList.add("hidden"); 
+      if (loader) loader.classList.add("hidden");
       alert("Login Error: " + error.message);
     });
 }
 
-// 3. The Redirect Catcher (Waits patiently for Firebase to finish)
+// 3. Wait for Firebase to finish checking the redirect ticket
 auth.getRedirectResult().then((result) => {
-  // FIREBASE IS DONE! Remove the lock.
-  sessionStorage.removeItem("authPending");
-  
-  // If Firebase finished but found no ticket, ONLY THEN do we show the login screen.
+  isRedirectCheckComplete = true; // Firebase is officially done checking!
+
+  // If there's no ticket, and no user is logged in, show the login screen
   if ((!result || !result.user) && !auth.currentUser) {
     switchScreen("login");
     document.getElementById("topAvatar")?.classList.add("hidden");
     document.getElementById("loading-screen")?.classList.add("hidden");
   }
 }).catch((error) => {
-  sessionStorage.removeItem("authPending"); // Remove lock on error
+  isRedirectCheckComplete = true;
   console.error("Redirect Error:", error);
-  switchScreen("login");
-  document.getElementById("loading-screen")?.classList.add("hidden");
-  alert("Authentication failed: " + error.message);
+  if (!auth.currentUser) {
+    switchScreen("login");
+    document.getElementById("topAvatar")?.classList.add("hidden");
+    document.getElementById("loading-screen")?.classList.add("hidden");
+  }
 });
 
-// 4. The Strict UI Gatekeeper
+// 4. The UI Gatekeeper
 auth.onAuthStateChanged(async (userAuth) => {
-  document.querySelector(".topbar")?.classList.remove("hidden"); 
+  document.querySelector(".topbar")?.classList.remove("hidden");
 
   if (userAuth) {
-    // WE HAVE A USER! Remove the lock and boot the app.
-    sessionStorage.removeItem("authPending");
+    // WE HAVE A USER! Boot the app.
     document.getElementById("loading-screen")?.classList.remove("hidden");
-    
+
     try {
-      userEmail = userAuth.email || userAuth.uid; 
+      userEmail = userAuth.email || userAuth.uid;
       const userRef = db.collection("users").doc(userEmail);
       let doc = await userRef.get();
-      
+
       if (doc.exists && doc.data().banned === true) {
         alert("SECURITY ALERT: Your account has been suspended.");
-        auth.signOut(); 
+        auth.signOut();
         return;
       }
-      
+
       if (!doc.exists) {
         let defaultName = userAuth.displayName || (userAuth.email ? userAuth.email.split('@')[0] : "Student");
-        await userRef.set({ 
-          name: defaultName, 
-          googlePfp: userAuth.photoURL || "", 
-          avatar: userAuth.photoURL || "👤", 
-          banned: false, 
-          joinedAt: Date.now() 
+        await userRef.set({
+          name: defaultName,
+          googlePfp: userAuth.photoURL || "",
+          avatar: userAuth.photoURL || "👤",
+          banned: false,
+          joinedAt: Date.now()
         });
         doc = await userRef.get();
       }
 
       if (!doc.data().username) {
         document.getElementById("topAvatar")?.classList.add("hidden");
-        switchScreen("usernameModal"); 
+        switchScreen("usernameModal");
         document.getElementById("loading-screen")?.classList.add("hidden");
-        return; 
+        return;
       }
 
       initializeUserApp(doc.data());
 
     } catch (error) {
-      console.error("Gatekeeper Error:", error); 
-      switchScreen("login"); 
+      console.error("Gatekeeper Error:", error);
+      switchScreen("login");
       document.getElementById("loading-screen")?.classList.add("hidden");
     }
   } else {
     // NO USER FOUND.
-    // THE MAGIC RULE: If the lock is engaged, ignore this and DO NOT show the login screen. 
-    // Only show the login screen if we are completely sure we aren't waiting for Google.
-    if (sessionStorage.getItem("authPending") !== "true") {
+    // THE MAGIC RULE: Only show the login screen if Firebase has officially finished checking the redirect!
+    // If it hasn't finished, ignore this and keep the loading screen exactly where it is.
+    if (isRedirectCheckComplete) {
       switchScreen("login");
       document.getElementById("topAvatar")?.classList.add("hidden");
       document.getElementById("loading-screen")?.classList.add("hidden");
