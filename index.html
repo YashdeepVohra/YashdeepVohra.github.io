@@ -22,7 +22,13 @@
 
   <header class="topbar">
     <div class="title">livesociya</div>
-    <button class="profileBtn hidden" onclick="openProfileScreen()" id="topAvatar">👤</button>
+    
+    <div style="position: relative; display: inline-flex; align-items: center;">
+      <button class="profileBtn hidden" onclick="openProfileScreen()" id="topAvatar">👤</button>
+      
+      <div id="desktopBadge" class="hidden" style="position: absolute; top: -2px; right: -2px; width: 14px; height: 14px; background: #ef4444; border-radius: 50%; border: 2px solid white; z-index: 100;"></div>
+    </div>
+    
   </header>
 
   <div class="container" id="login">
