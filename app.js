@@ -34,61 +34,41 @@ function renderAvatar(avatarCode) {
 }
 
 // ==========================================
-// 🔔 IN-APP & NATIVE DESKTOP NOTIFICATIONS
+// 🔔 IN-APP NOTIFICATION SYSTEM (CLEAN MOBILE)
 // ==========================================
 function showNotification(senderUsername, chatId) {
   if (currentChat === chatId) return;
 
-  // 1. NATIVE OS NOTIFICATION (Mac/Windows)
-  if ("Notification" in window && Notification.permission === "granted") {
-    new Notification("livesociya", { body: `New message from @${senderUsername}` });
+  let toastBox = document.getElementById("toastBox");
+  if (!toastBox) {
+    toastBox = document.createElement("div");
+    toastBox.id = "toastBox";
+    toastBox.style.cssText = "position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; width: 90%; max-width: 400px; display: flex; flex-direction: column; align-items: center; pointer-events: none;";
+    document.body.appendChild(toastBox);
   }
 
-  // 2. BULLETPROOF IN-APP TOAST (Fades in, impossible to clip)
-  let toastBox = document.getElementById("desktop-toast");
-  if (toastBox) toastBox.remove(); // Instantly destroy old ones so they never stack
+  // Clear previous notifications so they never stack
+  toastBox.innerHTML = "";
 
-  toastBox = document.createElement("div");
-  toastBox.id = "desktop-toast";
-  toastBox.style.cssText = `
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    background: var(--primary, #4f46e5);
-    color: white;
-    padding: 16px 24px;
-    border-radius: 12px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.4);
-    font-size: 14px;
-    font-weight: 700;
-    z-index: 2147483647; /* Maximum possible Z-index in browsers */
-    cursor: pointer;
-    opacity: 0;
-    transition: opacity 0.3s ease-in-out;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  `;
-  toastBox.innerHTML = `<i class='bx bxs-message-rounded-dots' style="font-size: 24px;"></i> New message from @${senderUsername}`;
-  
-  toastBox.onclick = () => {
+  const toast = document.createElement("div");
+  toast.style.cssText = "background: var(--primary); color: white; padding: 14px 20px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); font-size: 14px; font-weight: 600; cursor: pointer; transform: translateY(-150%); transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); display: flex; align-items: center; gap: 10px; width: 100%; pointer-events: auto;";
+  toast.innerHTML = `<i class='bx bxs-message-rounded-dots' style="font-size: 20px;"></i> New message from @${senderUsername}`;
+
+  toast.onclick = () => {
     openChat(chatId, senderUsername);
-    toastBox.style.opacity = "0";
-    setTimeout(() => toastBox.remove(), 300);
+    toast.style.transform = "translateY(-150%)"; 
+    setTimeout(() => toast.remove(), 400);
   };
 
-  document.body.appendChild(toastBox);
-
-  // Trigger the fade-in
-  setTimeout(() => { toastBox.style.opacity = "1"; }, 50);
-
-  // Fade out and remove after 5 seconds
+  toastBox.appendChild(toast);
+  
+  void toast.offsetWidth;
+  toast.style.transform = "translateY(0)";
+  
   setTimeout(() => {
-    if (document.body.contains(toastBox)) {
-      toastBox.style.opacity = "0";
-      setTimeout(() => toastBox.remove(), 300);
-    }
-  }, 5000);
+    toast.style.transform = "translateY(-150%)";
+    setTimeout(() => toast.remove(), 400);
+  }, 4000);
 }
 
 function formatTime(ms) {
@@ -410,56 +390,21 @@ function loadChatList() {
       
       if (chatsArray.length === 0) list.innerHTML = `<div class="empty-state" style="padding-top: 20px;"><i class='bx bx-message-square-x'></i><p>No messages yet.</p></div>`;
       
-      // ... (Keep the snapshot loops exactly as they are) ...
-      
       chatsArray.forEach(chat => {
         if (chat.unreadBy === user && currentChat === chat.id) { db.collection("chats").doc(chat.id).set({ unreadBy: "" }, { merge: true }); chat.unreadBy = ""; }
         const other = chat.users.find(u => u !== user); const initial = other.charAt(0).toUpperCase(); const isUnread = chat.unreadBy === user; if (isUnread) hasGlobalUnread = true;
         list.innerHTML += `<div class="chat-item" onclick="openChat('${chat.id}', '${other}')" style="${isUnread ? 'background: #e0e7ff; border-left: 4px solid var(--primary);' : ''}"><div class="chat-avatar">${initial}</div><div class="chat-name" style="${isUnread ? 'font-weight: 800;' : ''}">${other}</div>${isUnread ? `<div style="width:10px; height:10px; background:#ef4444; border-radius:50%; margin-left:auto;"></div>` : ''}</div>`;
       });
       
-      // 🔥 THE UNIVERSAL DESKTOP & MOBILE BADGE SYSTEM
-      let globalBadge = document.getElementById("universal-desktop-badge");
-      const bottomNavBadge = document.getElementById("chatBadge"); // Your existing mobile badge
+      // 🔥 CLEAN MOBILE BADGE + TAB TITLE
+      const badge = document.getElementById("chatBadge"); 
       
       if (hasGlobalUnread) {
-        document.title = "(1) New Message - livesociya";
-        if (bottomNavBadge) bottomNavBadge.classList.remove("hidden");
-        
-        // Create the un-ignorable Desktop Badge if it doesn't exist
-        if (!globalBadge) {
-          globalBadge = document.createElement("div");
-          globalBadge.id = "universal-desktop-badge";
-          globalBadge.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            width: 14px;
-            height: 14px;
-            background: #ef4444;
-            border: 2px solid white;
-            border-radius: 50%;
-            z-index: 2147483646;
-            box-shadow: 0 0 10px rgba(239, 68, 68, 0.8);
-          `;
-          
-          // Inject a tiny CSS animation for the pulse
-          if (!document.getElementById("pulse-css")) {
-            const style = document.createElement('style');
-            style.id = "pulse-css";
-            style.innerHTML = `@keyframes pulseRed { 0% { transform: scale(1); } 50% { transform: scale(1.3); } 100% { transform: scale(1); } }`;
-            document.head.appendChild(style);
-          }
-          globalBadge.style.animation = "pulseRed 1.5s infinite";
-          document.body.appendChild(globalBadge);
-        }
-        globalBadge.style.display = "block";
-        
+        if (badge) badge.classList.remove("hidden");
+        document.title = "(1) New Message - livesociya"; // Safe desktop feature
       } else {
-        // Clear all badges
+        if (badge) badge.classList.add("hidden");
         document.title = "livesociya";
-        if (bottomNavBadge) bottomNavBadge.classList.add("hidden");
-        if (globalBadge) globalBadge.style.display = "none";
       }
     });
 }
