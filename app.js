@@ -323,13 +323,25 @@ async function startChat(clickedUsername = null) {
 
 function openChat(chatId, otherUser) {
   currentChat = chatId; 
-  const hAvatar = document.getElementById("chatHeaderAvatar"); const hTitle = document.getElementById("chatWithTitle");
-  if(hAvatar) hAvatar.innerText = otherUser.charAt(0).toUpperCase(); if(hTitle) hTitle.innerText = otherUser;
-  document.querySelector(".topbar")?.classList.add("hidden"); switchScreen("chatScreen");
-  db.collection("chats").doc(chatId).set({ unreadBy: "" }, { merge: true }); 
+  const hAvatar = document.getElementById("chatHeaderAvatar"); 
+  const hTitle = document.getElementById("chatWithTitle");
+  
+  if(hAvatar) hAvatar.innerText = otherUser.charAt(0).toUpperCase(); 
+  if(hTitle) hTitle.innerText = otherUser;
+  
+  document.querySelector(".topbar")?.classList.add("hidden"); 
+  switchScreen("chatScreen");
+  
+  // 🔥 THE FIX: When clearing the unread dot, we force it to explicitly write your names into the document too!
+  db.collection("chats").doc(chatId).set({ unreadBy: "", users: [user, otherUser] }, { merge: true }); 
+  
   if(chatDocUnsubscribe) chatDocUnsubscribe();
   chatDocUnsubscribe = db.collection("chats").doc(chatId).onSnapshot(doc => {
-     if(doc.exists) { currentChatStatus = doc.data().status || "unlocked"; currentChatInitiator = doc.data().initiatedBy || ""; updateChatFooterUI(); }
+     if(doc.exists) { 
+         currentChatStatus = doc.data().status || "unlocked"; 
+         currentChatInitiator = doc.data().initiatedBy || ""; 
+         updateChatFooterUI(); 
+     }
   });
   loadMessages();
 }
@@ -342,15 +354,28 @@ function closeChat() {
 async function sendMessage() {
   const input = document.getElementById("msgInput"); if(!input) return; 
   const text = input.value.trim(); if (!text || !currentChat) return;
-  const otherUser = currentChat.split("_").find(u => u !== user); const chatRef = db.collection("chats").doc(currentChat); const chatDoc = await chatRef.get(); let newStatus = currentChatStatus;
-  if (!chatDoc.exists) {
-      const crossedPaths = await checkCrossedPaths(user, otherUser); newStatus = crossedPaths ? "unlocked" : "icebreaker";
-      await chatRef.set({ users: [user, otherUser], unreadBy: otherUser, lastUpdated: Date.now(), status: newStatus, initiatedBy: user });
+  
+  const otherUser = currentChat.split("_").find(u => u !== user); 
+  const chatRef = db.collection("chats").doc(currentChat); 
+  const chatDoc = await chatRef.get(); 
+  let newStatus = currentChatStatus;
+  
+  // 🔥 THE FIX: We now check if "status" exists, not just if the file exists. 
+  // This catches the partial files that were breaking your list.
+  if (!chatDoc.exists || !chatDoc.data().status) {
+      const crossedPaths = await checkCrossedPaths(user, otherUser); 
+      newStatus = crossedPaths ? "unlocked" : "icebreaker";
+      await chatRef.set({ users: [user, otherUser], unreadBy: otherUser, lastUpdated: Date.now(), status: newStatus, initiatedBy: user }, { merge: true });
   } else {
       if (currentChatStatus === "icebreaker" && currentChatInitiator === otherUser) { newStatus = "unlocked"; }
-      await chatRef.set({ unreadBy: otherUser, lastUpdated: Date.now(), status: newStatus }, { merge: true });
+      
+      // 🔥 THE AUTO-HEALER: We add the 'users' array here too. 
+      // This instantly fixes any currently invisible chats the moment you send a message.
+      await chatRef.set({ users: [user, otherUser], unreadBy: otherUser, lastUpdated: Date.now(), status: newStatus }, { merge: true });
   }
-  await db.collection("messages").add({ chatId: currentChat, sender: user, text: text, time: Date.now() }); input.value = "";
+  
+  await db.collection("messages").add({ chatId: currentChat, sender: user, text: text, time: Date.now() }); 
+  input.value = "";
 }
 
 function loadMessages() {
