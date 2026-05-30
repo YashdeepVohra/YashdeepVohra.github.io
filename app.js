@@ -39,56 +39,56 @@ function renderAvatar(avatarCode) {
 function showNotification(senderUsername, chatId) {
   if (currentChat === chatId) return;
 
-  // 1. THE DOM NOTIFICATION (Fixed Top-Right)
-  let toastContainer = document.getElementById("toast-container");
-  if (!toastContainer) {
-    toastContainer = document.createElement("div");
-    toastContainer.id = "toast-container";
-    // Maximum possible z-index. Fixed to top-right corner to avoid layout clipping!
-    toastContainer.style.cssText = "position: fixed; top: 20px; right: 20px; z-index: 2147483647; display: flex; flex-direction: column; gap: 10px; pointer-events: none; width: auto; max-width: 90vw;";
-    document.body.appendChild(toastContainer);
+  // 1. NATIVE OS NOTIFICATION (Mac/Windows)
+  if ("Notification" in window && Notification.permission === "granted") {
+    new Notification("livesociya", { body: `New message from @${senderUsername}` });
   }
 
-  // Clear previous notifications to prevent infinite stacking
-  toastContainer.innerHTML = "";
+  // 2. BULLETPROOF IN-APP TOAST (Fades in, impossible to clip)
+  let toastBox = document.getElementById("desktop-toast");
+  if (toastBox) toastBox.remove(); // Instantly destroy old ones so they never stack
 
-  const toast = document.createElement("div");
-  // Slides in from the right side instead of top
-  toast.style.cssText = "background: var(--primary); color: white; padding: 16px 20px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); font-size: 14px; font-weight: 600; cursor: pointer; pointer-events: auto; transform: translateX(150%); transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); display: flex; align-items: center; gap: 12px;";
-  toast.innerHTML = `<i class='bx bxs-message-rounded-dots' style="font-size: 24px;"></i> <span>New message from <b>@${senderUsername}</b></span>`;
-
-  toast.onclick = () => {
+  toastBox = document.createElement("div");
+  toastBox.id = "desktop-toast";
+  toastBox.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: var(--primary, #4f46e5);
+    color: white;
+    padding: 16px 24px;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+    font-size: 14px;
+    font-weight: 700;
+    z-index: 2147483647; /* Maximum possible Z-index in browsers */
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.3s ease-in-out;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  `;
+  toastBox.innerHTML = `<i class='bx bxs-message-rounded-dots' style="font-size: 24px;"></i> New message from @${senderUsername}`;
+  
+  toastBox.onclick = () => {
     openChat(chatId, senderUsername);
-    toast.style.transform = "translateX(150%)";
-    setTimeout(() => toast.remove(), 400);
+    toastBox.style.opacity = "0";
+    setTimeout(() => toastBox.remove(), 300);
   };
 
-  toastContainer.appendChild(toast);
+  document.body.appendChild(toastBox);
 
-  // Trigger smooth animation
-  requestAnimationFrame(() => {
-    toast.style.transform = "translateX(0)";
-  });
+  // Trigger the fade-in
+  setTimeout(() => { toastBox.style.opacity = "1"; }, 50);
 
+  // Fade out and remove after 5 seconds
   setTimeout(() => {
-    if(toast) {
-       toast.style.transform = "translateX(150%)";
-       setTimeout(() => toast.remove(), 400);
+    if (document.body.contains(toastBox)) {
+      toastBox.style.opacity = "0";
+      setTimeout(() => toastBox.remove(), 300);
     }
   }, 5000);
-
-  // 2. 🔥 NATIVE DESKTOP OS NOTIFICATIONS (Windows/Mac)
-  if ("Notification" in window) {
-    if (Notification.permission === "granted") {
-      new Notification("livesociya", { body: `New message from @${senderUsername}` });
-    } else if (Notification.permission !== "denied") {
-      Notification.requestPermission().then(permission => {
-        if (permission === "granted") {
-          new Notification("livesociya", { body: `New message from @${senderUsername}` });
-        }
-      });
-    }
-  }
 }
 
 function formatTime(ms) {
@@ -410,24 +410,56 @@ function loadChatList() {
       
       if (chatsArray.length === 0) list.innerHTML = `<div class="empty-state" style="padding-top: 20px;"><i class='bx bx-message-square-x'></i><p>No messages yet.</p></div>`;
       
+      // ... (Keep the snapshot loops exactly as they are) ...
+      
       chatsArray.forEach(chat => {
         if (chat.unreadBy === user && currentChat === chat.id) { db.collection("chats").doc(chat.id).set({ unreadBy: "" }, { merge: true }); chat.unreadBy = ""; }
         const other = chat.users.find(u => u !== user); const initial = other.charAt(0).toUpperCase(); const isUnread = chat.unreadBy === user; if (isUnread) hasGlobalUnread = true;
         list.innerHTML += `<div class="chat-item" onclick="openChat('${chat.id}', '${other}')" style="${isUnread ? 'background: #e0e7ff; border-left: 4px solid var(--primary);' : ''}"><div class="chat-avatar">${initial}</div><div class="chat-name" style="${isUnread ? 'font-weight: 800;' : ''}">${other}</div>${isUnread ? `<div style="width:10px; height:10px; background:#ef4444; border-radius:50%; margin-left:auto;"></div>` : ''}</div>`;
       });
       
-      // 🔥 THE FOOLPROOF BADGE SYSTEM
-      const bottomBadge = document.getElementById("chatBadge"); 
-      const desktopBadge = document.getElementById("desktopBadge"); // The new HTML dot
+      // 🔥 THE UNIVERSAL DESKTOP & MOBILE BADGE SYSTEM
+      let globalBadge = document.getElementById("universal-desktop-badge");
+      const bottomNavBadge = document.getElementById("chatBadge"); // Your existing mobile badge
       
       if (hasGlobalUnread) {
-        if (bottomBadge) bottomBadge.classList.remove("hidden");
-        if (desktopBadge) desktopBadge.classList.remove("hidden");
         document.title = "(1) New Message - livesociya";
+        if (bottomNavBadge) bottomNavBadge.classList.remove("hidden");
+        
+        // Create the un-ignorable Desktop Badge if it doesn't exist
+        if (!globalBadge) {
+          globalBadge = document.createElement("div");
+          globalBadge.id = "universal-desktop-badge";
+          globalBadge.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 14px;
+            height: 14px;
+            background: #ef4444;
+            border: 2px solid white;
+            border-radius: 50%;
+            z-index: 2147483646;
+            box-shadow: 0 0 10px rgba(239, 68, 68, 0.8);
+          `;
+          
+          // Inject a tiny CSS animation for the pulse
+          if (!document.getElementById("pulse-css")) {
+            const style = document.createElement('style');
+            style.id = "pulse-css";
+            style.innerHTML = `@keyframes pulseRed { 0% { transform: scale(1); } 50% { transform: scale(1.3); } 100% { transform: scale(1); } }`;
+            document.head.appendChild(style);
+          }
+          globalBadge.style.animation = "pulseRed 1.5s infinite";
+          document.body.appendChild(globalBadge);
+        }
+        globalBadge.style.display = "block";
+        
       } else {
-        if (bottomBadge) bottomBadge.classList.add("hidden");
-        if (desktopBadge) desktopBadge.classList.add("hidden");
+        // Clear all badges
         document.title = "livesociya";
+        if (bottomNavBadge) bottomNavBadge.classList.add("hidden");
+        if (globalBadge) globalBadge.style.display = "none";
       }
     });
 }
@@ -466,3 +498,16 @@ document.addEventListener("DOMContentLoaded", () => {
   const loginBtn = document.getElementById("login-btn"); if (loginBtn) { loginBtn.addEventListener("click", () => loginWithGoogle()); }
   const claimBtn = document.getElementById("claimBtn"); if (claimBtn) { claimBtn.addEventListener("click", async () => { const loadingScreen = document.getElementById("loading-screen"); if (loadingScreen) loadingScreen.classList.remove("hidden"); await claimUsername(); }); }
 });
+
+// ==========================================
+// 🔔 DESKTOP OS NOTIFICATION UNLOCKER
+// ==========================================
+// Browsers require a physical click to unlock native notifications. 
+// This listens for their very first click anywhere on the page and unlocks them.
+document.addEventListener("click", () => {
+  if ("Notification" in window && Notification.permission === "default") {
+    Notification.requestPermission().then(permission => {
+      if (permission === "granted") console.log("Desktop notifications enabled!");
+    });
+  }
+}, { once: true });
