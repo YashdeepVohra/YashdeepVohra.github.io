@@ -94,10 +94,8 @@ function toggleTime(element) {
 }
 
 // ==========================================
-// 🔐 BULLETPROOF AUTHENTICATION (THE PROMISE SYNC)
+// 🔐 BULLETPROOF AUTHENTICATION (THE NATIVE CHAIN)
 // ==========================================
-
-let isRedirectCheckComplete = false; // THE NEW MASTER LOCK
 
 function switchScreen(screenId) {
   document.getElementById("login")?.classList.add("hidden");
@@ -109,53 +107,32 @@ function switchScreen(screenId) {
   if (screenId) document.getElementById(screenId)?.classList.remove("hidden");
 }
 
-// 1. Instantly lock the screen on "Loading" when the app boots up
+// 1. Lock on loader instantly when the page opens
 document.getElementById("loading-screen")?.classList.remove("hidden");
 
 // 2. The Login Trigger
-function loginWithGoogle() {
+async function loginWithGoogle() {
   const loader = document.getElementById("loading-screen");
   if (loader) loader.classList.remove("hidden");
 
-  auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
-    .then(() => {
-      const provider = new firebase.auth.GoogleAuthProvider();
-      return auth.signInWithRedirect(provider);
-    })
-    .catch((error) => {
-      if (loader) loader.classList.add("hidden");
-      alert("Login Error: " + error.message);
-    });
+  try {
+    // Await persistence so it fully saves BEFORE we travel to Google
+    await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+    const provider = new firebase.auth.GoogleAuthProvider();
+    await auth.signInWithRedirect(provider);
+  } catch (error) {
+    if (loader) loader.classList.add("hidden");
+    alert("Login Error: " + error.message);
+  }
 }
 
-// 3. Wait for Firebase to finish checking the redirect ticket
-auth.getRedirectResult().then((result) => {
-  isRedirectCheckComplete = true; // Firebase is officially done checking!
-
-  // If there's no ticket, and no user is logged in, show the login screen
-  if ((!result || !result.user) && !auth.currentUser) {
-    switchScreen("login");
-    document.getElementById("topAvatar")?.classList.add("hidden");
-    document.getElementById("loading-screen")?.classList.add("hidden");
-  }
-}).catch((error) => {
-  isRedirectCheckComplete = true;
-  console.error("Redirect Error:", error);
-  if (!auth.currentUser) {
-    switchScreen("login");
-    document.getElementById("topAvatar")?.classList.add("hidden");
-    document.getElementById("loading-screen")?.classList.add("hidden");
-  }
-});
-
-// 4. The UI Gatekeeper
+// 3. The Ultimate Gatekeeper
 auth.onAuthStateChanged(async (userAuth) => {
   document.querySelector(".topbar")?.classList.remove("hidden");
 
   if (userAuth) {
-    // WE HAVE A USER! Boot the app.
+    // ---> LOGGED IN! <---
     document.getElementById("loading-screen")?.classList.remove("hidden");
-
     try {
       userEmail = userAuth.email || userAuth.uid;
       const userRef = db.collection("users").doc(userEmail);
@@ -169,13 +146,7 @@ auth.onAuthStateChanged(async (userAuth) => {
 
       if (!doc.exists) {
         let defaultName = userAuth.displayName || (userAuth.email ? userAuth.email.split('@')[0] : "Student");
-        await userRef.set({
-          name: defaultName,
-          googlePfp: userAuth.photoURL || "",
-          avatar: userAuth.photoURL || "👤",
-          banned: false,
-          joinedAt: Date.now()
-        });
+        await userRef.set({ name: defaultName, googlePfp: userAuth.photoURL || "", avatar: userAuth.photoURL || "👤", banned: false, joinedAt: Date.now() });
         doc = await userRef.get();
       }
 
@@ -187,20 +158,38 @@ auth.onAuthStateChanged(async (userAuth) => {
       }
 
       initializeUserApp(doc.data());
-
     } catch (error) {
       console.error("Gatekeeper Error:", error);
       switchScreen("login");
       document.getElementById("loading-screen")?.classList.add("hidden");
     }
+    
   } else {
-    // NO USER FOUND.
-    // THE MAGIC RULE: Only show the login screen if Firebase has officially finished checking the redirect!
-    // If it hasn't finished, ignore this and keep the loading screen exactly where it is.
-    if (isRedirectCheckComplete) {
-      switchScreen("login");
-      document.getElementById("topAvatar")?.classList.add("hidden");
-      document.getElementById("loading-screen")?.classList.add("hidden");
+    // ---> NO USER DETECTED YET <---
+    // We ask Firebase: Are we just returning from Google? 
+    // We wrap this in a 6-second timeout race. If Firebase hangs, we force it to quit.
+    try {
+      const result = await Promise.race([
+        auth.getRedirectResult(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 6000))
+      ]);
+
+      if (result && result.user) {
+         // The redirect worked! 
+         // We do nothing here, because onAuthStateChanged is about to automatically fire again with the user data.
+         console.log("Redirect caught successfully. Booting...");
+      } else {
+         // No redirect ticket, and no user. We are 100% safe to show the login screen.
+         switchScreen("login");
+         document.getElementById("topAvatar")?.classList.add("hidden");
+         document.getElementById("loading-screen")?.classList.add("hidden");
+      }
+    } catch (error) {
+       // Firebase crashed, Apple blocked it, or it took longer than 6 seconds.
+       console.error("Redirect check failed or timed out:", error);
+       switchScreen("login");
+       document.getElementById("topAvatar")?.classList.add("hidden");
+       document.getElementById("loading-screen")?.classList.add("hidden");
     }
   }
 });
