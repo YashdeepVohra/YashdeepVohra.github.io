@@ -116,12 +116,17 @@ function loginWithGoogle() {
   const loader = document.getElementById("loading-screen");
   if (loader) loader.classList.remove("hidden");
 
-  const provider = new firebase.auth.GoogleAuthProvider();
-  auth.signInWithRedirect(provider).catch((error) => {
-    console.error("Auth Error:", error);
-    if (loader) loader.classList.add("hidden"); 
-    alert("Login Error: " + error.message);
-  });
+  // 🔥 STRIKE 1: Force the browser to save the ticket to permanent local storage
+  auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
+    .then(() => {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      return auth.signInWithRedirect(provider);
+    })
+    .catch((error) => {
+      console.error("Auth Error:", error);
+      if (loader) loader.classList.add("hidden"); 
+      alert("Login Error: " + error.message);
+    });
 }
 
 auth.onAuthStateChanged(async (userAuth) => {
@@ -644,6 +649,8 @@ function showTab(tab) {
 
 // 🔥 OPEN PROFILE FIXED WITH MASTER SWITCH
 function openProfileScreen() {
+  if (!user || user === "") return;
+  
   try {
     const dName = document.getElementById("profileDisplayName");
     const uName = document.getElementById("profileUsername");
