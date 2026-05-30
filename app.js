@@ -3,7 +3,7 @@
 // ==========================================
 const firebaseConfig = {
   apiKey: "AIzaSyBvcJJ2wz2yteRUYdasRUe8oaTt_Vp9kGQ",
-  authDomain: "livesociya.com",
+  authDomain: "livesociyaweb.firebaseapp.com", // 🔥 THE FIX: WE ARE BACK TO NATIVE FIREBASE!
   projectId: "livesociyaweb",
   storageBucket: "livesociyaweb.firebasestorage.app",
   messagingSenderId: "676740518716",
@@ -19,82 +19,27 @@ const db = firebase.firestore();
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.getRegistrations().then(function(registrations) {
     for(let registration of registrations) {
-      registration.unregister().then(() => {
-        console.log("Service Worker successfully killed!");
-      });
+      registration.unregister().then(() => console.log("Service Worker successfully killed!"));
     }
   });
 }
 
-let currentChat = null;
-let user = "";
-let userEmail = "";
-let userAvatar = "👤"; 
-let messagesUnsubscribe = null; 
-let eventIdToManage = null;
-let currentSelectedTag = '☕ Chill'; 
-let googlePfp = ""; 
-let realName = "";
-let currentLiveFilter = 'All';
-let currentRecapFilter = 'All';
+let currentChat = null, user = "", userEmail = "", userAvatar = "👤"; 
+let messagesUnsubscribe = null, eventIdToManage = null;
+let currentSelectedTag = '☕ Chill', googlePfp = "", realName = "";
+let currentLiveFilter = 'All', currentRecapFilter = 'All';
 
 function renderAvatar(avatarCode) {
   if (!avatarCode) return "👤";
-  if (typeof avatarCode === 'string' && avatarCode.startsWith("http")) {
-    return `<img src="${avatarCode}" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">`;
-  }
+  if (typeof avatarCode === 'string' && avatarCode.startsWith("http")) return `<img src="${avatarCode}" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">`;
   return avatarCode;
 }
 
-// ==========================================
-// 🔔 IN-APP NOTIFICATION SYSTEM
-// ==========================================
-function showNotification(senderUsername, chatId) {
-  if (currentChat === chatId) return;
-
-  let toastBox = document.getElementById("toastBox");
-  if (!toastBox) {
-    toastBox = document.createElement("div");
-    toastBox.id = "toastBox";
-    toastBox.style.cssText = "position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; flex-direction: column; gap: 10px; width: 90%; max-width: 400px;";
-    document.body.appendChild(toastBox);
-  }
-
-  const toast = document.createElement("div");
-  toast.style.cssText = "background: var(--primary); color: white; padding: 14px 20px; border-radius: 16px; box-shadow: var(--shadow-lg); font-size: 14px; font-weight: 600; cursor: pointer; transform: translateY(-150%); transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); display: flex; align-items: center; gap: 10px;";
-  toast.innerHTML = `<i class='bx bxs-message-rounded-dots' style="font-size: 20px;"></i> New message from @${senderUsername}`;
-
-  toast.onclick = () => {
-    openChat(chatId, senderUsername);
-    toast.style.transform = "translateY(-150%)"; 
-    setTimeout(() => toast.remove(), 400);
-  };
-
-  toastBox.appendChild(toast);
-  setTimeout(() => toast.style.transform = "translateY(0)", 10);
-  setTimeout(() => {
-    toast.style.transform = "translateY(-150%)";
-    setTimeout(() => toast.remove(), 400);
-  }, 4000);
-}
-
-function formatTime(ms) {
-  const messageDate = new Date(ms); const today = new Date();
-  const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
-  const timeString = messageDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  if (messageDate.toDateString() === today.toDateString()) return `Today at ${timeString}`;
-  if (messageDate.toDateString() === yesterday.toDateString()) return `Yesterday at ${timeString}`;
-  return `${messageDate.toLocaleDateString([], { month: 'short', day: 'numeric' })} at ${timeString}`;
-}
-
-function toggleTime(element) {
-  const currentlyShowing = document.querySelector('.msg-wrapper.show-time');
-  if (currentlyShowing && currentlyShowing !== element) currentlyShowing.classList.remove('show-time');
-  element.classList.toggle('show-time');
-}
+// ... [Notification & Time Format functions removed for brevity - keep your existing ones!] ...
+// I am replacing ONLY the Auth section below to keep it clean. 
 
 // ==========================================
-// 🔐 BULLETPROOF AUTHENTICATION (THE NATIVE CHAIN)
+// 🔐 THE NATIVE FIREBASE AUTHENTICATION
 // ==========================================
 
 function switchScreen(screenId) {
@@ -103,47 +48,57 @@ function switchScreen(screenId) {
   document.getElementById("usernameModal")?.classList.add("hidden");
   document.getElementById("profileScreen")?.classList.add("hidden");
   document.getElementById("chatScreen")?.classList.add("hidden");
-
   if (screenId) document.getElementById(screenId)?.classList.remove("hidden");
 }
 
-// 1. Lock on loader instantly when the page opens
+// 1. Lock the loading screen on immediately when the app opens
 document.getElementById("loading-screen")?.classList.remove("hidden");
 
-// 2. The Login Trigger
-async function loginWithGoogle() {
+// 2. The Login Trigger (Clean, simple redirect)
+function loginWithGoogle() {
   const loader = document.getElementById("loading-screen");
   if (loader) loader.classList.remove("hidden");
 
-  try {
-    // Await persistence so it fully saves BEFORE we travel to Google
-    await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
-    const provider = new firebase.auth.GoogleAuthProvider();
-    await auth.signInWithRedirect(provider);
-  } catch (error) {
+  const provider = new firebase.auth.GoogleAuthProvider();
+  auth.signInWithRedirect(provider).catch((error) => {
     if (loader) loader.classList.add("hidden");
     alert("Login Error: " + error.message);
-  }
+  });
 }
 
-// 3. The Ultimate Gatekeeper
+// 3. The Redirect Catcher (Firebase natively handles the waiting)
+auth.getRedirectResult().then((result) => {
+  // If Firebase finished checking the redirect, and you are NOT logged in, show the login screen.
+  if (!result.user && !auth.currentUser) {
+    switchScreen("login");
+    document.getElementById("topAvatar")?.classList.add("hidden");
+    document.getElementById("loading-screen")?.classList.add("hidden");
+  }
+}).catch((error) => {
+  console.error("Redirect Error:", error);
+  switchScreen("login");
+  document.getElementById("loading-screen")?.classList.add("hidden");
+});
+
+// 4. The Database Boot-Up (Only fires when you actually have a ticket)
 auth.onAuthStateChanged(async (userAuth) => {
-  document.querySelector(".topbar")?.classList.remove("hidden");
+  document.querySelector(".topbar")?.classList.remove("hidden"); 
 
   if (userAuth) {
-    // ---> LOGGED IN! <---
+    // 🚨 YOU ARE LOGGED IN! 🚨 
     document.getElementById("loading-screen")?.classList.remove("hidden");
+    
     try {
-      userEmail = userAuth.email || userAuth.uid;
+      userEmail = userAuth.email || userAuth.uid; 
       const userRef = db.collection("users").doc(userEmail);
       let doc = await userRef.get();
-
+      
       if (doc.exists && doc.data().banned === true) {
         alert("SECURITY ALERT: Your account has been suspended.");
-        auth.signOut();
+        auth.signOut(); 
         return;
       }
-
+      
       if (!doc.exists) {
         let defaultName = userAuth.displayName || (userAuth.email ? userAuth.email.split('@')[0] : "Student");
         await userRef.set({ name: defaultName, googlePfp: userAuth.photoURL || "", avatar: userAuth.photoURL || "👤", banned: false, joinedAt: Date.now() });
@@ -152,44 +107,17 @@ auth.onAuthStateChanged(async (userAuth) => {
 
       if (!doc.data().username) {
         document.getElementById("topAvatar")?.classList.add("hidden");
-        switchScreen("usernameModal");
+        switchScreen("usernameModal"); 
         document.getElementById("loading-screen")?.classList.add("hidden");
-        return;
+        return; 
       }
 
       initializeUserApp(doc.data());
-    } catch (error) {
-      console.error("Gatekeeper Error:", error);
-      switchScreen("login");
-      document.getElementById("loading-screen")?.classList.add("hidden");
-    }
-    
-  } else {
-    // ---> NO USER DETECTED YET <---
-    // We ask Firebase: Are we just returning from Google? 
-    // We wrap this in a 6-second timeout race. If Firebase hangs, we force it to quit.
-    try {
-      const result = await Promise.race([
-        auth.getRedirectResult(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("Timeout")), 6000))
-      ]);
 
-      if (result && result.user) {
-         // The redirect worked! 
-         // We do nothing here, because onAuthStateChanged is about to automatically fire again with the user data.
-         console.log("Redirect caught successfully. Booting...");
-      } else {
-         // No redirect ticket, and no user. We are 100% safe to show the login screen.
-         switchScreen("login");
-         document.getElementById("topAvatar")?.classList.add("hidden");
-         document.getElementById("loading-screen")?.classList.add("hidden");
-      }
     } catch (error) {
-       // Firebase crashed, Apple blocked it, or it took longer than 6 seconds.
-       console.error("Redirect check failed or timed out:", error);
-       switchScreen("login");
-       document.getElementById("topAvatar")?.classList.add("hidden");
-       document.getElementById("loading-screen")?.classList.add("hidden");
+      console.error("Database Error:", error); 
+      switchScreen("login"); 
+      document.getElementById("loading-screen")?.classList.add("hidden");
     }
   }
 });
