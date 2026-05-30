@@ -137,29 +137,13 @@ function loginWithGoogle() {
   const provider = new firebase.auth.GoogleAuthProvider();
   
   // CRITICAL FIX: Use Redirect instead of Popup. 
-  // This completely bypasses the strict mobile popup blockers!
   auth.signInWithRedirect(provider).catch((error) => {
     console.error("Failed to start redirect:", error);
-    if (loader) loader.classList.add("hidden"); // Turn off spinner if it fails to start
+    if (loader) loader.classList.add("hidden"); 
   });
 }
 
-  // Inside your login button click listener:
-  document.getElementById('login-btn').addEventListener('click', () => {
-    document.getElementById('loading-screen').classList.remove('hidden'); // Show spinner
-    
-    signInWithPopup(auth, provider)
-      .then((result) => {
-        // Login successful! Your existing redirect code goes here
-      })
-      .catch((error) => {
-        document.getElementById('loading-screen').classList.add('hidden'); // Hide spinner if error
-        console.error(error);
-      });
-  });
-}
-
-// 2. THE UI GATEKEEPER
+// 3. THE UI GATEKEEPER
 auth.onAuthStateChanged(async (userAuth) => {
   if (!userAuth) {
     // UI FIX: Show top bar, hide avatar, show login page
