@@ -34,41 +34,61 @@ function renderAvatar(avatarCode) {
 }
 
 // ==========================================
-// 🔔 IN-APP NOTIFICATION SYSTEM (GOD-TIER DESKTOP)
+// 🔔 IN-APP & NATIVE DESKTOP NOTIFICATIONS
 // ==========================================
 function showNotification(senderUsername, chatId) {
   if (currentChat === chatId) return;
 
-  let toastBox = document.getElementById("toastBox");
-  if (!toastBox) {
-    toastBox = document.createElement("div");
-    toastBox.id = "toastBox";
-    toastBox.style.cssText = "position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 999999; width: 90%; max-width: 400px; display: flex; flex-direction: column; align-items: center; pointer-events: none;";
-    document.body.appendChild(toastBox);
+  // 1. THE DOM NOTIFICATION (Fixed Top-Right)
+  let toastContainer = document.getElementById("toast-container");
+  if (!toastContainer) {
+    toastContainer = document.createElement("div");
+    toastContainer.id = "toast-container";
+    // Maximum possible z-index. Fixed to top-right corner to avoid layout clipping!
+    toastContainer.style.cssText = "position: fixed; top: 20px; right: 20px; z-index: 2147483647; display: flex; flex-direction: column; gap: 10px; pointer-events: none; width: auto; max-width: 90vw;";
+    document.body.appendChild(toastContainer);
   }
 
-  // Clear previous notifications so they never stack
-  toastBox.innerHTML = "";
+  // Clear previous notifications to prevent infinite stacking
+  toastContainer.innerHTML = "";
 
   const toast = document.createElement("div");
-  toast.style.cssText = "background: var(--primary); color: white; padding: 14px 20px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); font-size: 14px; font-weight: 600; cursor: pointer; transform: translateY(-150%); transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); display: flex; align-items: center; gap: 10px; width: 100%; pointer-events: auto;";
-  toast.innerHTML = `<i class='bx bxs-message-rounded-dots' style="font-size: 20px;"></i> New message from @${senderUsername}`;
+  // Slides in from the right side instead of top
+  toast.style.cssText = "background: var(--primary); color: white; padding: 16px 20px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); font-size: 14px; font-weight: 600; cursor: pointer; pointer-events: auto; transform: translateX(150%); transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); display: flex; align-items: center; gap: 12px;";
+  toast.innerHTML = `<i class='bx bxs-message-rounded-dots' style="font-size: 24px;"></i> <span>New message from <b>@${senderUsername}</b></span>`;
 
   toast.onclick = () => {
     openChat(chatId, senderUsername);
-    toast.style.transform = "translateY(-150%)"; 
+    toast.style.transform = "translateX(150%)";
     setTimeout(() => toast.remove(), 400);
   };
 
-  toastBox.appendChild(toast);
-  
-  void toast.offsetWidth;
-  toast.style.transform = "translateY(0)";
-  
+  toastContainer.appendChild(toast);
+
+  // Trigger smooth animation
+  requestAnimationFrame(() => {
+    toast.style.transform = "translateX(0)";
+  });
+
   setTimeout(() => {
-    toast.style.transform = "translateY(-150%)";
-    setTimeout(() => toast.remove(), 400);
-  }, 4000);
+    if(toast) {
+       toast.style.transform = "translateX(150%)";
+       setTimeout(() => toast.remove(), 400);
+    }
+  }, 5000);
+
+  // 2. 🔥 NATIVE DESKTOP OS NOTIFICATIONS (Windows/Mac)
+  if ("Notification" in window) {
+    if (Notification.permission === "granted") {
+      new Notification("livesociya", { body: `New message from @${senderUsername}` });
+    } else if (Notification.permission !== "denied") {
+      Notification.requestPermission().then(permission => {
+        if (permission === "granted") {
+          new Notification("livesociya", { body: `New message from @${senderUsername}` });
+        }
+      });
+    }
+  }
 }
 
 function formatTime(ms) {
@@ -396,16 +416,17 @@ function loadChatList() {
         list.innerHTML += `<div class="chat-item" onclick="openChat('${chat.id}', '${other}')" style="${isUnread ? 'background: #e0e7ff; border-left: 4px solid var(--primary);' : ''}"><div class="chat-avatar">${initial}</div><div class="chat-name" style="${isUnread ? 'font-weight: 800;' : ''}">${other}</div>${isUnread ? `<div style="width:10px; height:10px; background:#ef4444; border-radius:50%; margin-left:auto;"></div>` : ''}</div>`;
       });
       
-      const badge = document.getElementById("chatBadge"); 
-      const topAvatar = document.getElementById("topAvatar");
+      // 🔥 THE FOOLPROOF BADGE SYSTEM
+      const bottomBadge = document.getElementById("chatBadge"); 
+      const desktopBadge = document.getElementById("desktopBadge"); // The new HTML dot
       
       if (hasGlobalUnread) {
-        if (badge) { badge.classList.remove("hidden"); badge.style.display = "block"; }
-        if (topAvatar) { topAvatar.style.border = "2px solid #ef4444"; topAvatar.style.boxShadow = "0 0 12px rgba(239, 68, 68, 0.6)"; }
+        if (bottomBadge) bottomBadge.classList.remove("hidden");
+        if (desktopBadge) desktopBadge.classList.remove("hidden");
         document.title = "(1) New Message - livesociya";
       } else {
-        if (badge) { badge.classList.add("hidden"); badge.style.display = "none"; }
-        if (topAvatar) { topAvatar.style.border = "none"; topAvatar.style.boxShadow = "none"; }
+        if (bottomBadge) bottomBadge.classList.add("hidden");
+        if (desktopBadge) desktopBadge.classList.add("hidden");
         document.title = "livesociya";
       }
     });
