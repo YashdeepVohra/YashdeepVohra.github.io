@@ -126,21 +126,29 @@ function loginWithGoogle() {
   });
 }
 
-// 3. THE UI GATEKEEPER
+// ==========================================
+// 3. THE STRICT UI GATEKEEPER
+// ==========================================
 auth.onAuthStateChanged(async (userAuth) => {
+  // 1. Immediately cover the screen so the user doesn't see glitchy UI switching
+  document.getElementById("loading-screen")?.classList.remove("hidden");
+
   if (!userAuth) {
-    // UI FIX: Using Safe Operators (?.) to prevent HTML crashes
-    document.querySelector(".topbar")?.classList.remove("hidden");
-    document.getElementById("topAvatar")?.classList.add("hidden"); 
-    document.getElementById("home")?.classList.add("hidden"); 
+    // STATE: LOGGED OUT - Hide absolutely everything except the login screen
+    document.getElementById("home")?.classList.add("hidden");
+    document.getElementById("topAvatar")?.classList.add("hidden");
+    document.getElementById("profileScreen")?.classList.add("hidden");
+    document.getElementById("chatScreen")?.classList.add("hidden");
+    document.getElementById("usernameModal")?.classList.add("hidden");
+    document.querySelector(".topbar")?.classList.add("hidden"); 
+
     document.getElementById("login")?.classList.remove("hidden");
-    
     document.getElementById("loading-screen")?.classList.add("hidden");
     return;
   }
   
   try {
-    userEmail = userAuth.email || userAuth.uid; // Failsafe if email is null
+    userEmail = userAuth.email || userAuth.uid; 
     const userRef = db.collection("users").doc(userEmail);
     let doc = await userRef.get();
     
@@ -150,48 +158,62 @@ auth.onAuthStateChanged(async (userAuth) => {
       return;
     }
     
+    // CREATE NEW USER PROFILE IF MISSING
     if (!doc.exists) {
       let defaultName = userAuth.displayName || (userAuth.email ? userAuth.email.split('@')[0] : "Student");
       await userRef.set({ 
         name: defaultName, 
         googlePfp: userAuth.photoURL || "", 
         avatar: userAuth.photoURL || "👤", 
-        banned: false, joinedAt: Date.now() 
+        banned: false, 
+        joinedAt: Date.now() 
       });
       doc = await userRef.get();
     }
 
+    // CHECK IF THEY NEED TO CLAIM A USERNAME
     if (!doc.data().username) {
       document.getElementById("login")?.classList.add("hidden"); 
+      document.getElementById("home")?.classList.add("hidden");
+      document.querySelector(".topbar")?.classList.add("hidden");
+      
       document.getElementById("usernameModal")?.classList.remove("hidden");
       document.getElementById("loading-screen")?.classList.add("hidden");
       return; 
     }
 
+    // EVERYTHING IS GOOD: BOOT UP THE APP
     initializeUserApp(doc.data());
 
   } catch (error) {
-    console.error(error); 
+    console.error("Gatekeeper Error:", error); 
     alert("Database Error: " + error.message);
     document.getElementById("loading-screen")?.classList.add("hidden");
   }
 });
 
 function initializeUserApp(userData) {
-  user = userData.username; 
-  realName = userData.name;
-  userAvatar = userData.avatar || "👤";
-  googlePfp = userData.googlePfp || "";
+  // Safe fallbacks to prevent Javascript from crashing
+  user = userData?.username || "Student"; 
+  realName = userData?.name || "Student";
+  userAvatar = userData?.avatar || "👤";
+  googlePfp = userData?.googlePfp || "";
   
   const topAvatarEl = document.getElementById("topAvatar");
   if(topAvatarEl) topAvatarEl.innerHTML = renderAvatar(userAvatar); 
   
+  // THE MASTER WIPE: Force-hide every other screen so they don't overlap
   document.getElementById("login")?.classList.add("hidden"); 
   document.getElementById("usernameModal")?.classList.add("hidden"); 
+  document.getElementById("profileScreen")?.classList.add("hidden");
+  document.getElementById("chatScreen")?.classList.add("hidden");
+
+  // REVEAL ONLY THE LIVE FEED
   document.querySelector(".topbar")?.classList.remove("hidden");
   document.getElementById("topAvatar")?.classList.remove("hidden"); 
   document.getElementById("home")?.classList.remove("hidden");
   
+  // Start loading data
   loadChatList(); 
   loadEvents();
   
