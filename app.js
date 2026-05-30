@@ -37,24 +37,47 @@ function renderAvatar(avatarCode) {
 }
 
 // ==========================================
-// 🔔 IN-APP NOTIFICATION SYSTEM
+// 🔔 IN-APP NOTIFICATION SYSTEM (UPGRADED)
 // ==========================================
 function showNotification(senderUsername, chatId) {
   if (currentChat === chatId) return;
+
+  // 🔥 FIX 1: Attach to the app-frame so it aligns perfectly on desktop monitors
+  let appFrame = document.querySelector(".app-frame") || document.body;
   let toastBox = document.getElementById("toastBox");
+
   if (!toastBox) {
     toastBox = document.createElement("div");
     toastBox.id = "toastBox";
-    toastBox.style.cssText = "position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; flex-direction: column; gap: 10px; width: 90%; max-width: 400px;";
-    document.body.appendChild(toastBox);
+    // Changed to position: absolute so it stays inside the app frame!
+    toastBox.style.cssText = "position: absolute; top: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; width: 90%; max-width: 400px; display: flex; flex-direction: column; align-items: center;";
+    appFrame.appendChild(toastBox);
   }
+
+  // 🔥 FIX 2: Clear the box! This prevents stacking. A new message instantly replaces the old one.
+  toastBox.innerHTML = "";
+
   const toast = document.createElement("div");
-  toast.style.cssText = "background: var(--primary); color: white; padding: 14px 20px; border-radius: 16px; box-shadow: var(--shadow-lg); font-size: 14px; font-weight: 600; cursor: pointer; transform: translateY(-150%); transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); display: flex; align-items: center; gap: 10px;";
+  toast.style.cssText = "background: var(--primary); color: white; padding: 14px 20px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); font-size: 14px; font-weight: 600; cursor: pointer; transform: translateY(-150%); transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); display: flex; align-items: center; gap: 10px; width: 100%;";
   toast.innerHTML = `<i class='bx bxs-message-rounded-dots' style="font-size: 20px;"></i> New message from @${senderUsername}`;
-  toast.onclick = () => { openChat(chatId, senderUsername); toast.style.transform = "translateY(-150%)"; setTimeout(() => toast.remove(), 400); };
+
+  toast.onclick = () => {
+    openChat(chatId, senderUsername);
+    toast.style.transform = "translateY(-150%)"; 
+    setTimeout(() => toast.remove(), 400);
+  };
+
   toastBox.appendChild(toast);
-  setTimeout(() => toast.style.transform = "translateY(0)", 10);
-  setTimeout(() => { toast.style.transform = "translateY(-150%)"; setTimeout(() => toast.remove(), 400); }, 4000);
+  
+  // Force the browser to render the hidden state before animating down
+  void toast.offsetWidth;
+  
+  toast.style.transform = "translateY(0)";
+  
+  setTimeout(() => {
+    toast.style.transform = "translateY(-150%)";
+    setTimeout(() => toast.remove(), 400);
+  }, 4000);
 }
 
 function formatTime(ms) {
@@ -360,17 +383,62 @@ function updateChatFooterUI() {
 
 function loadChatList() {
   db.collection("chats").where("users", "array-contains", user).onSnapshot(snapshot => {
-      const list = document.getElementById("chatList"); if(!list) return;
-      list.innerHTML = ""; let hasGlobalUnread = false; let chatsArray = [];
-      snapshot.docChanges().forEach(change => { if (change.type === "modified") { const chatData = change.doc.data(); if (chatData.unreadBy === user && currentChat !== change.doc.id) { const otherUser = chatData.users.find(u => u !== user); showNotification(otherUser, change.doc.id); } } });
-      snapshot.forEach(doc => { chatsArray.push({ id: doc.id, ...doc.data() }); }); chatsArray.sort((a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0));
-      if (chatsArray.length === 0) list.innerHTML = `<div class="empty-state" style="padding-top: 20px;"><i class='bx bx-message-square-x'></i><p>No messages yet.</p></div>`;
-      chatsArray.forEach(chat => {
-        if (chat.unreadBy === user && currentChat === chat.id) { db.collection("chats").doc(chat.id).set({ unreadBy: "" }, { merge: true }); chat.unreadBy = ""; }
-        const other = chat.users.find(u => u !== user); const initial = other.charAt(0).toUpperCase(); const isUnread = chat.unreadBy === user; if (isUnread) hasGlobalUnread = true;
-        list.innerHTML += `<div class="chat-item" onclick="openChat('${chat.id}', '${other}')" style="${isUnread ? 'background: #e0e7ff; border-left: 4px solid var(--primary);' : ''}"><div class="chat-avatar">${initial}</div><div class="chat-name" style="${isUnread ? 'font-weight: 800;' : ''}">${other}</div>${isUnread ? `<div style="width:10px; height:10px; background:#ef4444; border-radius:50%; margin-left:auto;"></div>` : ''}</div>`;
+      const list = document.getElementById("chatList"); 
+      if(!list) return;
+      
+      list.innerHTML = ""; 
+      let hasGlobalUnread = false; 
+      let chatsArray = [];
+
+      snapshot.docChanges().forEach(change => {
+         if (change.type === "modified") {
+             const chatData = change.doc.data();
+             if (chatData.unreadBy === user && currentChat !== change.doc.id) {
+                 const otherUser = chatData.users.find(u => u !== user);
+                 showNotification(otherUser, change.doc.id);
+             }
+         }
       });
-      const badge = document.getElementById("chatBadge"); if (badge) { if (hasGlobalUnread) badge.classList.remove("hidden"); else badge.classList.add("hidden"); }
+
+      snapshot.forEach(doc => { chatsArray.push({ id: doc.id, ...doc.data() }); });
+      chatsArray.sort((a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0));
+
+      if (chatsArray.length === 0) {
+        list.innerHTML = `<div class="empty-state" style="padding-top: 20px;"><i class='bx bx-message-square-x'></i><p>No messages yet.</p></div>`;
+      }
+
+      chatsArray.forEach(chat => {
+        if (chat.unreadBy === user && currentChat === chat.id) { 
+          db.collection("chats").doc(chat.id).set({ unreadBy: "" }, { merge: true }); 
+          chat.unreadBy = ""; 
+        }
+
+        const other = chat.users.find(u => u !== user); 
+        const initial = other.charAt(0).toUpperCase(); 
+        const isUnread = chat.unreadBy === user;
+        
+        if (isUnread) hasGlobalUnread = true;
+
+        list.innerHTML += `
+          <div class="chat-item" onclick="openChat('${chat.id}', '${other}')" style="${isUnread ? 'background: #e0e7ff; border-left: 4px solid var(--primary);' : ''}">
+            <div class="chat-avatar">${initial}</div>
+            <div class="chat-name" style="${isUnread ? 'font-weight: 800;' : ''}">${other}</div>
+            ${isUnread ? `<div style="width:10px; height:10px; background:#ef4444; border-radius:50%; margin-left:auto;"></div>` : ''}
+          </div>`;
+      });
+      
+      const badge = document.getElementById("chatBadge"); 
+      if (badge) { 
+        if (hasGlobalUnread) {
+          badge.classList.remove("hidden"); 
+          // 🔥 DESKTOP FIX: Show notification in the browser tab!
+          document.title = "(1) New Message - livesociya";
+        } else { 
+          badge.classList.add("hidden");
+          // 🔥 DESKTOP FIX: Reset browser tab back to normal
+          document.title = "livesociya";
+        } 
+      }
     });
 }
 
