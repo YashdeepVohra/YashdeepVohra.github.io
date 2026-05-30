@@ -388,13 +388,10 @@ function updateChatFooterUI() {
   if(!footer) return;
   
   if (currentChatStatus === "icebreaker" && currentChatInitiator === user && myMessageCount >= 1) {
-      // Locked State: Waiting for reply
       footer.innerHTML = `<div style="width: 100%; text-align: center; color: var(--text-muted); font-size: 13px; font-weight: bold; padding: 10px;"><i class='bx bxs-lock-alt'></i> Icebreaker sent! Waiting for reply...</div>`;
   } else { 
-      // Unlocked State: Free to type
-      // 🔥 THE FIX: Only draw the text box if it doesn't already exist! 
-      // This prevents the app from deleting what the user is currently typing.
       if (!document.getElementById("msgInput")) {
+          // Added autocomplete="off" here too!
           footer.innerHTML = `<input id="msgInput" placeholder="Message..." autocomplete="off" onkeydown="if(event.key === 'Enter') sendMessage()" /><button onclick="sendMessage()"><i class='bx bxs-send'></i></button>`; 
       }
   }
