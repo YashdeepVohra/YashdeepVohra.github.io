@@ -49,6 +49,46 @@ function renderAvatar(avatarCode) {
   return avatarCode;
 }
 
+// ==========================================
+// 🔔 IN-APP NOTIFICATION SYSTEM
+// ==========================================
+function showNotification(senderUsername, chatId) {
+  // If I am currently looking at this exact chat, do not annoy me with a popup!
+  if (currentChat === chatId) return;
+
+  // Create the container if it doesn't exist yet
+  let toastBox = document.getElementById("toastBox");
+  if (!toastBox) {
+    toastBox = document.createElement("div");
+    toastBox.id = "toastBox";
+    toastBox.style.cssText = "position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; flex-direction: column; gap: 10px; width: 90%; max-width: 400px;";
+    document.body.appendChild(toastBox);
+  }
+
+  // Create the actual notification bubble
+  const toast = document.createElement("div");
+  toast.style.cssText = "background: var(--primary); color: white; padding: 14px 20px; border-radius: 16px; box-shadow: var(--shadow-lg); font-size: 14px; font-weight: 600; cursor: pointer; transform: translateY(-150%); transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); display: flex; align-items: center; gap: 10px;";
+  toast.innerHTML = `<i class='bx bxs-message-rounded-dots' style="font-size: 20px;"></i> New message from @${senderUsername}`;
+
+  // If they click the popup, open the chat!
+  toast.onclick = () => {
+    openChat(chatId, senderUsername);
+    toast.style.transform = "translateY(-150%)"; // slide up
+    setTimeout(() => toast.remove(), 400);
+  };
+
+  toastBox.appendChild(toast);
+
+  // Animate the slide-in
+  setTimeout(() => toast.style.transform = "translateY(0)", 10);
+
+  // Auto-remove after 4 seconds
+  setTimeout(() => {
+    toast.style.transform = "translateY(-150%)";
+    setTimeout(() => toast.remove(), 400);
+  }, 4000);
+}
+
 function formatTime(ms) {
   const messageDate = new Date(ms); const today = new Date();
   const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
@@ -512,21 +552,65 @@ function updateChatFooterUI() {
   }
 }
 
+// ==========================================
+// 📥 CHAT LIST & UNREAD BADGES
+// ==========================================
 function loadChatList() {
   db.collection("chats").where("users", "array-contains", user).onSnapshot(snapshot => {
-      const list = document.getElementById("chatList"); list.innerHTML = ""; let hasGlobalUnread = false; let chatsArray = [];
+      const list = document.getElementById("chatList"); 
+      list.innerHTML = ""; 
+      let hasGlobalUnread = false; 
+      let chatsArray = [];
+
+      // 🔔 1. FIRE THE NOTIFICATION (Only if the database was just modified)
+      snapshot.docChanges().forEach(change => {
+         if (change.type === "modified") {
+             const chatData = change.doc.data();
+             // If it has a new unread flag for ME, and I am NOT in the chat
+             if (chatData.unreadBy === user && currentChat !== change.doc.id) {
+                 const otherUser = chatData.users.find(u => u !== user);
+                 showNotification(otherUser, change.doc.id);
+             }
+         }
+      });
+
+      // 2. Gather all chats and sort them by newest
       snapshot.forEach(doc => { chatsArray.push({ id: doc.id, ...doc.data() }); });
       chatsArray.sort((a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0));
 
-      if (chatsArray.length === 0) list.innerHTML = `<div class="empty-state" style="padding-top: 20px;"><i class='bx bx-message-square-x'></i><p>No messages yet.</p></div>`;
+      if (chatsArray.length === 0) {
+          list.innerHTML = `<div class="empty-state" style="padding-top: 20px;"><i class='bx bx-message-square-x'></i><p>No messages yet.</p></div>`;
+      }
 
+      // 3. Render the list
       chatsArray.forEach(chat => {
-        if (chat.unreadBy === user && currentChat === chat.id) { db.collection("chats").doc(chat.id).set({ unreadBy: "" }, { merge: true }); chat.unreadBy = ""; }
-        const other = chat.users.find(u => u !== user); const initial = other.charAt(0); const isUnread = chat.unreadBy === user;
+        // 🐛 BUG FIX: Instantly clear the unread flag if I'm actively staring at this chat!
+        if (chat.unreadBy === user && currentChat === chat.id) { 
+            db.collection("chats").doc(chat.id).set({ unreadBy: "" }, { merge: true }); 
+            chat.unreadBy = ""; 
+        }
+
+        const other = chat.users.find(u => u !== user); 
+        const initial = other.charAt(0).toUpperCase(); 
+        const isUnread = chat.unreadBy === user;
+        
         if (isUnread) hasGlobalUnread = true;
-        list.innerHTML += `<div class="chat-item" onclick="openChat('${chat.id}', '${other}')" style="${isUnread ? 'background: #e0e7ff; border-color: var(--primary);' : ''}"><div class="chat-avatar">${initial}</div><div class="chat-name" style="${isUnread ? 'font-weight: 800;' : ''}">${other}</div>${isUnread ? `<div class="chat-unread-dot"></div>` : ''}</div>`;
+
+        // Draw the row (Blue background, bold text, and a red dot if unread)
+        list.innerHTML += `
+          <div class="chat-item" onclick="openChat('${chat.id}', '${other}')" style="${isUnread ? 'background: #e0e7ff; border-left: 4px solid var(--primary);' : ''}">
+            <div class="chat-avatar">${initial}</div>
+            <div class="chat-name" style="${isUnread ? 'font-weight: 800;' : ''}">${other}</div>
+            ${isUnread ? `<div style="width:10px; height:10px; background:#ef4444; border-radius:50%; margin-left:auto;"></div>` : ''}
+          </div>`;
       });
-      const badge = document.getElementById("chatBadge"); if (hasGlobalUnread) badge.classList.remove("hidden"); else badge.classList.add("hidden");
+      
+      // 4. Turn the little red dot on the Bottom Nav Bar on/off
+      const badge = document.getElementById("chatBadge"); 
+      if (badge) {
+          if (hasGlobalUnread) badge.classList.remove("hidden"); 
+          else badge.classList.add("hidden");
+      }
     });
 }
 
