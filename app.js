@@ -15,9 +15,16 @@ try { firebase.initializeApp(firebaseConfig); } catch (e) { console.error("Fireb
 const auth = firebase.auth();
 const db = firebase.firestore();
 
-// NEW: REGISTER PWA SERVICE WORKER
+// 🚨 EMERGENCY FIX: KILL THE ROGUE SERVICE WORKER
+// This unregisters the PWA so it stops blocking Firebase's hidden login URLs.
 if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js').catch(err => console.log("SW Registration failed: ", err));
+  navigator.serviceWorker.getRegistrations().then(function(registrations) {
+    for(let registration of registrations) {
+      registration.unregister().then(() => {
+        console.log("Service Worker successfully killed!");
+      });
+    }
+  });
 }
 
 let currentChat = null;
@@ -90,38 +97,26 @@ function toggleTime(element) {
 }
 
 // ==========================================
-// 🔐 BULLETPROOF AUTHENTICATION (HYBRID METHOD)
+// 🔐 BULLETPROOF AUTHENTICATION
 // ==========================================
 
-// 1. Catch silent mobile redirects
-auth.getRedirectResult().then((result) => {
-  if (result && result.user) console.log("Successfully logged in via Redirect!");
-}).catch((error) => {
-  console.error("Redirect Error:", error);
-  document.getElementById("loading-screen")?.classList.add("hidden");
-});
-
-// 2. The main login trigger
 function loginWithGoogle() {
-  if (Object.keys(firebaseConfig).length === 0) return alert("Firebase Config is missing!");
-  
   const loader = document.getElementById("loading-screen");
   if (loader) loader.classList.remove("hidden");
 
-  const provider = new firebase.auth.GoogleAuthProvider();
-  
-  // Try popup first. If mobile blocks it, instantly force a redirect!
-  auth.signInWithPopup(provider).catch((error) => {
-    console.error("Popup Error:", error);
-    
-    if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user') {
-      console.log("Popup blocked! Falling back to mobile redirect...");
-      auth.signInWithRedirect(provider);
-    } else {
+  // Force Firebase to remember the login in the browser's local memory
+  auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
+    .then(() => {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      
+      // We MUST use Popup. Redirects get trapped in loops on custom domains.
+      return auth.signInWithPopup(provider);
+    })
+    .catch((error) => {
+      console.error("Auth Error:", error);
       if (loader) loader.classList.add("hidden"); 
-      alert("Login failed: " + error.message);
-    }
-  });
+      alert("Login Error: Please ensure popups are allowed for this site.");
+    });
 }
 
 // 3. THE UI GATEKEEPER
