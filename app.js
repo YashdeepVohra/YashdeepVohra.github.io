@@ -37,28 +37,26 @@ function renderAvatar(avatarCode) {
 }
 
 // ==========================================
-// 🔔 IN-APP NOTIFICATION SYSTEM (UPGRADED)
+// 🔔 IN-APP NOTIFICATION SYSTEM (DESKTOP PROOF)
 // ==========================================
 function showNotification(senderUsername, chatId) {
   if (currentChat === chatId) return;
 
-  // 🔥 FIX 1: Attach to the app-frame so it aligns perfectly on desktop monitors
-  let appFrame = document.querySelector(".app-frame") || document.body;
   let toastBox = document.getElementById("toastBox");
-
   if (!toastBox) {
     toastBox = document.createElement("div");
     toastBox.id = "toastBox";
-    // Changed to position: absolute so it stays inside the app frame!
-    toastBox.style.cssText = "position: absolute; top: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; width: 90%; max-width: 400px; display: flex; flex-direction: column; align-items: center;";
-    appFrame.appendChild(toastBox);
+    // 🔥 FIXED position, God-Tier z-index, and pointer-events: none so it doesn't block clicks underneath
+    toastBox.style.cssText = "position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 999999; width: 90%; max-width: 400px; display: flex; flex-direction: column; align-items: center; pointer-events: none;";
+    document.body.appendChild(toastBox);
   }
 
-  // 🔥 FIX 2: Clear the box! This prevents stacking. A new message instantly replaces the old one.
+  // 🔥 Clear the box! This instantly deletes the old notification so they NEVER stack.
   toastBox.innerHTML = "";
 
   const toast = document.createElement("div");
-  toast.style.cssText = "background: var(--primary); color: white; padding: 14px 20px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); font-size: 14px; font-weight: 600; cursor: pointer; transform: translateY(-150%); transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); display: flex; align-items: center; gap: 10px; width: 100%;";
+  // Re-enable pointer events on the actual toast so you can click it
+  toast.style.cssText = "background: var(--primary); color: white; padding: 14px 20px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); font-size: 14px; font-weight: 600; cursor: pointer; transform: translateY(-150%); transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); display: flex; align-items: center; gap: 10px; width: 100%; pointer-events: auto;";
   toast.innerHTML = `<i class='bx bxs-message-rounded-dots' style="font-size: 20px;"></i> New message from @${senderUsername}`;
 
   toast.onclick = () => {
@@ -69,9 +67,8 @@ function showNotification(senderUsername, chatId) {
 
   toastBox.appendChild(toast);
   
-  // Force the browser to render the hidden state before animating down
+  // Force the browser to render before animating
   void toast.offsetWidth;
-  
   toast.style.transform = "translateY(0)";
   
   setTimeout(() => {
@@ -413,31 +410,31 @@ function loadChatList() {
           chat.unreadBy = ""; 
         }
 
-        const other = chat.users.find(u => u !== user); 
-        const initial = other.charAt(0).toUpperCase(); 
-        const isUnread = chat.unreadBy === user;
-        
-        if (isUnread) hasGlobalUnread = true;
-
-        list.innerHTML += `
-          <div class="chat-item" onclick="openChat('${chat.id}', '${other}')" style="${isUnread ? 'background: #e0e7ff; border-left: 4px solid var(--primary);' : ''}">
-            <div class="chat-avatar">${initial}</div>
-            <div class="chat-name" style="${isUnread ? 'font-weight: 800;' : ''}">${other}</div>
-            ${isUnread ? `<div style="width:10px; height:10px; background:#ef4444; border-radius:50%; margin-left:auto;"></div>` : ''}
-          </div>`;
-      });
+        // ... (Keep the chatsArray.forEach loop exactly as it is) ...
       
       const badge = document.getElementById("chatBadge"); 
-      if (badge) { 
-        if (hasGlobalUnread) {
-          badge.classList.remove("hidden"); 
-          // 🔥 DESKTOP FIX: Show notification in the browser tab!
-          document.title = "(1) New Message - livesociya";
-        } else { 
-          badge.classList.add("hidden");
-          // 🔥 DESKTOP FIX: Reset browser tab back to normal
-          document.title = "livesociya";
-        } 
+      const topAvatar = document.getElementById("topAvatar"); // Grab the top profile icon
+      
+      if (hasGlobalUnread) {
+        // 1. Show Bottom Badge (Mobile)
+        if (badge) { badge.classList.remove("hidden"); badge.style.display = "block"; }
+        
+        // 2. 🔥 Show Top Badge (Desktop-Friendly!)
+        if (topAvatar) { 
+          topAvatar.style.border = "2px solid #ef4444"; 
+          topAvatar.style.boxShadow = "0 0 12px rgba(239, 68, 68, 0.6)"; 
+        }
+        
+        // 3. Tab Notification
+        document.title = "(1) New Message - livesociya";
+      } else {
+        // Hide all badges
+        if (badge) { badge.classList.add("hidden"); badge.style.display = "none"; }
+        if (topAvatar) { 
+          topAvatar.style.border = "none"; 
+          topAvatar.style.boxShadow = "none"; 
+        }
+        document.title = "livesociya";
       }
     });
 }
