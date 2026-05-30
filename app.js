@@ -54,26 +54,21 @@ function switchScreen(screenId) {
 // 1. Instantly check if we are already logged in
 document.getElementById("loading-screen")?.classList.remove("hidden");
 
-// 2. THE POPUP TRIGGER (This bypasses Apple's redirect blocker completely!)
-async function loginWithGoogle() {
+// 2. THE POPUP TRIGGER (Instant execution for Mobile Safari/Chrome)
+function loginWithGoogle() {
   const loader = document.getElementById("loading-screen");
   if (loader) loader.classList.remove("hidden");
 
-  try {
-    await auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
-    const provider = new firebase.auth.GoogleAuthProvider();
-    
-    // 🔥 THE MAGIC BULLET: signInWithPopup
-    await auth.signInWithPopup(provider); 
-    
-    // Once the popup closes, onAuthStateChanged automatically takes over below!
-  } catch (error) {
+  const provider = new firebase.auth.GoogleAuthProvider();
+  
+  // 🔥 NO AWAIT, NO DELAY. Fire the popup in the exact millisecond of the click.
+  auth.signInWithPopup(provider).catch((error) => {
     if (loader) loader.classList.add("hidden");
-    // If they close the popup manually, just ignore it. Otherwise, show the error.
+    // Ignore the error if the user just closed the popup manually
     if (error.code !== 'auth/popup-closed-by-user') {
       alert("Login Error: " + error.message);
     }
-  }
+  });
 }
 
 // 3. The Ultimate Gatekeeper (Massively simplified because there are no redirects!)
