@@ -252,16 +252,21 @@ async function claimUsername() {
 }
 
 function logout() { 
-  // 1. Instantly hide the app and show the loading screen so it doesn't look frozen
   const loader = document.getElementById("loading-screen");
   if (loader) loader.classList.remove("hidden");
   document.getElementById("home")?.classList.add("hidden");
 
-  // 2. Sign out, then force a hard, clean wipe of the URL
   auth.signOut().then(() => {
-    // This physically forces the browser to drop all ghost data and reload cleanly
-    window.location.replace(window.location.pathname);
-  }).catch((err) => console.error("Logout Error:", err)); 
+    // 1. Nuke the browser's local memory completely
+    localStorage.clear();
+    sessionStorage.clear();
+    
+    // 2. Force a hard server reload (bypasses Apple's stubborn cache)
+    window.location.href = window.location.origin + "?refresh=" + new Date().getTime();
+  }).catch((err) => {
+    console.error("Logout Error:", err);
+    alert("Error logging out.");
+  }); 
 }
 
 function openProfileModal() { document.getElementById("profileModal")?.classList.remove("hidden"); }
