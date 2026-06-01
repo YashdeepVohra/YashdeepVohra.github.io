@@ -124,7 +124,7 @@ button:active { transform: translateY(1px); }
 
 .msg-wrapper { display: flex; flex-direction: column; width: 100%; cursor: pointer; }
 .msg-time { font-size: 11px; color: #94a3b8; max-height: 0; opacity: 0; overflow: hidden; transition: all 0.2s ease-out; padding: 0 4px; }
-.msg-wrapper.show-time .msg-time { max-height: 20px; opacity: 1; margin-bottom: 8px; margin-top: 2px; }
+.msg-wrapper.show-time .msg-time { max-height: 40px; opacity: 1; margin-bottom: 8px; margin-top: 2px; }
 
 .msg-bubble { padding: 10px 14px; font-size: 15px; font-weight: 500; max-width: 75%; word-wrap: break-word; line-height: 1.4; transition: all 0.2s; }
 
@@ -287,28 +287,26 @@ input[type="datetime-local"] { width: 100%; max-width: 100%; padding: 14px 16px;
 .msg-wrapper, .msg-bubble { outline: none !important; }
 
 /* ==========================================
-   SWIPE-TO-REPLY UI
+   SWIPE-TO-REPLY UI (FIXED FOR DESKTOP & MOBILE)
    ========================================== */
-.msg-wrapper { position: relative; } /* Allows the icon to sit behind the text */
+/* touch-action: pan-y kills the browser's horizontal screen-slide bug */
+.msg-wrapper { position: relative; touch-action: pan-y; } 
 
 .swipe-reply-icon {
-  position: absolute;
-  left: -40px; /* Hidden off-screen to the left */
-  top: 50%;
-  transform: translateY(-50%) scale(0.5);
-  opacity: 0;
-  width: 30px; height: 30px;
-  background: #e0e7ff; color: var(--primary);
-  border-radius: 50%;
+  position: absolute; top: 50%; transform: translateY(-50%) scale(0.5);
+  opacity: 0; width: 30px; height: 30px;
+  background: #e0e7ff; color: var(--primary); border-radius: 50%;
   display: flex; justify-content: center; align-items: center;
-  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  z-index: 0;
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); z-index: 0;
 }
 
-/* When the user swipes far enough, the icon pops out and locks in */
+/* Received messages pull right, icon sits on the left */
+.swipe-reply-icon.left { left: -40px; right: auto; }
+/* Sent messages pull left, icon sits on the right */
+.swipe-reply-icon.right { right: -40px; left: auto; }
+
 .msg-wrapper.ready-to-reply .swipe-reply-icon {
-  opacity: 1;
-  transform: translateY(-50%) scale(1);
+  opacity: 1; transform: translateY(-50%) scale(1);
 }
 
 /* ==========================================
