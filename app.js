@@ -377,17 +377,15 @@ async function sendMessage() {
       if (currentChatStatus === "icebreaker" && currentChatInitiator === otherUser) newStatus = "unlocked"; 
   }
   
-  // 🔥 THE FIX: Capture the reply data before clearing it
-  const replyData = replyingToMessage ? { sender: replyingToMessage.sender, text: replyingToMessage.text } : null;
-  replyingToMessage = null; // Instantly clear it from the UI so it feels snappy
+  // 🔥 UPGRADE: We now save the 'time' into the Firebase database!
+  const replyData = replyingToMessage ? { sender: replyingToMessage.sender, text: replyingToMessage.text, time: replyingToMessage.time } : null;
+  replyingToMessage = null; 
   
   await chatRef.set({ users: [user, otherUser], unreadBy: otherUser, lastUpdated: Date.now(), status: newStatus, typing: "" }, { merge: true });
-  
-  // 🔥 THE FIX: Inject the replyData into the database payload!
   await db.collection("messages").add({ chatId: currentChat, sender: user, text: text, time: Date.now(), replyTo: replyData }); 
   
   input.value = "";
-  updateChatFooterUI(); // Resets the footer back to normal instantly
+  updateChatFooterUI(); 
 }
 
 function handleTyping() {
@@ -399,11 +397,11 @@ function handleTyping() {
   }, 1500);
 }
 
-function initiateReply(sender, text) {
-  replyingToMessage = { sender, text };
+// 🔥 UPGRADE: Now accepts the 'time' parameter
+function initiateReply(sender, text, time) {
+  replyingToMessage = { sender, text, time };
   updateChatFooterUI();
   
-  // 🔥 THE FIX: Smoothly forces the keyboard to open AND pushes the screen up
   setTimeout(() => {
       const input = document.getElementById("msgInput");
       if(input) { 
@@ -416,6 +414,26 @@ function initiateReply(sender, text) {
 function cancelReply() {
   replyingToMessage = null;
   updateChatFooterUI();
+}
+
+function scrollToMessage(time) {
+    const targetMsg = document.getElementById(`msg-${time}`);
+    if (targetMsg) {
+        // Smoothly scroll the message right into the middle of the screen
+        targetMsg.scrollIntoView({ behavior: "smooth", block: "center" });
+        
+        // Grab the bubble and trigger the glow animation
+        const bubble = targetMsg.querySelector(".msg-bubble");
+        if (bubble) {
+            bubble.classList.remove("highlight-pulse"); // Reset if clicked twice
+            void bubble.offsetWidth; // Magic trick to restart CSS animations
+            bubble.classList.add("highlight-pulse");
+            
+            setTimeout(() => {
+                bubble.classList.remove("highlight-pulse");
+            }, 1500); // Removes the class after the animation finishes
+        }
+    }
 }
 
 function updateReadReceipts() {
@@ -505,16 +523,22 @@ function loadMessages() {
         }
 
         const safeText = m.text.replace(/[`$'\\]/g, ""); 
-        
-        // 🔥 THE FIX: Encodes the text so quotes and symbols NEVER break the HTML
         const encodedText = encodeURIComponent(m.text); 
         
+        let replyBlock = "";
+        if (m.replyTo) {
+            const replyName = m.replyTo.sender === user ? "You" : m.replyTo.sender;
+            // 🔥 UPGRADE: Added the click listener to scroll! (Only works for new messages that have 'time' saved)
+            const clickAction = m.replyTo.time ? `onclick="event.stopPropagation(); scrollToMessage(${m.replyTo.time})"` : "";
+            replyBlock = `<div class="msg-replied-to" ${clickAction}><b>${replyName}:</b> ${m.replyTo.text}</div>`;
+        }
+
         const swipeIconHTML = isMe 
             ? `<div class="swipe-reply-icon right"><i class='bx bx-reply' style="transform: scaleX(-1);"></i></div>` 
             : `<div class="swipe-reply-icon left"><i class='bx bx-reply'></i></div>`;
             
-        // 🔥 THE FIX: Passed encodedText into both the data-attribute AND the button
-        newHTML += `<div class="msg-wrapper" data-sender="${m.sender}" data-text="${encodedText}" style="align-items: ${isMe ? 'flex-end' : 'flex-start'};" onclick="toggleTime(this)">
+        // 🔥 UPGRADE: Added id="msg-${m.time}" and data-time="${m.time}"
+        newHTML += `<div id="msg-${m.time}" class="msg-wrapper" data-sender="${m.sender}" data-time="${m.time}" data-text="${encodedText}" style="align-items: ${isMe ? 'flex-end' : 'flex-start'};" onclick="toggleTime(this)">
                       ${swipeIconHTML}
                       <div class="msg-bubble ${isMe ? 'msg-sent' : 'msg-received'} ${shape}">
                          ${replyBlock}
@@ -522,7 +546,7 @@ function loadMessages() {
                       </div>
                       <div class="msg-time" style="text-align: ${isMe ? 'right' : 'left'}">
                          ${formatTime(m.time)}
-                         <button class="reply-action-btn" onclick="event.stopPropagation(); initiateReply('${m.sender}', decodeURIComponent('${encodedText}'))"><i class='bx bx-reply'></i> Reply</button>
+                         <button class="reply-action-btn" onclick="event.stopPropagation(); initiateReply('${m.sender}', decodeURIComponent('${encodedText}'), ${m.time})"><i class='bx bx-reply'></i> Reply</button>
                       </div>
                     </div>`;
         
