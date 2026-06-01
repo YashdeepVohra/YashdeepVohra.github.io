@@ -112,7 +112,7 @@ button:active { transform: translateY(1px); }
 
 /* The Premium Floating Glass Badge (Hidden by default) */
 .floating-date {
-  position: absolute; top: 70px; left: 50%; transform: translateX(-50%);
+  position: absolute; top: 90px; left: 50%; transform: translateX(-50%);
   background: rgba(248, 250, 252, 0.5);
   backdrop-filter: blur(20px) saturate(180%); -webkit-backdrop-filter: blur(20px) saturate(180%);
   padding: 6px 16px; border-radius: 20px;
