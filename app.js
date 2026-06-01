@@ -523,7 +523,6 @@ function loadChatList() {
         if (change.type === "modified") { 
           const chatData = change.doc.data(); 
           if (chatData.unreadBy === user && currentChat !== change.doc.id) { 
-            // 🔥 BULLETPROOF: Safely extract name even if DB is corrupted
             const otherUser = (chatData.users && Array.isArray(chatData.users)) 
                 ? chatData.users.find(u => u !== user) 
                 : change.doc.id.replace(user, "").replace("_", "");
@@ -538,7 +537,6 @@ function loadChatList() {
       if (chatsArray.length === 0) list.innerHTML = `<div class="empty-state" style="padding-top: 20px;"><i class='bx bx-message-square-x'></i><p>No messages yet.</p></div>`;
       
       chatsArray.forEach(chat => {
-        // 🔥 AUTO-HEALER: If it's an old corrupted chat, fix it silently
         let other = "Unknown";
         if (chat.users && Array.isArray(chat.users)) {
             other = chat.users.find(u => u !== user) || "Unknown";
@@ -549,8 +547,22 @@ function loadChatList() {
 
         if (chat.unreadBy === user && currentChat === chat.id) { db.collection("chats").doc(chat.id).set({ unreadBy: "" }, { merge: true }); chat.unreadBy = ""; }
         
-        const initial = other.charAt(0).toUpperCase(); const isUnread = chat.unreadBy === user; if (isUnread) hasGlobalUnread = true;
-        list.innerHTML += `<div class="chat-item" onclick="openChat('${chat.id}', '${other}')" style="${isUnread ? 'background: #e0e7ff; border-left: 4px solid var(--primary);' : ''}"><div class="chat-avatar">${initial}</div><div class="chat-name" style="${isUnread ? 'font-weight: 800;' : ''}">${other}</div>${isUnread ? `<div style="width:10px; height:10px; background:#ef4444; border-radius:50%; margin-left:auto;"></div>` : ''}</div>`;
+        const initial = other.charAt(0).toUpperCase(); 
+        const isUnread = chat.unreadBy === user; 
+        if (isUnread) hasGlobalUnread = true;
+        
+        // 🔥 THE FIX: Using the unbreakable, pulsing CSS class!
+        const unreadStyles = isUnread ? 'background: #e0e7ff; border-left: 4px solid var(--primary);' : '';
+        const nameStyles = isUnread ? 'font-weight: 800;' : '';
+        const dotHTML = isUnread ? `<div class="unread-pulse-dot"></div>` : '';
+        
+        list.innerHTML += `
+          <div class="chat-item" onclick="openChat('${chat.id}', '${other}')" style="${unreadStyles}">
+            <div class="chat-avatar">${initial}</div>
+            <div class="chat-name" style="${nameStyles}">${other}</div>
+            ${dotHTML}
+          </div>
+        `;
       });
       
       const badge = document.getElementById("chatBadge"); 
