@@ -506,16 +506,20 @@ function loadMessages() {
 
         const safeText = m.text.replace(/[`$'\\]/g, ""); 
         
-        // 🔥 THE SWIPE UPGRADE: Added data tags and the hidden icon
+        // 🔥 THE FIX: Dynamically load the icon on the correct side!
+        const swipeIconHTML = isMe 
+            ? `<div class="swipe-reply-icon right"><i class='bx bx-reply' style="transform: scaleX(-1);"></i></div>` 
+            : `<div class="swipe-reply-icon left"><i class='bx bx-reply'></i></div>`;
+            
         newHTML += `<div class="msg-wrapper" data-sender="${m.sender}" data-text="${safeText}" style="align-items: ${isMe ? 'flex-end' : 'flex-start'};" onclick="toggleTime(this)">
-                      <div class="swipe-reply-icon"><i class='bx bx-reply'></i></div>
+                      ${swipeIconHTML}
                       <div class="msg-bubble ${isMe ? 'msg-sent' : 'msg-received'} ${shape}">
                          ${replyBlock}
                          ${m.text}
                       </div>
                       <div class="msg-time" style="text-align: ${isMe ? 'right' : 'left'}">
                          ${formatTime(m.time)}
-                         <button class="reply-action-btn" onclick="event.stopPropagation(); initiateReply('${m.sender}', \`${safeText}\`)"><i class='bx bx-reply'></i></button>
+                         <button class="reply-action-btn" onclick="event.stopPropagation(); initiateReply('${m.sender}', \`${safeText}\`)"><i class='bx bx-reply'></i> Reply</button>
                       </div>
                     </div>`;
         
@@ -694,56 +698,62 @@ document.addEventListener("click", () => {
 }, { once: true });
 
 // ==========================================
-// 📲 SWIPE TO REPLY GESTURE ENGINE
+// 🖱️ + 📲 UNIVERSAL SWIPE TO REPLY ENGINE
 // ==========================================
-let touchStartX = 0, touchStartY = 0, currentSwipeItem = null, isSwiping = false;
+let startX = 0, startY = 0, currentSwipeItem = null, isSwiping = false, swipeDirection = 0;
 
-document.addEventListener("touchstart", (e) => {
+document.addEventListener("pointerdown", (e) => {
     const wrapper = e.target.closest(".msg-wrapper");
     if (!wrapper) return;
-    touchStartX = e.touches[0].clientX;
-    touchStartY = e.touches[0].clientY;
-    currentSwipeItem = wrapper;
-    isSwiping = false;
-    wrapper.style.transition = "none"; // Disables animation so it sticks perfectly to your thumb
-}, { passive: true });
-
-document.addEventListener("touchmove", (e) => {
-    if (!currentSwipeItem) return;
-    const deltaX = e.touches[0].clientX - touchStartX;
-    const deltaY = e.touches[0].clientY - touchStartY;
-
-    // If scrolling up/down, cancel the swipe instantly
-    if (!isSwiping && Math.abs(deltaY) > Math.abs(deltaX)) { currentSwipeItem = null; return; }
+    startX = e.clientX; startY = e.clientY;
+    currentSwipeItem = wrapper; isSwiping = false;
+    wrapper.style.transition = "none"; 
     
-    // Only lock into swipe mode if they move perfectly to the right
-    if (deltaX > 10) isSwiping = true;
+    // 🔥 THE FIX: Decide which way we are allowed to pull
+    const isSent = wrapper.querySelector(".msg-sent") !== null;
+    swipeDirection = isSent ? -1 : 1; // -1 = pull left (Sent), 1 = pull right (Received)
+    
+    wrapper.setPointerCapture(e.pointerId); // Forces mouse to keep tracking even if it slips off
+});
 
-    if (isSwiping && deltaX > 0) {
-        const movePx = Math.min(deltaX * 0.4, 65); // 0.4 creates thick "native" friction
+document.addEventListener("pointermove", (e) => {
+    if (!currentSwipeItem) return;
+    const deltaX = e.clientX - startX;
+    const deltaY = e.clientY - startY;
+
+    if (!isSwiping && Math.abs(deltaY) > Math.abs(deltaX)) { currentSwipeItem = null; return; }
+
+    // Lock into swipe mode only if pulling in the correct direction
+    if ((swipeDirection === 1 && deltaX > 10) || (swipeDirection === -1 && deltaX < -10)) {
+        isSwiping = true;
+    }
+
+    if (isSwiping) {
+        let movePx = 0;
+        if (swipeDirection === 1 && deltaX > 0) movePx = Math.min(deltaX * 0.4, 65);
+        else if (swipeDirection === -1 && deltaX < 0) movePx = Math.max(deltaX * 0.4, -65);
+
         currentSwipeItem.style.transform = `translateX(${movePx}px)`;
         
-        // At 50px, lock the icon and get ready to trigger the reply
-        if (movePx >= 50) currentSwipeItem.classList.add("ready-to-reply");
+        if (Math.abs(movePx) >= 50) currentSwipeItem.classList.add("ready-to-reply");
         else currentSwipeItem.classList.remove("ready-to-reply");
     }
-}, { passive: true });
+});
 
-document.addEventListener("touchend", (e) => {
+const endSwipe = (e) => {
     if (!currentSwipeItem) return;
-    
-    // If they swiped far enough, trigger the reply bar!
     if (currentSwipeItem.classList.contains("ready-to-reply")) {
         const sender = currentSwipeItem.getAttribute("data-sender");
         const text = currentSwipeItem.getAttribute("data-text");
         initiateReply(sender, text);
-        if (navigator.vibrate) navigator.vibrate(50); // Premium haptic tick!
+        if (navigator.vibrate) navigator.vibrate(50); 
     }
-
-    // Smooth snap-back animation when they let go
     currentSwipeItem.style.transition = "transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)";
     currentSwipeItem.style.transform = "translateX(0px)";
     currentSwipeItem.classList.remove("ready-to-reply");
-    currentSwipeItem = null;
-    isSwiping = false;
-});
+    if(e.pointerId) currentSwipeItem.releasePointerCapture(e.pointerId);
+    currentSwipeItem = null; isSwiping = false;
+};
+
+document.addEventListener("pointerup", endSwipe);
+document.addEventListener("pointercancel", endSwipe);
