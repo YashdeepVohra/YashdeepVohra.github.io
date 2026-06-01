@@ -402,7 +402,15 @@ function handleTyping() {
 function initiateReply(sender, text) {
   replyingToMessage = { sender, text };
   updateChatFooterUI();
-  document.getElementById("msgInput")?.focus();
+  
+  // 🔥 THE FIX: Smoothly forces the keyboard to open AND pushes the screen up
+  setTimeout(() => {
+      const input = document.getElementById("msgInput");
+      if(input) { 
+          input.focus(); 
+          input.scrollIntoView({ behavior: "smooth", block: "nearest" }); 
+      }
+  }, 50);
 }
 
 function cancelReply() {
@@ -490,17 +498,17 @@ function loadMessages() {
         const isSamePrev = prev && prev.sender === m.sender; const isSameNext = next && next.sender === m.sender;
         let shape = "single"; if (isSamePrev && isSameNext) shape = "middle"; else if (!isSamePrev && isSameNext) shape = "first"; else if (isSamePrev && !isSameNext) shape = "last";
 
-        // 🔥 THE FIX: If the database says this is a reply, inject the context box BEFORE the actual text!
         let replyBlock = "";
         if (m.replyTo) {
             const replyName = m.replyTo.sender === user ? "You" : m.replyTo.sender;
             replyBlock = `<div class="msg-replied-to"><b>${replyName}:</b> ${m.replyTo.text}</div>`;
         }
 
-        // 🔥 THE FIX: Inject the Reply Button right next to the timestamp!
-        const safeText = m.text.replace(/[`$'\\]/g, ""); // Strips quotes so it doesn't break JS
+        const safeText = m.text.replace(/[`$'\\]/g, ""); 
         
-        newHTML += `<div class="msg-wrapper" style="align-items: ${isMe ? 'flex-end' : 'flex-start'};" onclick="toggleTime(this)">
+        // 🔥 THE SWIPE UPGRADE: Added data tags and the hidden icon
+        newHTML += `<div class="msg-wrapper" data-sender="${m.sender}" data-text="${safeText}" style="align-items: ${isMe ? 'flex-end' : 'flex-start'};" onclick="toggleTime(this)">
+                      <div class="swipe-reply-icon"><i class='bx bx-reply'></i></div>
                       <div class="msg-bubble ${isMe ? 'msg-sent' : 'msg-received'} ${shape}">
                          ${replyBlock}
                          ${m.text}
@@ -528,32 +536,41 @@ function loadMessages() {
 
 function updateChatFooterUI() {
   const footer = document.querySelector(".chat-footer"); if(!footer) return;
+
   if (currentChatStatus === "icebreaker" && currentChatInitiator === user && myMessageCount >= 1) {
       footer.innerHTML = `<div style="width: 100%; text-align: center; color: var(--text-muted); font-size: 13px; font-weight: bold; padding: 10px;"><i class='bx bxs-lock-alt'></i> Icebreaker sent! Waiting for reply...</div>`;
       footer.style.flexDirection = "row";
-  } else { 
-      // 🔥 THE FIX: Dynamically creates the beautiful blue preview box right above your keyboard
-      let previewHTML = "";
-      if (replyingToMessage) {
-          const name = replyingToMessage.sender === user ? "Yourself" : replyingToMessage.sender;
-          previewHTML = `
-            <div style="width: 100%; display: flex; justify-content: space-between; align-items: center; background: #e0e7ff; padding: 10px 16px; border-radius: 16px 16px 0 0; font-size: 12px; margin-bottom: -12px; border: 1px solid #c7d2fe; border-bottom: none; z-index: 0;">
-               <div style="color: var(--primary);"><b>Replying to ${name}:</b><br><span style="color: #6366f1; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;">${replyingToMessage.text}</span></div>
-               <div onclick="cancelReply()" style="background: white; width: 26px; height: 26px; min-width: 26px; border-radius: 50%; display: flex; justify-content: center; align-items: center; cursor: pointer; color: var(--danger); box-shadow: var(--shadow-sm);"><i class='bx bx-x'></i></div>
-            </div>`;
-      }
+      return;
+  }
 
+  // 🔥 THE FIX: We build the input field ONCE and never delete it
+  if (!document.getElementById("msgInput")) {
       footer.style.flexDirection = "column"; 
       footer.style.alignItems = "stretch";
-      
-      const inputId = document.getElementById("msgInput") ? "" : `id="msgInput"`; // Keep focus if it exists
-      const currentVal = document.getElementById("msgInput") ? document.getElementById("msgInput").value : "";
-      
-      footer.innerHTML = previewHTML + `
+      footer.innerHTML = `
+        <div id="replyPreviewContainer"></div>
         <div style="display: flex; gap: 10px; width: 100%; margin-top: 12px; z-index: 1;">
-            <input ${inputId} value="${currentVal}" placeholder="Message..." autocomplete="off" oninput="handleTyping()" onkeydown="if(event.key === 'Enter') sendMessage()" style="margin-bottom:0;" />
+            <input id="msgInput" placeholder="Message..." autocomplete="off" oninput="handleTyping()" onkeydown="if(event.key === 'Enter') sendMessage()" style="margin-bottom:0;" />
             <button onclick="sendMessage()"><i class='bx bxs-send'></i></button>
         </div>`;
+  }
+
+  // 🔥 THE FIX: We ONLY change the container above the input
+  const previewContainer = document.getElementById("replyPreviewContainer");
+  if (previewContainer) {
+      if (replyingToMessage) {
+          const name = replyingToMessage.sender === user ? "Yourself" : replyingToMessage.sender;
+          previewContainer.innerHTML = `
+            <div class="reply-preview-bar">
+               <div class="reply-preview-content">
+                 <i class='bx bx-reply reply-preview-icon'></i>
+                 <div style="color: var(--primary);"><b>Replying to ${name}:</b><br><span style="color: #6366f1; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;">${replyingToMessage.text}</span></div>
+               </div>
+               <div onclick="cancelReply()" style="background: white; width: 26px; height: 26px; min-width: 26px; border-radius: 50%; display: flex; justify-content: center; align-items: center; cursor: pointer; color: var(--danger); box-shadow: var(--shadow-sm);"><i class='bx bx-x'></i></div>
+            </div>`;
+      } else {
+          previewContainer.innerHTML = "";
+      }
   }
 }
 
@@ -675,3 +692,58 @@ document.addEventListener("click", () => {
     });
   }
 }, { once: true });
+
+// ==========================================
+// 📲 SWIPE TO REPLY GESTURE ENGINE
+// ==========================================
+let touchStartX = 0, touchStartY = 0, currentSwipeItem = null, isSwiping = false;
+
+document.addEventListener("touchstart", (e) => {
+    const wrapper = e.target.closest(".msg-wrapper");
+    if (!wrapper) return;
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+    currentSwipeItem = wrapper;
+    isSwiping = false;
+    wrapper.style.transition = "none"; // Disables animation so it sticks perfectly to your thumb
+}, { passive: true });
+
+document.addEventListener("touchmove", (e) => {
+    if (!currentSwipeItem) return;
+    const deltaX = e.touches[0].clientX - touchStartX;
+    const deltaY = e.touches[0].clientY - touchStartY;
+
+    // If scrolling up/down, cancel the swipe instantly
+    if (!isSwiping && Math.abs(deltaY) > Math.abs(deltaX)) { currentSwipeItem = null; return; }
+    
+    // Only lock into swipe mode if they move perfectly to the right
+    if (deltaX > 10) isSwiping = true;
+
+    if (isSwiping && deltaX > 0) {
+        const movePx = Math.min(deltaX * 0.4, 65); // 0.4 creates thick "native" friction
+        currentSwipeItem.style.transform = `translateX(${movePx}px)`;
+        
+        // At 50px, lock the icon and get ready to trigger the reply
+        if (movePx >= 50) currentSwipeItem.classList.add("ready-to-reply");
+        else currentSwipeItem.classList.remove("ready-to-reply");
+    }
+}, { passive: true });
+
+document.addEventListener("touchend", (e) => {
+    if (!currentSwipeItem) return;
+    
+    // If they swiped far enough, trigger the reply bar!
+    if (currentSwipeItem.classList.contains("ready-to-reply")) {
+        const sender = currentSwipeItem.getAttribute("data-sender");
+        const text = currentSwipeItem.getAttribute("data-text");
+        initiateReply(sender, text);
+        if (navigator.vibrate) navigator.vibrate(50); // Premium haptic tick!
+    }
+
+    // Smooth snap-back animation when they let go
+    currentSwipeItem.style.transition = "transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)";
+    currentSwipeItem.style.transform = "translateX(0px)";
+    currentSwipeItem.classList.remove("ready-to-reply");
+    currentSwipeItem = null;
+    isSwiping = false;
+});
