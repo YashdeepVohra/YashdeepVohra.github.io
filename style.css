@@ -281,3 +281,50 @@ input[type="datetime-local"] { width: 100%; max-width: 100%; padding: 14px 16px;
   font-size: 11px; font-weight: 700; cursor: pointer;
   margin-left: 8px; display: inline-flex; align-items: center; gap: 4px;
 }
+
+/* Obliterate the mobile tap highlight bug globally */
+* { -webkit-tap-highlight-color: transparent; }
+.msg-wrapper, .msg-bubble { outline: none !important; }
+
+/* ==========================================
+   SWIPE-TO-REPLY UI
+   ========================================== */
+.msg-wrapper { position: relative; } /* Allows the icon to sit behind the text */
+
+.swipe-reply-icon {
+  position: absolute;
+  left: -40px; /* Hidden off-screen to the left */
+  top: 50%;
+  transform: translateY(-50%) scale(0.5);
+  opacity: 0;
+  width: 30px; height: 30px;
+  background: #e0e7ff; color: var(--primary);
+  border-radius: 50%;
+  display: flex; justify-content: center; align-items: center;
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  z-index: 0;
+}
+
+/* When the user swipes far enough, the icon pops out and locks in */
+.msg-wrapper.ready-to-reply .swipe-reply-icon {
+  opacity: 1;
+  transform: translateY(-50%) scale(1);
+}
+
+/* ==========================================
+   REPLY PREVIEW BAR UI
+   ========================================== */
+.reply-preview-bar {
+  width: 100%; display: flex; justify-content: space-between; align-items: center; 
+  background: #e0e7ff; padding: 10px 16px; border-radius: 16px 16px 0 0; 
+  font-size: 12px; margin-bottom: -12px; border: 1px solid #c7d2fe; 
+  border-bottom: none; z-index: 0;
+  animation: slideUp 0.2s ease-out;
+}
+.reply-preview-content {
+  display: flex; gap: 10px; align-items: center; width: 85%;
+}
+.reply-preview-icon {
+  color: var(--primary); font-size: 22px; background: white; 
+  border-radius: 50%; padding: 4px; box-shadow: var(--shadow-sm);
+}
