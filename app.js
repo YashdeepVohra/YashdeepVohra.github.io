@@ -506,12 +506,15 @@ function loadMessages() {
 
         const safeText = m.text.replace(/[`$'\\]/g, ""); 
         
-        // 🔥 THE FIX: Dynamically load the icon on the correct side!
+        // 🔥 THE FIX: Encodes the text so quotes and symbols NEVER break the HTML
+        const encodedText = encodeURIComponent(m.text); 
+        
         const swipeIconHTML = isMe 
             ? `<div class="swipe-reply-icon right"><i class='bx bx-reply' style="transform: scaleX(-1);"></i></div>` 
             : `<div class="swipe-reply-icon left"><i class='bx bx-reply'></i></div>`;
             
-        newHTML += `<div class="msg-wrapper" data-sender="${m.sender}" data-text="${safeText}" style="align-items: ${isMe ? 'flex-end' : 'flex-start'};" onclick="toggleTime(this)">
+        // 🔥 THE FIX: Passed encodedText into both the data-attribute AND the button
+        newHTML += `<div class="msg-wrapper" data-sender="${m.sender}" data-text="${encodedText}" style="align-items: ${isMe ? 'flex-end' : 'flex-start'};" onclick="toggleTime(this)">
                       ${swipeIconHTML}
                       <div class="msg-bubble ${isMe ? 'msg-sent' : 'msg-received'} ${shape}">
                          ${replyBlock}
@@ -519,7 +522,7 @@ function loadMessages() {
                       </div>
                       <div class="msg-time" style="text-align: ${isMe ? 'right' : 'left'}">
                          ${formatTime(m.time)}
-                         <button class="reply-action-btn" onclick="event.stopPropagation(); initiateReply('${m.sender}', \`${safeText}\`)"><i class='bx bx-reply'></i> Reply</button>
+                         <button class="reply-action-btn" onclick="event.stopPropagation(); initiateReply('${m.sender}', decodeURIComponent('${encodedText}'))"><i class='bx bx-reply'></i> Reply</button>
                       </div>
                     </div>`;
         
@@ -698,34 +701,45 @@ document.addEventListener("click", () => {
 }, { once: true });
 
 // ==========================================
-// 🖱️ + 📲 UNIVERSAL SWIPE TO REPLY ENGINE
+// 🖱️ + 📲 HYBRID SWIPE TO REPLY ENGINE
 // ==========================================
 let startX = 0, startY = 0, currentSwipeItem = null, isSwiping = false, swipeDirection = 0;
 
-document.addEventListener("pointerdown", (e) => {
+function handleDragStart(e) {
     const wrapper = e.target.closest(".msg-wrapper");
     if (!wrapper) return;
-    startX = e.clientX; startY = e.clientY;
-    currentSwipeItem = wrapper; isSwiping = false;
+    
+    // Supports both Mouse and Touch
+    const touch = e.type.includes("mouse") ? e : e.touches[0];
+    startX = touch.clientX; 
+    startY = touch.clientY;
+    
+    currentSwipeItem = wrapper; 
+    isSwiping = false;
     wrapper.style.transition = "none"; 
     
-    // 🔥 THE FIX: Decide which way we are allowed to pull
     const isSent = wrapper.querySelector(".msg-sent") !== null;
-    swipeDirection = isSent ? -1 : 1; // -1 = pull left (Sent), 1 = pull right (Received)
-    
-    wrapper.setPointerCapture(e.pointerId); // Forces mouse to keep tracking even if it slips off
-});
+    swipeDirection = isSent ? -1 : 1; 
+}
 
-document.addEventListener("pointermove", (e) => {
+function handleDragMove(e) {
     if (!currentSwipeItem) return;
-    const deltaX = e.clientX - startX;
-    const deltaY = e.clientY - startY;
+    
+    const touch = e.type.includes("mouse") ? e : e.touches[0];
+    const deltaX = touch.clientX - startX;
+    const deltaY = touch.clientY - startY;
 
-    if (!isSwiping && Math.abs(deltaY) > Math.abs(deltaX)) { currentSwipeItem = null; return; }
+    // If moving up/down, let the user scroll normally
+    if (!isSwiping && Math.abs(deltaY) > Math.abs(deltaX)) { 
+        currentSwipeItem = null; 
+        return; 
+    }
 
-    // Lock into swipe mode only if pulling in the correct direction
+    // Lock into horizontal swipe mode
     if ((swipeDirection === 1 && deltaX > 10) || (swipeDirection === -1 && deltaX < -10)) {
         isSwiping = true;
+        // 🔥 THE FIX: Tells the mobile browser "Stop scrolling, I am dragging!"
+        if(e.cancelable) e.preventDefault(); 
     }
 
     if (isSwiping) {
@@ -738,22 +752,32 @@ document.addEventListener("pointermove", (e) => {
         if (Math.abs(movePx) >= 50) currentSwipeItem.classList.add("ready-to-reply");
         else currentSwipeItem.classList.remove("ready-to-reply");
     }
-});
+}
 
-const endSwipe = (e) => {
+function handleDragEnd(e) {
     if (!currentSwipeItem) return;
+    
+    // 🔥 THE FIX: Now decodes the safe text and triggers the reply instantly!
     if (currentSwipeItem.classList.contains("ready-to-reply")) {
         const sender = currentSwipeItem.getAttribute("data-sender");
-        const text = currentSwipeItem.getAttribute("data-text");
+        const text = decodeURIComponent(currentSwipeItem.getAttribute("data-text"));
         initiateReply(sender, text);
         if (navigator.vibrate) navigator.vibrate(50); 
     }
+    
     currentSwipeItem.style.transition = "transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)";
     currentSwipeItem.style.transform = "translateX(0px)";
     currentSwipeItem.classList.remove("ready-to-reply");
-    if(e.pointerId) currentSwipeItem.releasePointerCapture(e.pointerId);
-    currentSwipeItem = null; isSwiping = false;
-};
+    currentSwipeItem = null; 
+    isSwiping = false;
+}
 
-document.addEventListener("pointerup", endSwipe);
-document.addEventListener("pointercancel", endSwipe);
+// Attach Desktop Mouse Listeners
+document.addEventListener("mousedown", handleDragStart);
+document.addEventListener("mousemove", handleDragMove);
+document.addEventListener("mouseup", handleDragEnd);
+
+// Attach Mobile Touch Listeners (passive: false is REQUIRED to stop screen sliding)
+document.addEventListener("touchstart", handleDragStart, { passive: false });
+document.addEventListener("touchmove", handleDragMove, { passive: false });
+document.addEventListener("touchend", handleDragEnd);
