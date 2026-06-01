@@ -115,19 +115,19 @@ button:active { transform: translateY(1px); }
 
 .msg-bubble { padding: 10px 14px; font-size: 15px; font-weight: 500; max-width: 75%; word-wrap: break-word; line-height: 1.4; transition: all 0.2s; }
 
-/* Smart Tails: Sent Messages */
+/* Smart Tails: Sent Messages (Smooth Pill Design) */
 .msg-sent { background: var(--primary); color: white; align-self: flex-end; }
-.msg-sent.single { border-radius: 20px 20px 4px 20px; margin-bottom: 12px; }
+.msg-sent.single { border-radius: 20px 20px 20px 20px; margin-bottom: 12px; }
 .msg-sent.first  { border-radius: 20px 20px 6px 20px; margin-bottom: 2px; }
 .msg-sent.middle { border-radius: 20px 6px 6px 20px; margin-bottom: 2px; }
-.msg-sent.last   { border-radius: 20px 6px 4px 20px; margin-bottom: 12px; }
+.msg-sent.last   { border-radius: 20px 6px 20px 20px; margin-bottom: 12px; }
 
-/* Smart Tails: Received Messages */
+/* Smart Tails: Received Messages (Smooth Pill Design) */
 .msg-received { background: var(--surface); color: var(--text); border: 1px solid var(--border); align-self: flex-start; }
-.msg-received.single { border-radius: 20px 20px 20px 4px; margin-bottom: 12px; }
+.msg-received.single { border-radius: 20px 20px 20px 20px; margin-bottom: 12px; }
 .msg-received.first  { border-radius: 20px 20px 20px 6px; margin-bottom: 2px; }
 .msg-received.middle { border-radius: 6px 20px 20px 6px; margin-bottom: 2px; }
-.msg-received.last   { border-radius: 6px 20px 20px 4px; margin-bottom: 12px; }
+.msg-received.last   { border-radius: 6px 20px 20px 20px; margin-bottom: 12px; }
 
 /* Read Receipts & Typing Indicators */
 .msg-status { font-size: 11px; color: var(--text-muted); align-self: flex-end; margin-top: -8px; margin-bottom: 12px; font-weight: 600; display: flex; align-items: center; gap: 4px; }
