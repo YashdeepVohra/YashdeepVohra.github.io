@@ -323,7 +323,7 @@ async function startChat(clickedUsername = null) {
 
 function openChat(chatId, otherUser) {
   currentChat = chatId; 
-  currentOtherUser = otherUser; // 🔥 MEMORIZE THE EXACT USERNAME
+  currentOtherUser = otherUser; 
   
   const hAvatar = document.getElementById("chatHeaderAvatar"); 
   const hTitle = document.getElementById("chatWithTitle");
@@ -331,16 +331,21 @@ function openChat(chatId, otherUser) {
   if(hTitle) hTitle.innerText = otherUser;
   
   document.querySelector(".topbar")?.classList.add("hidden"); switchScreen("chatScreen");
-  db.collection("chats").doc(chatId).set({ unreadBy: "", users: [user, otherUser] }, { merge: true }); 
   
   if(chatDocUnsubscribe) chatDocUnsubscribe();
   chatDocUnsubscribe = db.collection("chats").doc(chatId).onSnapshot(doc => {
      if(doc.exists) { 
          currentChatData = doc.data(); 
-         currentChatStatus = doc.data().status || "unlocked"; 
-         currentChatInitiator = doc.data().initiatedBy || ""; 
+         currentChatStatus = currentChatData.status || "unlocked"; 
+         currentChatInitiator = currentChatData.initiatedBy || ""; 
          
-         if (currentChatData.unreadBy === "" && currentChat === chatId) updateReadReceipts();
+         // 🔥 THE FIX: ONLY wipe the unread tag if the message was actually unread by YOU
+         if (currentChatData.unreadBy === user) {
+             db.collection("chats").doc(chatId).set({ unreadBy: "" }, { merge: true });
+             currentChatData.unreadBy = ""; // Instantly update locally so UI doesn't lag
+         }
+         
+         updateReadReceipts();
          updateTypingIndicator();
          updateChatFooterUI(); 
      }
@@ -403,9 +408,53 @@ function updateTypingIndicator() {
   }
 }
 
+let scrollTimeout = null; // Global timer for the fade effect
+
+function handleChatScroll() {
+  const box = document.getElementById("messages");
+  let floatingDate = document.getElementById("floatingDate");
+  
+  // 1. Create the glass badge if it doesn't exist yet
+  if (!floatingDate) {
+      floatingDate = document.createElement("div");
+      floatingDate.id = "floatingDate";
+      floatingDate.className = "floating-date";
+      document.getElementById("chatScreen").appendChild(floatingDate);
+  }
+  
+  const dateWrappers = box.getElementsByClassName("date-separator");
+  let activeDateText = "";
+  
+  // 2. Calculate exactly which date your thumb is scrolling past
+  const boxRect = box.getBoundingClientRect();
+  for (let el of dateWrappers) {
+      const rect = el.getBoundingClientRect();
+      if (rect.top <= boxRect.top + 60) {
+          activeDateText = el.innerText;
+      }
+  }
+  
+  // 3. Show the glass badge and reset the 1-second fade-out timer
+  if (activeDateText) {
+      floatingDate.innerText = activeDateText;
+      floatingDate.classList.add("visible");
+      
+      clearTimeout(scrollTimeout);
+      scrollTimeout = setTimeout(() => {
+          floatingDate.classList.remove("visible");
+      }, 1200); // Fades out exactly 1.2 seconds after you stop scrolling
+  }
+}
+
 function loadMessages() {
   if (messagesUnsubscribe) messagesUnsubscribe(); 
   const box = document.getElementById("messages"); if(!box) return;
+  
+  // 🔥 Attach the scroll listener so the app watches your thumb
+  if (!box.dataset.hasScrollListener) {
+      box.addEventListener("scroll", handleChatScroll);
+      box.dataset.hasScrollListener = "true";
+  }
   
   messagesUnsubscribe = db.collection("messages").where("chatId", "==", currentChat).onSnapshot(snapshot => {
       let lastDateString = ""; myMessageCount = 0; let theirMessageCount = 0;
@@ -417,14 +466,12 @@ function loadMessages() {
         const isMe = m.sender === user; if(isMe) myMessageCount++; else theirMessageCount++;
         const msgDate = new Date(m.time).toLocaleDateString();
         
-        // Render Sticky Date
         if (msgDate !== lastDateString) { 
             let displayDate = ""; const today = new Date().toLocaleDateString(); const yesterdayObj = new Date(); yesterdayObj.setDate(yesterdayObj.getDate() - 1); const yesterday = yesterdayObj.toLocaleDateString(); 
             if (msgDate === today) displayDate = "Today"; else if (msgDate === yesterday) displayDate = "Yesterday"; else displayDate = new Date(m.time).toLocaleDateString([], { month: 'short', day: 'numeric' }); 
             newHTML += `<div class="date-wrapper"><div class="date-separator">${displayDate}</div></div>`; lastDateString = msgDate; 
         }
 
-        // Smart Tails Logic
         const prev = msgs[i - 1]; const next = msgs[i + 1];
         const isSamePrev = prev && prev.sender === m.sender;
         const isSameNext = next && next.sender === m.sender;
@@ -438,15 +485,12 @@ function loadMessages() {
                       <div class="msg-time" style="text-align: ${isMe ? 'right' : 'left'}">${formatTime(m.time)}</div>
                     </div>`;
         
-        // Read Receipt (Only under the very last message)
         if (i === msgs.length - 1 && isMe) {
             newHTML += `<div class="msg-status" id="readReceipt">Sent <i class='bx bx-check'></i></div>`; 
         }
       });
       
-      // Typing Indicator HTML
       newHTML += `<div id="typingBubble" class="typing-indicator hidden"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>`;
-
       box.innerHTML = newHTML;
       
       if (currentChatStatus === "icebreaker" && theirMessageCount > 0 && currentChatInitiator === user) { db.collection("chats").doc(currentChat).update({ status: "unlocked" }); }
