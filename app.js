@@ -464,6 +464,45 @@ function updateChatFooterUI() {
   }
 }
 
+function loadChatList() {
+  db.collection("chats").where("users", "array-contains", user).onSnapshot(snapshot => {
+      const list = document.getElementById("chatList"); if(!list) return;
+      list.innerHTML = ""; let hasGlobalUnread = false; let chatsArray = [];
+      
+      snapshot.docChanges().forEach(change => { 
+        if (change.type === "modified") { 
+          const chatData = change.doc.data(); 
+          if (chatData.unreadBy === user && currentChat !== change.doc.id) { 
+            const otherUser = chatData.users.find(u => u !== user); 
+            showNotification(otherUser, change.doc.id); 
+          } 
+        } 
+      });
+      
+      snapshot.forEach(doc => { chatsArray.push({ id: doc.id, ...doc.data() }); }); 
+      chatsArray.sort((a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0));
+      
+      if (chatsArray.length === 0) list.innerHTML = `<div class="empty-state" style="padding-top: 20px;"><i class='bx bx-message-square-x'></i><p>No messages yet.</p></div>`;
+      
+      chatsArray.forEach(chat => {
+        if (chat.unreadBy === user && currentChat === chat.id) { db.collection("chats").doc(chat.id).set({ unreadBy: "" }, { merge: true }); chat.unreadBy = ""; }
+        const other = chat.users.find(u => u !== user); const initial = other.charAt(0).toUpperCase(); const isUnread = chat.unreadBy === user; if (isUnread) hasGlobalUnread = true;
+        list.innerHTML += `<div class="chat-item" onclick="openChat('${chat.id}', '${other}')" style="${isUnread ? 'background: #e0e7ff; border-left: 4px solid var(--primary);' : ''}"><div class="chat-avatar">${initial}</div><div class="chat-name" style="${isUnread ? 'font-weight: 800;' : ''}">${other}</div>${isUnread ? `<div style="width:10px; height:10px; background:#ef4444; border-radius:50%; margin-left:auto;"></div>` : ''}</div>`;
+      });
+      
+      // 🔥 CLEAN MOBILE BADGE + TAB TITLE
+      const badge = document.getElementById("chatBadge"); 
+      
+      if (hasGlobalUnread) {
+        if (badge) badge.classList.remove("hidden");
+        document.title = "(1) New Message - livesociya"; 
+      } else {
+        if (badge) badge.classList.add("hidden");
+        document.title = "livesociya";
+      }
+    });
+}
+
 function showTab(tab) {
   document.getElementById("eventsTab")?.classList.add("hidden"); document.getElementById("recapTab")?.classList.add("hidden"); document.getElementById("chatsTab")?.classList.add("hidden");
   document.querySelectorAll(".nav-item").forEach(t => t.classList.remove("active")); const navItems = document.querySelectorAll(".nav-item");
