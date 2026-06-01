@@ -300,6 +300,7 @@ function confirmDeletePermanently() { if (!eventIdToManage) return; db.collectio
 let chatDocUnsubscribe = null, currentChatStatus = "unlocked", currentChatInitiator = "", myMessageCount = 0;
 let currentChatData = null; 
 let typingTimer = null; 
+let currentOtherUser = "";
 
 async function checkCrossedPaths(user1, user2) {
   const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000); const snap = await db.collection("events").where("participants", "array-contains", user1).get();
@@ -322,6 +323,8 @@ async function startChat(clickedUsername = null) {
 
 function openChat(chatId, otherUser) {
   currentChat = chatId; 
+  currentOtherUser = otherUser; // 🔥 MEMORIZE THE EXACT USERNAME
+  
   const hAvatar = document.getElementById("chatHeaderAvatar"); 
   const hTitle = document.getElementById("chatWithTitle");
   if(hAvatar) hAvatar.innerText = otherUser.charAt(0).toUpperCase(); 
@@ -337,7 +340,6 @@ function openChat(chatId, otherUser) {
          currentChatStatus = doc.data().status || "unlocked"; 
          currentChatInitiator = doc.data().initiatedBy || ""; 
          
-         // Real-time checks
          if (currentChatData.unreadBy === "" && currentChat === chatId) updateReadReceipts();
          updateTypingIndicator();
          updateChatFooterUI(); 
@@ -347,8 +349,8 @@ function openChat(chatId, otherUser) {
 }
 
 function closeChat() {
-  if (currentChat) db.collection("chats").doc(currentChat).set({ typing: "" }, { merge: true }); // Clear typing
-  currentChat = null; currentChatData = null; 
+  if (currentChat) db.collection("chats").doc(currentChat).set({ typing: "" }, { merge: true }); 
+  currentChat = null; currentChatData = null; currentOtherUser = ""; // 🔥 CLEAR IT
   if (messagesUnsubscribe) messagesUnsubscribe(); if (chatDocUnsubscribe) chatDocUnsubscribe();
   document.querySelector(".topbar")?.classList.remove("hidden"); switchScreen("home");
 }
@@ -356,7 +358,9 @@ function closeChat() {
 async function sendMessage() {
   const input = document.getElementById("msgInput"); if(!input) return; 
   const text = input.value.trim(); if (!text || !currentChat) return;
-  const otherUser = currentChat.split("_").find(u => u !== user); 
+  
+  const otherUser = currentOtherUser; // 🔥 FIXED: No more splitting strings!
+  
   const chatRef = db.collection("chats").doc(currentChat); 
   const chatDoc = await chatRef.get(); 
   let newStatus = currentChatStatus;
@@ -368,7 +372,6 @@ async function sendMessage() {
       if (currentChatStatus === "icebreaker" && currentChatInitiator === otherUser) newStatus = "unlocked"; 
   }
   
-  // Set unread and immediately clear typing indicator
   await chatRef.set({ users: [user, otherUser], unreadBy: otherUser, lastUpdated: Date.now(), status: newStatus, typing: "" }, { merge: true });
   await db.collection("messages").add({ chatId: currentChat, sender: user, text: text, time: Date.now() }); 
   input.value = "";
@@ -394,7 +397,7 @@ function updateReadReceipts() {
 function updateTypingIndicator() {
   const bubble = document.getElementById("typingBubble"); const box = document.getElementById("messages");
   if (bubble && currentChatData) {
-      const otherUser = currentChat.split("_").find(u => u !== user);
+      const otherUser = currentOtherUser; // 🔥 FIXED
       if (currentChatData.typing === otherUser) { bubble.classList.remove("hidden"); box.scrollTop = box.scrollHeight; } 
       else { bubble.classList.add("hidden"); }
   }
