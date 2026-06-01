@@ -550,19 +550,24 @@ function updateChatFooterUI() {
       return;
   }
 
-  // 🔥 THE FIX: We build the input field ONCE and never delete it
-  if (!document.getElementById("msgInput")) {
-      footer.style.flexDirection = "column"; 
-      footer.style.alignItems = "stretch";
+  footer.style.flexDirection = "column"; 
+  footer.style.alignItems = "stretch";
+
+  // 🔥 THE FIX: We specifically look for the container, not the input
+  if (!document.getElementById("replyPreviewContainer")) {
+      const existingInput = document.getElementById("msgInput");
+      const currentVal = existingInput ? existingInput.value : "";
+      
+      // Builds the missing container AND keeps whatever you were typing
       footer.innerHTML = `
         <div id="replyPreviewContainer"></div>
         <div style="display: flex; gap: 10px; width: 100%; margin-top: 12px; z-index: 1;">
-            <input id="msgInput" placeholder="Message..." autocomplete="off" oninput="handleTyping()" onkeydown="if(event.key === 'Enter') sendMessage()" style="margin-bottom:0;" />
+            <input id="msgInput" value="${currentVal}" placeholder="Message..." autocomplete="off" oninput="handleTyping()" onkeydown="if(event.key === 'Enter') sendMessage()" style="margin-bottom:0;" />
             <button onclick="sendMessage()"><i class='bx bxs-send'></i></button>
         </div>`;
   }
 
-  // 🔥 THE FIX: We ONLY change the container above the input
+  // Now we know 100% that the container exists, so we inject the blue bar!
   const previewContainer = document.getElementById("replyPreviewContainer");
   if (previewContainer) {
       if (replyingToMessage) {
