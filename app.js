@@ -301,6 +301,7 @@ let chatDocUnsubscribe = null, currentChatStatus = "unlocked", currentChatInitia
 let currentChatData = null; 
 let typingTimer = null; 
 let currentOtherUser = "";
+let replyingToMessage = null;
 
 async function checkCrossedPaths(user1, user2) {
   const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000); const snap = await db.collection("events").where("participants", "array-contains", user1).get();
@@ -364,8 +365,7 @@ async function sendMessage() {
   const input = document.getElementById("msgInput"); if(!input) return; 
   const text = input.value.trim(); if (!text || !currentChat) return;
   
-  const otherUser = currentOtherUser; // 🔥 FIXED: No more splitting strings!
-  
+  const otherUser = currentOtherUser; 
   const chatRef = db.collection("chats").doc(currentChat); 
   const chatDoc = await chatRef.get(); 
   let newStatus = currentChatStatus;
@@ -377,9 +377,17 @@ async function sendMessage() {
       if (currentChatStatus === "icebreaker" && currentChatInitiator === otherUser) newStatus = "unlocked"; 
   }
   
+  // 🔥 THE FIX: Capture the reply data before clearing it
+  const replyData = replyingToMessage ? { sender: replyingToMessage.sender, text: replyingToMessage.text } : null;
+  replyingToMessage = null; // Instantly clear it from the UI so it feels snappy
+  
   await chatRef.set({ users: [user, otherUser], unreadBy: otherUser, lastUpdated: Date.now(), status: newStatus, typing: "" }, { merge: true });
-  await db.collection("messages").add({ chatId: currentChat, sender: user, text: text, time: Date.now() }); 
+  
+  // 🔥 THE FIX: Inject the replyData into the database payload!
+  await db.collection("messages").add({ chatId: currentChat, sender: user, text: text, time: Date.now(), replyTo: replyData }); 
+  
   input.value = "";
+  updateChatFooterUI(); // Resets the footer back to normal instantly
 }
 
 function handleTyping() {
@@ -389,6 +397,17 @@ function handleTyping() {
   typingTimer = setTimeout(() => {
       if (currentChat) db.collection("chats").doc(currentChat).set({ typing: "" }, { merge: true });
   }, 1500);
+}
+
+function initiateReply(sender, text) {
+  replyingToMessage = { sender, text };
+  updateChatFooterUI();
+  document.getElementById("msgInput")?.focus();
+}
+
+function cancelReply() {
+  replyingToMessage = null;
+  updateChatFooterUI();
 }
 
 function updateReadReceipts() {
@@ -450,15 +469,11 @@ function loadMessages() {
   if (messagesUnsubscribe) messagesUnsubscribe(); 
   const box = document.getElementById("messages"); if(!box) return;
   
-  if (!box.dataset.hasScrollListener) {
-      box.addEventListener("scroll", handleChatScroll);
-      box.dataset.hasScrollListener = "true";
-  }
+  if (!box.dataset.hasScrollListener) { box.addEventListener("scroll", handleChatScroll); box.dataset.hasScrollListener = "true"; }
   
   messagesUnsubscribe = db.collection("messages").where("chatId", "==", currentChat).onSnapshot(snapshot => {
       let lastDateString = ""; myMessageCount = 0; let theirMessageCount = 0;
       let msgs = []; snapshot.forEach(doc => msgs.push(doc.data())); msgs.sort((a, b) => a.time - b.time); 
-      
       let newHTML = "";
 
       msgs.forEach((m, i) => {
@@ -472,23 +487,32 @@ function loadMessages() {
         }
 
         const prev = msgs[i - 1]; const next = msgs[i + 1];
-        const isSamePrev = prev && prev.sender === m.sender;
-        const isSameNext = next && next.sender === m.sender;
-        let shape = "single";
-        if (isSamePrev && isSameNext) shape = "middle";
-        else if (!isSamePrev && isSameNext) shape = "first";
-        else if (isSamePrev && !isSameNext) shape = "last";
+        const isSamePrev = prev && prev.sender === m.sender; const isSameNext = next && next.sender === m.sender;
+        let shape = "single"; if (isSamePrev && isSameNext) shape = "middle"; else if (!isSamePrev && isSameNext) shape = "first"; else if (isSamePrev && !isSameNext) shape = "last";
 
+        // 🔥 THE FIX: If the database says this is a reply, inject the context box BEFORE the actual text!
+        let replyBlock = "";
+        if (m.replyTo) {
+            const replyName = m.replyTo.sender === user ? "You" : m.replyTo.sender;
+            replyBlock = `<div class="msg-replied-to"><b>${replyName}:</b> ${m.replyTo.text}</div>`;
+        }
+
+        // 🔥 THE FIX: Inject the Reply Button right next to the timestamp!
+        const safeText = m.text.replace(/[`$'\\]/g, ""); // Strips quotes so it doesn't break JS
+        
         newHTML += `<div class="msg-wrapper" style="align-items: ${isMe ? 'flex-end' : 'flex-start'};" onclick="toggleTime(this)">
-                      <div class="msg-bubble ${isMe ? 'msg-sent' : 'msg-received'} ${shape}">${m.text}</div>
-                      <div class="msg-time" style="text-align: ${isMe ? 'right' : 'left'}">${formatTime(m.time)}</div>
+                      <div class="msg-bubble ${isMe ? 'msg-sent' : 'msg-received'} ${shape}">
+                         ${replyBlock}
+                         ${m.text}
+                      </div>
+                      <div class="msg-time" style="text-align: ${isMe ? 'right' : 'left'}">
+                         ${formatTime(m.time)}
+                         <button class="reply-action-btn" onclick="event.stopPropagation(); initiateReply('${m.sender}', \`${safeText}\`)"><i class='bx bx-reply'></i></button>
+                      </div>
                     </div>`;
         
-        // 🔥 BULLETPROOF READ RECEIPT: Checks live data instantly before drawing
         if (i === msgs.length - 1 && isMe) {
-            let statusHtml = (currentChatData && currentChatData.unreadBy === "")
-                ? `Read <i class='bx bx-check-double' style="color: var(--primary);"></i>`
-                : `Sent <i class='bx bx-check'></i>`;
+            let statusHtml = (currentChatData && currentChatData.unreadBy === "") ? `Read <i class='bx bx-check-double' style="color: var(--primary);"></i>` : `Sent <i class='bx bx-check'></i>`;
             newHTML += `<div class="msg-status" id="readReceipt">${statusHtml}</div>`; 
         }
       });
@@ -506,11 +530,30 @@ function updateChatFooterUI() {
   const footer = document.querySelector(".chat-footer"); if(!footer) return;
   if (currentChatStatus === "icebreaker" && currentChatInitiator === user && myMessageCount >= 1) {
       footer.innerHTML = `<div style="width: 100%; text-align: center; color: var(--text-muted); font-size: 13px; font-weight: bold; padding: 10px;"><i class='bx bxs-lock-alt'></i> Icebreaker sent! Waiting for reply...</div>`;
+      footer.style.flexDirection = "row";
   } else { 
-      if (!document.getElementById("msgInput")) {
-          // Attached the handleTyping() trigger right here
-          footer.innerHTML = `<input id="msgInput" placeholder="Message..." autocomplete="off" oninput="handleTyping()" onkeydown="if(event.key === 'Enter') sendMessage()" /><button onclick="sendMessage()"><i class='bx bxs-send'></i></button>`; 
+      // 🔥 THE FIX: Dynamically creates the beautiful blue preview box right above your keyboard
+      let previewHTML = "";
+      if (replyingToMessage) {
+          const name = replyingToMessage.sender === user ? "Yourself" : replyingToMessage.sender;
+          previewHTML = `
+            <div style="width: 100%; display: flex; justify-content: space-between; align-items: center; background: #e0e7ff; padding: 10px 16px; border-radius: 16px 16px 0 0; font-size: 12px; margin-bottom: -12px; border: 1px solid #c7d2fe; border-bottom: none; z-index: 0;">
+               <div style="color: var(--primary);"><b>Replying to ${name}:</b><br><span style="color: #6366f1; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;">${replyingToMessage.text}</span></div>
+               <div onclick="cancelReply()" style="background: white; width: 26px; height: 26px; min-width: 26px; border-radius: 50%; display: flex; justify-content: center; align-items: center; cursor: pointer; color: var(--danger); box-shadow: var(--shadow-sm);"><i class='bx bx-x'></i></div>
+            </div>`;
       }
+
+      footer.style.flexDirection = "column"; 
+      footer.style.alignItems = "stretch";
+      
+      const inputId = document.getElementById("msgInput") ? "" : `id="msgInput"`; // Keep focus if it exists
+      const currentVal = document.getElementById("msgInput") ? document.getElementById("msgInput").value : "";
+      
+      footer.innerHTML = previewHTML + `
+        <div style="display: flex; gap: 10px; width: 100%; margin-top: 12px; z-index: 1;">
+            <input ${inputId} value="${currentVal}" placeholder="Message..." autocomplete="off" oninput="handleTyping()" onkeydown="if(event.key === 'Enter') sendMessage()" style="margin-bottom:0;" />
+            <button onclick="sendMessage()"><i class='bx bxs-send'></i></button>
+        </div>`;
   }
 }
 
