@@ -450,7 +450,6 @@ function loadMessages() {
   if (messagesUnsubscribe) messagesUnsubscribe(); 
   const box = document.getElementById("messages"); if(!box) return;
   
-  // 🔥 Attach the scroll listener so the app watches your thumb
   if (!box.dataset.hasScrollListener) {
       box.addEventListener("scroll", handleChatScroll);
       box.dataset.hasScrollListener = "true";
@@ -485,8 +484,12 @@ function loadMessages() {
                       <div class="msg-time" style="text-align: ${isMe ? 'right' : 'left'}">${formatTime(m.time)}</div>
                     </div>`;
         
+        // 🔥 BULLETPROOF READ RECEIPT: Checks live data instantly before drawing
         if (i === msgs.length - 1 && isMe) {
-            newHTML += `<div class="msg-status" id="readReceipt">Sent <i class='bx bx-check'></i></div>`; 
+            let statusHtml = (currentChatData && currentChatData.unreadBy === "")
+                ? `Read <i class='bx bx-check-double' style="color: var(--primary);"></i>`
+                : `Sent <i class='bx bx-check'></i>`;
+            newHTML += `<div class="msg-status" id="readReceipt">${statusHtml}</div>`; 
         }
       });
       
@@ -520,7 +523,10 @@ function loadChatList() {
         if (change.type === "modified") { 
           const chatData = change.doc.data(); 
           if (chatData.unreadBy === user && currentChat !== change.doc.id) { 
-            const otherUser = chatData.users.find(u => u !== user); 
+            // 🔥 BULLETPROOF: Safely extract name even if DB is corrupted
+            const otherUser = (chatData.users && Array.isArray(chatData.users)) 
+                ? chatData.users.find(u => u !== user) 
+                : change.doc.id.replace(user, "").replace("_", "");
             showNotification(otherUser, change.doc.id); 
           } 
         } 
@@ -532,14 +538,22 @@ function loadChatList() {
       if (chatsArray.length === 0) list.innerHTML = `<div class="empty-state" style="padding-top: 20px;"><i class='bx bx-message-square-x'></i><p>No messages yet.</p></div>`;
       
       chatsArray.forEach(chat => {
+        // 🔥 AUTO-HEALER: If it's an old corrupted chat, fix it silently
+        let other = "Unknown";
+        if (chat.users && Array.isArray(chat.users)) {
+            other = chat.users.find(u => u !== user) || "Unknown";
+        } else {
+            other = chat.id.replace(user, "").replace("_", "");
+            db.collection("chats").doc(chat.id).set({ users: [user, other] }, { merge: true });
+        }
+
         if (chat.unreadBy === user && currentChat === chat.id) { db.collection("chats").doc(chat.id).set({ unreadBy: "" }, { merge: true }); chat.unreadBy = ""; }
-        const other = chat.users.find(u => u !== user); const initial = other.charAt(0).toUpperCase(); const isUnread = chat.unreadBy === user; if (isUnread) hasGlobalUnread = true;
+        
+        const initial = other.charAt(0).toUpperCase(); const isUnread = chat.unreadBy === user; if (isUnread) hasGlobalUnread = true;
         list.innerHTML += `<div class="chat-item" onclick="openChat('${chat.id}', '${other}')" style="${isUnread ? 'background: #e0e7ff; border-left: 4px solid var(--primary);' : ''}"><div class="chat-avatar">${initial}</div><div class="chat-name" style="${isUnread ? 'font-weight: 800;' : ''}">${other}</div>${isUnread ? `<div style="width:10px; height:10px; background:#ef4444; border-radius:50%; margin-left:auto;"></div>` : ''}</div>`;
       });
       
-      // 🔥 CLEAN MOBILE BADGE + TAB TITLE
       const badge = document.getElementById("chatBadge"); 
-      
       if (hasGlobalUnread) {
         if (badge) badge.classList.remove("hidden");
         document.title = "(1) New Message - livesociya"; 
