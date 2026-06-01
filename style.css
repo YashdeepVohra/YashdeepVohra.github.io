@@ -248,3 +248,36 @@ input[type="datetime-local"] { width: 100%; max-width: 100%; padding: 14px 16px;
   animation: pulse-red 2s infinite; 
   z-index: 10;
 }
+
+/* ==========================================
+   SMART REPLY SYSTEM
+   ========================================== */
+/* The quoted message sitting inside the new bubble */
+.msg-replied-to { 
+  font-size: 12px; 
+  background: rgba(0, 0, 0, 0.06); 
+  padding: 6px 10px; 
+  border-radius: 10px; 
+  margin-bottom: 6px; 
+  color: var(--text-muted); 
+  display: -webkit-box; 
+  -webkit-line-clamp: 1; 
+  -webkit-box-orient: vertical; 
+  overflow: hidden; 
+  border-left: 3px solid rgba(0, 0, 0, 0.2);
+}
+
+/* If the reply is inside a blue 'Sent' bubble, make it look white/glassy */
+.msg-sent .msg-replied-to { 
+  background: rgba(255, 255, 255, 0.2); 
+  color: rgba(255, 255, 255, 0.9); 
+  border-left: 3px solid white;
+}
+
+/* The Reply action button next to the timestamp */
+.reply-action-btn {
+  background: #e0e7ff; color: var(--primary);
+  border: none; padding: 4px 10px; border-radius: 12px;
+  font-size: 11px; font-weight: 700; cursor: pointer;
+  margin-left: 8px; display: inline-flex; align-items: center; gap: 4px;
+}
