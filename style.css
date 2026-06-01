@@ -106,8 +106,30 @@ button:active { transform: translateY(1px); }
 /* ==========================================
    PREMIUM CHAT UI: DATES, TAILS, & INDICATORS
    ========================================== */
-.date-wrapper { text-align: center; margin: 24px 0 16px 0; position: sticky; top: 10px; z-index: 10; pointer-events: none; }
-.date-separator { display: inline-block; background: rgba(248, 250, 252, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); padding: 6px 14px; border-radius: 16px; font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; box-shadow: var(--shadow-sm); border: 1px solid var(--border); }
+.date-wrapper { 
+  text-align: center; 
+  margin: 24px 0 16px 0; 
+  position: sticky; 
+  top: 16px; /* Pushes it down slightly so it floats beautifully */
+  z-index: 10; 
+  pointer-events: none; 
+}
+
+.date-separator { 
+  display: inline-block; 
+  background: rgba(248, 250, 252, 0.5); /* 50% transparent */
+  backdrop-filter: blur(20px) saturate(180%); /* The premium Apple glass effect */
+  -webkit-backdrop-filter: blur(20px) saturate(180%); 
+  padding: 6px 16px; 
+  border-radius: 20px; 
+  font-size: 11px; 
+  font-weight: 700; 
+  color: #64748b; 
+  text-transform: uppercase; 
+  letter-spacing: 0.5px; 
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04); /* Soft, floating shadow */
+  border: 1px solid rgba(255, 255, 255, 0.6); /* White glass reflection on the edge */
+}
 
 .msg-wrapper { display: flex; flex-direction: column; width: 100%; cursor: pointer; }
 .msg-time { font-size: 11px; color: #94a3b8; max-height: 0; opacity: 0; overflow: hidden; transition: all 0.2s ease-out; padding: 0 4px; }
