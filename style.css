@@ -328,18 +328,21 @@ input[type="datetime-local"] { width: 100%; max-width: 100%; padding: 14px 16px;
 }
 
 /* ==========================================
-   SCROLL-TO-REPLY HIGHLIGHT ANIMATION
+   SCROLL-TO-REPLY HIGHLIGHT (TRANSITION ENGINE)
    ========================================== */
-.msg-replied-to { cursor: pointer; }
-
-/* 🔥 THE FIX: Highlights the FULL row wrapper safely */
-.msg-wrapper.highlight-pulse {
-  animation: rowPulse 1.5s ease-out forwards !important;
-  border-radius: 12px;
+.msg-replied-to { 
+  cursor: pointer; 
 }
 
-@keyframes rowPulse {
-  0% { background-color: rgba(79, 70, 229, 0); }
-  15% { background-color: rgba(79, 70, 229, 0.15); } /* Premium soft blue wash */
-  100% { background-color: rgba(79, 70, 229, 0); }
+/* 1. Ensure all bubbles can transition smoothly in both directions */
+.msg-bubble {
+  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.4s ease, filter 0.4s ease !important;
+}
+
+/* 2. The active flash state (Tight exactly to the bubble) */
+.msg-bubble.flash-active {
+  transform: scale(1.05) !important;
+  box-shadow: 0 8px 25px rgba(79, 70, 229, 0.5) !important;
+  filter: brightness(1.15) !important;
+  z-index: 10; /* Pops it above surrounding messages */
 }
