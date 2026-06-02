@@ -328,23 +328,30 @@ input[type="datetime-local"] { width: 100%; max-width: 100%; padding: 14px 16px;
 }
 
 /* ==========================================
-   SCROLL-TO-REPLY: BROAD BORDER PULSE
+   SCROLL-TO-REPLY: SMART BORDER PULSE
    ========================================== */
-.msg-replied-to { 
-  cursor: pointer; 
-}
+.msg-replied-to { cursor: pointer; }
 
 .msg-bubble {
-  will-change: transform, box-shadow; /* Warns the browser an animation is coming */
+  will-change: transform, box-shadow; 
 }
 
-.msg-bubble.flash-active {
-  animation: broadBorderPulse 1.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards !important;
+/* 1. RECEIVED MESSAGES (White Background -> Purple Pulse) */
+.msg-bubble.flash-active-received {
+  animation: pulseReceived 1.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards !important;
+}
+@keyframes pulseReceived {
+  0% { box-shadow: 0 0 0 0px rgba(79, 70, 229, 0); transform: scale(1); }
+  20% { box-shadow: 0 0 0 4px var(--primary); transform: scale(1.02); }
+  100% { box-shadow: 0 0 0 0px rgba(79, 70, 229, 0); transform: scale(1); }
 }
 
-@keyframes broadBorderPulse {
-  0% { box-shadow: 0 0 0 0px rgba(79, 70, 229, 0); transform: scale(1); filter: brightness(1); }
-  /* The 4px creates a thick, solid border. The scale(1.02) gives it a slight pop! */
-  20% { box-shadow: 0 0 0 4px var(--primary); transform: scale(1.02); filter: brightness(1.1); }
-  100% { box-shadow: 0 0 0 0px rgba(79, 70, 229, 0); transform: scale(1); filter: brightness(1); }
+/* 2. SENT MESSAGES (Purple Background -> Bright White Pulse) */
+.msg-bubble.flash-active-sent {
+  animation: pulseSent 1.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards !important;
+}
+@keyframes pulseSent {
+  0% { box-shadow: 0 0 0 0px rgba(255, 255, 255, 0); transform: scale(1); filter: brightness(1); }
+  20% { box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.9); transform: scale(1.02); filter: brightness(1.2); }
+  100% { box-shadow: 0 0 0 0px rgba(255, 255, 255, 0); transform: scale(1); filter: brightness(1); }
 }
