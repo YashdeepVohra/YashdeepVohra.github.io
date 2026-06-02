@@ -88,11 +88,24 @@ function toggleTime(element) {
 let lastTapTime = 0;
 
 function handleMessageTap(event, element, sender, encodedText, time) {
+    // 1. THE FIX: Check if their finger specifically landed on the grey context box
+    const replyBox = event.target.closest('.msg-replied-to');
+    
+    if (replyBox) {
+        // They tapped the grey box! 
+        const targetTime = replyBox.getAttribute('data-target-time');
+        
+        // If the message has a GPS coordinate, scroll to it!
+        if (targetTime) scrollToMessage(targetTime);
+        
+        // 🛑 EXIT IMMEDIATELY! Do not open the timestamp. Do not double-tap.
+        return; 
+    }
+
+    // 2. If they touched the normal blue/grey bubble, run the standard rules
     const currentTime = new Date().getTime();
     const tapLength = currentTime - lastTapTime;
-    
-    // 1. Check if their finger specifically landed on the quoted context box
-    const replyBox = event.target.closest('.msg-replied-to');
+    lastTapTime = currentTime;
     
     if (tapLength < 300 && tapLength > 0) {
         // 🔥 DOUBLE TAP: Trigger Reply
@@ -100,16 +113,9 @@ function handleMessageTap(event, element, sender, encodedText, time) {
         initiateReply(sender, decodeURIComponent(encodedText), time);
         if (navigator.vibrate) navigator.vibrate(50); 
     } else {
-        // 👆 SINGLE TAP: Decide what to do
-        if (replyBox && replyBox.getAttribute('data-target-time')) {
-            // They tapped the quoted message! Scroll to it.
-            scrollToMessage(replyBox.getAttribute('data-target-time'));
-        } else {
-            // They tapped the normal text bubble! Reveal the timestamp.
-            toggleTime(element);
-        }
+        // 👆 SINGLE TAP: Reveal Timestamp
+        toggleTime(element);
     }
-    lastTapTime = currentTime;
 }
 
 // ==========================================
