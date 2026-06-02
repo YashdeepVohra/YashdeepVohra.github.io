@@ -85,6 +85,24 @@ function toggleTime(element) {
   element.classList.toggle('show-time');
 }
 
+let lastTapTime = 0;
+
+function handleMessageTap(event, element, sender, encodedText, time) {
+    const currentTime = new Date().getTime();
+    const tapLength = currentTime - lastTapTime;
+    
+    if (tapLength < 300 && tapLength > 0) {
+        // 🔥 DOUBLE TAP DETECTED!
+        event.preventDefault(); // Stops the screen from zooming
+        initiateReply(sender, decodeURIComponent(encodedText), time);
+        if (navigator.vibrate) navigator.vibrate(50); // Premium haptic feedback
+    } else {
+        // 👆 SINGLE TAP DETECTED!
+        toggleTime(element);
+    }
+    lastTapTime = currentTime;
+}
+
 // ==========================================
 // 🔐 ENTERPRISE FIRST-PARTY AUTHENTICATION
 // ==========================================
@@ -516,19 +534,12 @@ function loadMessages() {
         const isSamePrev = prev && prev.sender === m.sender; const isSameNext = next && next.sender === m.sender;
         let shape = "single"; if (isSamePrev && isSameNext) shape = "middle"; else if (!isSamePrev && isSameNext) shape = "first"; else if (isSamePrev && !isSameNext) shape = "last";
 
-        let replyBlock = "";
-        if (m.replyTo) {
-            const replyName = m.replyTo.sender === user ? "You" : m.replyTo.sender;
-            replyBlock = `<div class="msg-replied-to"><b>${replyName}:</b> ${m.replyTo.text}</div>`;
-        }
-
         const safeText = m.text.replace(/[`$'\\]/g, ""); 
         const encodedText = encodeURIComponent(m.text); 
         
         let replyBlock = "";
         if (m.replyTo) {
             const replyName = m.replyTo.sender === user ? "You" : m.replyTo.sender;
-            // 🔥 UPGRADE: Added the click listener to scroll! (Only works for new messages that have 'time' saved)
             const clickAction = m.replyTo.time ? `onclick="event.stopPropagation(); scrollToMessage(${m.replyTo.time})"` : "";
             replyBlock = `<div class="msg-replied-to" ${clickAction}><b>${replyName}:</b> ${m.replyTo.text}</div>`;
         }
@@ -537,8 +548,8 @@ function loadMessages() {
             ? `<div class="swipe-reply-icon right"><i class='bx bx-reply' style="transform: scaleX(-1);"></i></div>` 
             : `<div class="swipe-reply-icon left"><i class='bx bx-reply'></i></div>`;
             
-        // 🔥 UPGRADE: Added id="msg-${m.time}" and data-time="${m.time}"
-        newHTML += `<div id="msg-${m.time}" class="msg-wrapper" data-sender="${m.sender}" data-time="${m.time}" data-text="${encodedText}" style="align-items: ${isMe ? 'flex-end' : 'flex-start'};" onclick="toggleTime(this)">
+        // 🔥 THE UPGRADE: Added handleMessageTap, removed the button!
+        newHTML += `<div id="msg-${m.time}" class="msg-wrapper" data-sender="${m.sender}" data-time="${m.time}" data-text="${encodedText}" style="align-items: ${isMe ? 'flex-end' : 'flex-start'};" onclick="handleMessageTap(event, this, '${m.sender}', '${encodedText}', ${m.time})">
                       ${swipeIconHTML}
                       <div class="msg-bubble ${isMe ? 'msg-sent' : 'msg-received'} ${shape}">
                          ${replyBlock}
@@ -546,7 +557,6 @@ function loadMessages() {
                       </div>
                       <div class="msg-time" style="text-align: ${isMe ? 'right' : 'left'}">
                          ${formatTime(m.time)}
-                         <button class="reply-action-btn" onclick="event.stopPropagation(); initiateReply('${m.sender}', decodeURIComponent('${encodedText}'), ${m.time})"><i class='bx bx-reply'></i> Reply</button>
                       </div>
                     </div>`;
         
@@ -786,11 +796,13 @@ function handleDragMove(e) {
 function handleDragEnd(e) {
     if (!currentSwipeItem) return;
     
-    // 🔥 THE FIX: Now decodes the safe text and triggers the reply instantly!
     if (currentSwipeItem.classList.contains("ready-to-reply")) {
         const sender = currentSwipeItem.getAttribute("data-sender");
         const text = decodeURIComponent(currentSwipeItem.getAttribute("data-text"));
-        initiateReply(sender, text);
+        // 🔥 THE FIX: Safely grabs the timestamp so the swipe doesn't glitch!
+        const time = parseInt(currentSwipeItem.getAttribute("data-time"));
+        
+        initiateReply(sender, text, time);
         if (navigator.vibrate) navigator.vibrate(50); 
     }
     
