@@ -451,19 +451,15 @@ function cancelReply() {
 
 function scrollToMessage(time) {
     const targetMsg = document.getElementById(`msg-${time}`);
-    if (!targetMsg) return;
+    const chatBox = document.getElementById("messages");
+    if (!targetMsg || !chatBox) return;
 
     const bubble = targetMsg.querySelector(".msg-bubble");
     if (!bubble) return;
 
-    // 🔥 YOUR LOGIC: Force the message to the bottom of the visible chat area!
-    // This forces the browser to shift the layout and wakes up the graphics card.
-    targetMsg.scrollIntoView({ behavior: "smooth", block: "end" });
-
-    // Native scroll physics max out around 400ms. 
-    // We wait exactly 500ms for it to finish arriving, then strike.
-    setTimeout(() => {
-        // Clear any stuck glitches just in case you double-tap
+    // 1. The Graphics Engine
+    const playGlow = () => {
+        // Cancels any stuck animations if you double-tap fast
         if (typeof bubble.getAnimations === 'function') {
             bubble.getAnimations().forEach(anim => anim.cancel());
         }
@@ -471,17 +467,43 @@ function scrollToMessage(time) {
         const isSent = bubble.classList.contains("msg-sent");
         const glowColor = isSent ? "rgba(255, 255, 255, 0.9)" : "var(--primary)";
 
-        // Native GPU Command (Ignores all CSS rules)
         bubble.animate([
             { transform: "scale(1)", filter: "brightness(1)", boxShadow: "0 0 0 0px transparent" },
-            { transform: "scale(1.05)", filter: "brightness(1.2)", boxShadow: `0 0 0 4px ${glowColor}`, offset: 0.15 },
+            { transform: "scale(1.03)", filter: "brightness(1.15)", boxShadow: `0 0 0 4px ${glowColor}`, offset: 0.15 },
             { transform: "scale(1)", filter: "brightness(1)", boxShadow: "0 0 0 0px transparent" }
-        ], {
-            duration: 1500, // Long, satisfying pulse
-            easing: "cubic-bezier(0.175, 0.885, 0.32, 1.275)"
-        });
+        ], { duration: 1300, easing: "cubic-bezier(0.175, 0.885, 0.32, 1.275)" });
+    };
+
+    // 2. Trigger the smooth scroll normally (back to center)
+    targetMsg.scrollIntoView({ behavior: "smooth", block: "center" });
+
+    // 3. The Smart Scroll Tracker
+    let isScrolling = false;
+    let scrollTimeout;
+
+    const scrollHandler = () => {
+        isScrolling = true; // We detect movement!
+        clearTimeout(scrollTimeout);
         
-    }, 500); 
+        // Every time the screen moves a pixel, this 60ms timer resets.
+        // When the screen finally stops moving for 60ms, the scroll is officially done.
+        scrollTimeout = setTimeout(() => {
+            chatBox.removeEventListener('scroll', scrollHandler);
+            playGlow();
+        }, 60);
+    };
+
+    chatBox.addEventListener('scroll', scrollHandler);
+
+    // 4. The Failsafe (Fixes the "On Screen / Didn't Move" Bug)
+    // If we tell it to scroll, but 100ms pass and the screen NEVER moved,
+    // it means the message was already right in front of us. Just play the glow!
+    setTimeout(() => {
+        if (!isScrolling) {
+            chatBox.removeEventListener('scroll', scrollHandler);
+            playGlow();
+        }
+    }, 100);
 }
 
 function updateReadReceipts() {
