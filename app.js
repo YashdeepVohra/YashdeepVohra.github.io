@@ -451,60 +451,72 @@ function cancelReply() {
 
 function scrollToMessage(time) {
     const targetMsg = document.getElementById(`msg-${time}`);
-    if (!targetMsg) return;
+    const chatBox = document.getElementById("messages");
+    if (!targetMsg || !chatBox) return;
 
     const bubble = targetMsg.querySelector(".msg-bubble");
-    const chatBox = document.getElementById("messages");
-    if (!bubble || !chatBox) return;
+    if (!bubble) return;
 
-    // 1. Trigger the native smooth scroll immediately
-    targetMsg.scrollIntoView({ behavior: "smooth", block: "center" });
-
-    // 2. The Native GPU Animation Engine (Bypasses all CSS bugs)
+    // 1. The Graphics Engine
     const playGlow = () => {
+        // Anti-spam: Prevents the animation from glitching if you double-tap
+        if (bubble.dataset.isGlowing === "true") return;
+        bubble.dataset.isGlowing = "true";
+
         const isSent = bubble.classList.contains("msg-sent");
-        
-        // Colors: Sent gets a bright white flash. Received gets a primary color flash.
         const glowColor = isSent ? "rgba(255, 255, 255, 0.9)" : "var(--primary)";
-        
-        // This natively commands the browser to animate, ignoring CSS state
-        bubble.animate([
+
+        // Native GPU Command
+        const animation = bubble.animate([
             { transform: "scale(1)", filter: "brightness(1)", boxShadow: "0 0 0 0px transparent" },
-            { transform: "scale(1.02)", filter: "brightness(1.15)", boxShadow: `0 0 0 4px ${glowColor}`, offset: 0.15 },
+            { transform: "scale(1.03)", filter: "brightness(1.15)", boxShadow: `0 0 0 4px ${glowColor}`, offset: 0.15 },
             { transform: "scale(1)", filter: "brightness(1)", boxShadow: "0 0 0 0px transparent" }
         ], {
             duration: 1300,
             easing: "cubic-bezier(0.175, 0.885, 0.32, 1.275)"
         });
+
+        // Reset the anti-spam lock when the animation finishes
+        animation.onfinish = () => { bubble.dataset.isGlowing = "false"; };
     };
 
-    // 3. The Math: Check if it's ALREADY visible inside the chat box
+    // 2. The Math: Center-Point Detection
+    // This perfectly calculates if you are already looking at the message.
     const boxRect = chatBox.getBoundingClientRect();
     const msgRect = targetMsg.getBoundingClientRect();
     
-    // Is the message physically inside the visible boundaries of the chat box?
-    const isVisible = (msgRect.top >= boxRect.top) && (msgRect.bottom <= boxRect.bottom);
+    // Find the exact dead-center of the text bubble
+    const msgCenterY = msgRect.top + (msgRect.height / 2);
+    
+    // Is the center of the bubble currently inside the chat window?
+    const isVisible = (msgCenterY >= boxRect.top) && (msgCenterY <= boxRect.bottom);
 
     if (isVisible) {
-        // Boom. It's on screen. Play it instantly.
+        // BOOM: It's already on screen. Play it instantly.
         playGlow();
     } else {
-        // 4. The Observer: Wait for the scroll to bring it into the chat box
-        const observer = new IntersectionObserver((entries) => {
-            if (entries[0].isIntersecting) {
-                // It arrived! Give it 50ms to settle, then flash.
-                setTimeout(playGlow, 50);
-                observer.disconnect(); // Turn the camera off
-            }
-        }, {
-            root: chatBox, // 🔥 CRITICAL FIX: The camera now ONLY looks inside the chat box
-            threshold: 0.5
-        });
-        
-        observer.observe(targetMsg);
-        
-        // Failsafe: Disconnect after 2.5 seconds so we don't leak memory
-        setTimeout(() => observer.disconnect(), 2500);
+        // NOT ON SCREEN: Trigger the scroll engine
+        targetMsg.scrollIntoView({ behavior: "smooth", block: "center" });
+
+        // 3. The Radar: Wait for the exact millisecond the scroll stops
+        let scrollTimeout;
+        const scrollHandler = () => {
+            clearTimeout(scrollTimeout);
+            // If 100ms pass without the screen moving, the scroll has officially finished!
+            scrollTimeout = setTimeout(() => {
+                chatBox.removeEventListener('scroll', scrollHandler);
+                playGlow(); // Now we play the animation safely
+            }, 100); 
+        };
+
+        // Attach the radar to the chat box
+        chatBox.addEventListener('scroll', scrollHandler);
+
+        // Failsafe: If the browser glitches and swallows the scroll event, force the animation after 1 second
+        setTimeout(() => {
+            chatBox.removeEventListener('scroll', scrollHandler);
+            playGlow();
+        }, 1000);
     }
 }
 
