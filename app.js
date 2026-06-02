@@ -449,14 +449,22 @@ function scrollToMessage(time) {
         // Smoothly scroll the message right into the middle of the screen
         targetMsg.scrollIntoView({ behavior: "smooth", block: "center" });
         
-        // 🔥 THE FIX: Apply the glow to the whole wrapper so the browser doesn't block it!
-        targetMsg.classList.remove("highlight-pulse"); 
-        void targetMsg.offsetWidth; // Restart animation trick
-        targetMsg.classList.add("highlight-pulse");
-        
-        setTimeout(() => {
-            targetMsg.classList.remove("highlight-pulse");
-        }, 1500); 
+        // 🔥 THE FIX: We target the BUBBLE directly so the size is perfectly tight
+        const bubble = targetMsg.querySelector(".msg-bubble");
+        if (bubble) {
+            bubble.classList.remove("highlight-pulse"); 
+            
+            // 🔥 THE FIX: Forces the browser to play the animation even if it didn't scroll
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    bubble.classList.add("highlight-pulse");
+                });
+            });
+            
+            setTimeout(() => {
+                bubble.classList.remove("highlight-pulse");
+            }, 1500); 
+        }
     }
 }
 
