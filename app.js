@@ -600,31 +600,29 @@ function updateChatFooterUI() {
   const footer = document.querySelector(".chat-footer");
   if (!footer) return;
 
-  // 1. Icebreaker check
   if (currentChatStatus === "icebreaker" && currentChatInitiator === user && myMessageCount >= 1) {
       footer.innerHTML = `<div style="width: 100%; text-align: center; color: var(--text-muted); font-size: 13px; font-weight: bold; padding: 10px;">Icebreaker sent! Waiting...</div>`;
       return;
   }
 
-  // 2. Locate the input (if it exists)
   const input = document.getElementById("msgInput");
   const currentVal = input ? input.value : "";
 
-  // 3. Rebuild the whole footer structure
-  // By injecting the currentVal, we ensure your typing is never lost
+  // Set the layout to column so Reply Bar is on TOP, Input is on BOTTOM
+  footer.style.flexDirection = "column";
+
   footer.innerHTML = `
-    <div id="replyPreviewContainer" style="width: 100%;"></div>
-    <div style="display: flex; gap: 10px; width: 100%; z-index: 1;">
+    <div id="replyPreviewContainer"></div>
+    <div class="input-wrapper">
         <input id="msgInput" value="${currentVal}" placeholder="Message..." autocomplete="off" oninput="handleTyping()" onkeydown="if(event.key === 'Enter') sendMessage()" style="margin-bottom:0;" />
-        <button onclick="sendMessage()"><i class='bx bxs-send'></i></button>
+        <button onclick="sendMessage()" style="height: 50px; width: 50px; flex-shrink: 0;"><i class='bx bxs-send'></i></button>
     </div>`;
 
-  // 4. Update the Reply Bar (only if there is a message to reply to)
   const previewContainer = document.getElementById("replyPreviewContainer");
   if (replyingToMessage && previewContainer) {
       const name = replyingToMessage.sender === user ? "Yourself" : replyingToMessage.sender;
       previewContainer.innerHTML = `
-        <div style="background: rgba(79, 70, 229, 0.1); padding: 8px 12px; border-radius: 12px; border-left: 4px solid var(--primary); margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+        <div class="reply-preview-bar">
              <div style="color: var(--primary); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                 <b>Replying to ${name}:</b><br>${replyingToMessage.text}
              </div>
