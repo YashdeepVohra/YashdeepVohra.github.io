@@ -445,25 +445,33 @@ function cancelReply() {
 
 function scrollToMessage(time) {
     const targetMsg = document.getElementById(`msg-${time}`);
-    if (targetMsg) {
-        // Smoothly scroll the message right into the middle of the screen
-        targetMsg.scrollIntoView({ behavior: "smooth", block: "center" });
-        
-        // Remove the glow just in case it's already there
-        targetMsg.classList.remove("highlight-pulse"); 
-        
-        // Magic trick to force the browser to recalculate the HTML
-        void targetMsg.offsetWidth; 
-        
-        // 🔥 THE FIX: A tiny 50ms delay forces mobile browsers to redraw the glow!
-        setTimeout(() => {
-            targetMsg.classList.add("highlight-pulse");
-        }, 50);
-        
-        // Clean up the class after 1.5 seconds
-        setTimeout(() => {
-            targetMsg.classList.remove("highlight-pulse");
-        }, 1550); 
+    if (!targetMsg) return;
+
+    // 1. Safely scroll (even if it's already on screen, this won't break)
+    targetMsg.scrollIntoView({ behavior: "smooth", block: "center" });
+
+    // 2. Grab ONLY the exact physical text bubble so the size is perfect
+    const bubble = targetMsg.querySelector(".msg-bubble");
+    if (bubble) {
+        // 3. Clear old timers so if a user spams the button, it doesn't glitch
+        if (bubble.dataset.flashTimer) {
+            clearTimeout(parseInt(bubble.dataset.flashTimer));
+        }
+
+        // 4. Wipe the slate clean and force the browser to register it
+        bubble.classList.remove("flash-active");
+        void bubble.offsetWidth; 
+
+        // 5. Slam the class on. The CSS transition takes over immediately.
+        bubble.classList.add("flash-active");
+
+        // 6. Smoothly remove it after 1.2 seconds so it fades back to normal
+        const timer = setTimeout(() => {
+            bubble.classList.remove("flash-active");
+        }, 1200);
+
+        // Store the timer so we can cancel it if they click again
+        bubble.dataset.flashTimer = timer;
     }
 }
 
