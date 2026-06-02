@@ -335,3 +335,29 @@ input[type="datetime-local"] { width: 100%; max-width: 100%; padding: 14px 16px;
   50% { box-shadow: 0 0 0 6px rgba(255, 255, 255, 0.5); }
   100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
 }
+
+/* Ensure the container is a stack */
+#replyPreviewContainer {
+    width: 100%;
+    margin-bottom: 8px; /* Spacing between reply bar and input */
+    flex-shrink: 0;
+}
+
+/* The input wrapper */
+.input-wrapper {
+    display: flex;
+    gap: 10px;
+    width: 100%;
+    align-items: center;
+}
+
+.reply-preview-bar {
+    background: rgba(79, 70, 229, 0.1); 
+    padding: 8px 12px; 
+    border-radius: 12px; 
+    border-left: 4px solid var(--primary); 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center;
+    width: 100%;
+}
