@@ -451,28 +451,37 @@ function cancelReply() {
 
 function scrollToMessage(time) {
     const targetMsg = document.getElementById(`msg-${time}`);
-    if (!targetMsg) return;
+    const overlay = document.getElementById("highlight-overlay");
+    if (!targetMsg || !overlay) return;
 
-    const bubble = targetMsg.querySelector(".msg-bubble");
-    if (!bubble) return;
-
-    // 1. Tell the screen to scroll to the message
+    // 1. Scroll to the message
     targetMsg.scrollIntoView({ behavior: "smooth", block: "center" });
 
-    // 2. Wipe it clean just in case they are tapping it repeatedly
-    bubble.classList.remove("simple-highlight");
-    
-    // Magic trick to force the browser to register the reset
-    void bubble.offsetWidth; 
-
-    // 3. INSTANTLY turn on the bright color (Your idea!)
-    bubble.classList.add("simple-highlight");
-
-    // 4. Wait 2 seconds. (This is long enough to survive any scrolling).
-    // Then remove the class, which triggers the slow CSS fade-out!
+    // 2. Wait for the scroll to finish
     setTimeout(() => {
-        bubble.classList.remove("simple-highlight");
-    }, 2000); 
+        const rect = targetMsg.getBoundingClientRect();
+        
+        // 3. Create the Ghost
+        const ghost = document.createElement("div");
+        ghost.className = "ghost-highlight";
+        
+        // Match the message dimensions exactly
+        ghost.style.top = rect.top + "px";
+        ghost.style.left = rect.left + "px";
+        ghost.style.width = rect.width + "px";
+        ghost.style.height = rect.height + "px";
+        
+        overlay.appendChild(ghost);
+        
+        // 4. Trigger the "Ghost" Effect
+        requestAnimationFrame(() => {
+            ghost.style.opacity = "1";
+            setTimeout(() => {
+                ghost.style.opacity = "0";
+                setTimeout(() => ghost.remove(), 500);
+            }, 1000);
+        });
+    }, 400); // Wait for smooth scroll
 }
 
 function updateReadReceipts() {
