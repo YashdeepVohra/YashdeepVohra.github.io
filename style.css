@@ -308,14 +308,3 @@ input[type="datetime-local"] { width: 100%; max-width: 100%; padding: 14px 16px;
 .msg-wrapper.ready-to-reply .swipe-reply-icon {
   opacity: 1; transform: translateY(-50%) scale(1);
 }
-
-/*Logic of highlight*/
-.msg-bubble.highlight-pulse {
-    animation: pulse-animation 1.5s ease-out forwards !important;
-}
-
-@keyframes pulse-animation {
-    0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(79, 70, 229, 0.4); }
-    20% { transform: scale(1.03); box-shadow: 0 0 0 8px rgba(79, 70, 229, 0.4); }
-    100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(79, 70, 229, 0); }
-}
