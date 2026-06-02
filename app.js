@@ -457,17 +457,18 @@ function scrollToMessage(time) {
     const bubble = targetMsg.querySelector(".msg-bubble");
     if (!bubble) return;
 
-    // 1. The Graphics Engine
+    // 1. Tell the browser to scroll to the message
+    targetMsg.scrollIntoView({ behavior: "smooth", block: "center" });
+
+    // 2. The Native GPU Graphics Engine
     const playGlow = () => {
-        // Anti-spam: Prevents the animation from glitching if you double-tap
-        if (bubble.dataset.isGlowing === "true") return;
-        bubble.dataset.isGlowing = "true";
+        // Anti-spam: Stops the old animation instantly if you double-tap it
+        bubble.getAnimations().forEach(anim => anim.cancel());
 
         const isSent = bubble.classList.contains("msg-sent");
         const glowColor = isSent ? "rgba(255, 255, 255, 0.9)" : "var(--primary)";
 
-        // Native GPU Command
-        const animation = bubble.animate([
+        bubble.animate([
             { transform: "scale(1)", filter: "brightness(1)", boxShadow: "0 0 0 0px transparent" },
             { transform: "scale(1.03)", filter: "brightness(1.15)", boxShadow: `0 0 0 4px ${glowColor}`, offset: 0.15 },
             { transform: "scale(1)", filter: "brightness(1)", boxShadow: "0 0 0 0px transparent" }
@@ -475,49 +476,34 @@ function scrollToMessage(time) {
             duration: 1300,
             easing: "cubic-bezier(0.175, 0.885, 0.32, 1.275)"
         });
-
-        // Reset the anti-spam lock when the animation finishes
-        animation.onfinish = () => { bubble.dataset.isGlowing = "false"; };
     };
 
-    // 2. The Math: Center-Point Detection
-    // This perfectly calculates if you are already looking at the message.
-    const boxRect = chatBox.getBoundingClientRect();
-    const msgRect = targetMsg.getBoundingClientRect();
-    
-    // Find the exact dead-center of the text bubble
-    const msgCenterY = msgRect.top + (msgRect.height / 2);
-    
-    // Is the center of the bubble currently inside the chat window?
-    const isVisible = (msgCenterY >= boxRect.top) && (msgCenterY <= boxRect.bottom);
+    // 3. THE RADAR: Tracks if the screen is actually moving
+    let lastScrollTop = chatBox.scrollTop;
+    let stationaryFrames = 0;
 
-    if (isVisible) {
-        // BOOM: It's already on screen. Play it instantly.
+    const checkScroll = setInterval(() => {
+        if (chatBox.scrollTop === lastScrollTop) {
+            // The screen didn't move! Add to the counter.
+            stationaryFrames++;
+            
+            // If it sits completely still for ~100ms, we have arrived (or we were already there!)
+            if (stationaryFrames >= 2) {
+                clearInterval(checkScroll);
+                playGlow();
+            }
+        } else {
+            // The screen is moving! Reset the counter and track the new position.
+            stationaryFrames = 0;
+            lastScrollTop = chatBox.scrollTop;
+        }
+    }, 50);
+
+    // 4. FAILSAFE: If anything ever glitches, force the flash after 1.5 seconds anyway
+    setTimeout(() => {
+        clearInterval(checkScroll);
         playGlow();
-    } else {
-        // NOT ON SCREEN: Trigger the scroll engine
-        targetMsg.scrollIntoView({ behavior: "smooth", block: "center" });
-
-        // 3. The Radar: Wait for the exact millisecond the scroll stops
-        let scrollTimeout;
-        const scrollHandler = () => {
-            clearTimeout(scrollTimeout);
-            // If 100ms pass without the screen moving, the scroll has officially finished!
-            scrollTimeout = setTimeout(() => {
-                chatBox.removeEventListener('scroll', scrollHandler);
-                playGlow(); // Now we play the animation safely
-            }, 100); 
-        };
-
-        // Attach the radar to the chat box
-        chatBox.addEventListener('scroll', scrollHandler);
-
-        // Failsafe: If the browser glitches and swallows the scroll event, force the animation after 1 second
-        setTimeout(() => {
-            chatBox.removeEventListener('scroll', scrollHandler);
-            playGlow();
-        }, 1000);
-    }
+    }, 1500);
 }
 
 function updateReadReceipts() {
