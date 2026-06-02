@@ -447,32 +447,51 @@ function scrollToMessage(time) {
     const targetMsg = document.getElementById(`msg-${time}`);
     if (!targetMsg) return;
 
-    // 1. Trigger the smooth scroll to the message
-    targetMsg.scrollIntoView({ behavior: "smooth", block: "center" });
+    const bubble = targetMsg.querySelector(".msg-bubble");
+    if (!bubble) return;
 
-    // 2. WAIT 500ms for the scrolling to actually finish!
-    setTimeout(() => {
-        const bubble = targetMsg.querySelector(".msg-bubble");
-        const chatBox = document.getElementById("messages");
-        
-        if (bubble && chatBox) {
-            // 🔥 THE HACK: The 1-Pixel Jiggle to wake up mobile browsers
-            chatBox.scrollBy(0, 1);
-            chatBox.scrollBy(0, -1);
+    // The Engine that handles the flash
+    function triggerFlash() {
+        // Strip old classes and force the browser to register the clean slate
+        bubble.classList.remove("flash-active-sent", "flash-active-received");
+        void bubble.offsetWidth; 
 
-            // 3. Wipe the slate clean
-            bubble.classList.remove("flash-active");
-            void bubble.offsetWidth; // Force the browser to register the reset
+        // A tiny 10ms micro-delay forces iOS/Android to redraw the frame 100% of the time
+        setTimeout(() => {
+            const flashClass = bubble.classList.contains("msg-sent") ? "flash-active-sent" : "flash-active-received";
+            bubble.classList.add(flashClass);
             
-            // 4. Slam the animation on now that the screen has stopped moving
-            bubble.classList.add("flash-active");
-
-            // 5. Clean up after the animation finishes
             setTimeout(() => {
-                bubble.classList.remove("flash-active");
+                bubble.classList.remove(flashClass);
             }, 1300);
-        }
-    }, 500); // Half-second delay perfectly matches native scroll speed
+        }, 10);
+    }
+
+    // Check exactly where the message is right now
+    const rect = targetMsg.getBoundingClientRect();
+    const isInView = (rect.top >= 0 && rect.bottom <= window.innerHeight);
+
+    if (isInView) {
+        // 1. If it's already sitting right in front of us, flash it instantly!
+        triggerFlash();
+    } else {
+        // 2. If it's far away, start scrolling...
+        targetMsg.scrollIntoView({ behavior: "smooth", block: "center" });
+        
+        // 3. Turn on the Camera (Observer) to watch for it to arrive
+        const observer = new IntersectionObserver((entries) => {
+            if (entries[0].isIntersecting) {
+                // It just entered the screen! Let it settle for 100ms, then flash!
+                setTimeout(triggerFlash, 100);
+                observer.disconnect(); // Turn off the camera
+            }
+        }, { threshold: 0.5 }); // Triggers when 50% of the message is visible
+        
+        observer.observe(targetMsg);
+        
+        // Failsafe: Turn off the camera after 3 seconds just in case
+        setTimeout(() => observer.disconnect(), 3000);
+    }
 }
 
 function updateReadReceipts() {
