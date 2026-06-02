@@ -447,31 +447,27 @@ function scrollToMessage(time) {
     const targetMsg = document.getElementById(`msg-${time}`);
     if (!targetMsg) return;
 
-    // 1. Safely scroll (even if it's already on screen, this won't break)
+    // 1. Smoothly scroll (the browser ignores this if already on screen, which is fine)
     targetMsg.scrollIntoView({ behavior: "smooth", block: "center" });
 
-    // 2. Grab ONLY the exact physical text bubble so the size is perfect
+    // 2. Target the specific bubble for the thick border pulse
     const bubble = targetMsg.querySelector(".msg-bubble");
     if (bubble) {
-        // 3. Clear old timers so if a user spams the button, it doesn't glitch
-        if (bubble.dataset.flashTimer) {
-            clearTimeout(parseInt(bubble.dataset.flashTimer));
-        }
-
-        // 4. Wipe the slate clean and force the browser to register it
+        // 3. Immediately strip the class to wipe the slate clean
         bubble.classList.remove("flash-active");
-        void bubble.offsetWidth; 
+        
+        // 🔥 THE FIX: The Double requestAnimationFrame Sledgehammer!
+        // This forces the browser to stop being lazy and physically redraw the screen NOW.
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                bubble.classList.add("flash-active");
+            });
+        });
 
-        // 5. Slam the class on. The CSS transition takes over immediately.
-        bubble.classList.add("flash-active");
-
-        // 6. Smoothly remove it after 1.2 seconds so it fades back to normal
-        const timer = setTimeout(() => {
+        // 4. Clean up the class after 1.3 seconds so it can be triggered again later
+        setTimeout(() => {
             bubble.classList.remove("flash-active");
-        }, 1200);
-
-        // Store the timer so we can cancel it if they click again
-        bubble.dataset.flashTimer = timer;
+        }, 1300);
     }
 }
 
