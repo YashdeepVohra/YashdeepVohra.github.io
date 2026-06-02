@@ -89,8 +89,30 @@ button:active { transform: translateY(1px); }
 .tag.active { background: #e0e7ff; color: var(--primary); border-color: #c7d2fe; }
 
 .event-tag-badge { display: inline-block; background: #f1f5f9; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 700; margin-bottom: 8px; color: var(--text); }
-.event-desc-box { max-height: 0; overflow: hidden; opacity: 0; transition: all 0.3s ease; background: #f8fafc; border-radius: 12px; padding: 0 12px; margin-top: 0; font-size: 14px; color: #475569; border-left: 3px solid var(--primary); }
-.event.expanded .event-desc-box { max-height: 200px; opacity: 1; padding: 12px; margin-top: 12px; }
+/* Event Description Fixes */
+.event-desc-box { 
+  max-height: 0; 
+  overflow: hidden; 
+  opacity: 0; 
+  transition: all 0.3s ease; 
+  background: #f8fafc; 
+  border-radius: 12px; 
+  padding: 0 12px; 
+  margin-top: 0; 
+  font-size: 14px; 
+  color: #475569; 
+  border-left: 3px solid var(--primary); 
+}
+
+.event.expanded .event-desc-box { 
+  max-height: 250px; 
+  opacity: 1; 
+  padding: 12px; 
+  margin-top: 12px; 
+  overflow-y: auto; /* Adds a scrollbar if the text is huge */
+  white-space: pre-wrap; /* Respects the enter key/paragraphs */
+  word-wrap: break-word; /* Stops long links from breaking the box */
+}
 .read-more-btn { background: none; border: none; color: var(--primary); font-size: 13px; font-weight: 600; padding: 0; margin-top: 8px; justify-content: flex-start; width: auto; }
 .read-more-btn:hover { background: none; text-decoration: underline; transform: none; }
 
