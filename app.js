@@ -451,37 +451,27 @@ function cancelReply() {
 
 function scrollToMessage(time) {
     const targetMsg = document.getElementById(`msg-${time}`);
-    const overlay = document.getElementById("highlight-overlay");
-    if (!targetMsg || !overlay) return;
+    if (!targetMsg) return;
 
-    // 1. Scroll to the message
+    const bubble = targetMsg.querySelector(".msg-bubble");
+    if (!bubble) return;
+
+    // 1. Scroll directly to the message
     targetMsg.scrollIntoView({ behavior: "smooth", block: "center" });
 
-    // 2. Wait for the scroll to finish
+    // 2. Clear previous classes
+    bubble.classList.remove("highlight-pulse");
+    
+    // 3. Force browser reflow (the "magic" fix for animations not playing)
+    void bubble.offsetWidth;
+
+    // 4. Apply animation class
+    bubble.classList.add("highlight-pulse");
+
+    // 5. Clean up
     setTimeout(() => {
-        const rect = targetMsg.getBoundingClientRect();
-        
-        // 3. Create the Ghost
-        const ghost = document.createElement("div");
-        ghost.className = "ghost-highlight";
-        
-        // Match the message dimensions exactly
-        ghost.style.top = rect.top + "px";
-        ghost.style.left = rect.left + "px";
-        ghost.style.width = rect.width + "px";
-        ghost.style.height = rect.height + "px";
-        
-        overlay.appendChild(ghost);
-        
-        // 4. Trigger the "Ghost" Effect
-        requestAnimationFrame(() => {
-            ghost.style.opacity = "1";
-            setTimeout(() => {
-                ghost.style.opacity = "0";
-                setTimeout(() => ghost.remove(), 500);
-            }, 1000);
-        });
-    }, 400); // Wait for smooth scroll
+        bubble.classList.remove("highlight-pulse");
+    }, 1600);
 }
 
 function updateReadReceipts() {
