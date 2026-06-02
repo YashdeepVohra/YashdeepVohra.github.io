@@ -22,7 +22,8 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-let currentChat = null, user = "", userEmail = "", userAvatar = "👤"; 
+let currentChat = null, user = "", userEmail = "", userAvatar = "👤";
+let currentChatType = "direct";
 let messagesUnsubscribe = null, eventIdToManage = null;
 let currentSelectedTag = '☕ Chill', googlePfp = "", realName = "";
 let currentLiveFilter = 'All', currentRecapFilter = 'All';
@@ -306,7 +307,35 @@ function loadEvents() {
       if (e.expiresAt > currentTime) {
         if (matchesLive) {
           activeCount++; const hasJoined = e.participants && e.participants.includes(user);
-          liveList.innerHTML += `<div class="event card" id="event-${id}"><div style="display: flex; justify-content: space-between; align-items: flex-start;">${displayTag} ${statusBadge}</div><div class="event-title">${e.title}</div><div class="event-meta" style="display:flex; align-items:center;">${avatarHTML} <span>${e.place} • hosted by @${e.user}</span></div>${displayDesc}<div class="attendees"><i class='bx bx-group'></i> Going (${attendeesCount}): ${attendeeNames}</div>${e.user === user ? `<button class="delete-btn" onclick="openDeleteModal('${id}')"><i class='bx bx-slider'></i> Manage Event</button>` : (hasJoined ? `<button class="leave-btn" onclick="leaveEvent('${id}')"><i class='bx bx-exit'></i> Leave Hangout</button>` : `<button class="join" onclick="joinEvent('${id}')">Join Hangout</button>`)}</div>`;
+          // Replaced the single long line with this formatted block!
+          liveList.innerHTML += `
+            <div class="event card" id="event-${id}">
+              <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                ${displayTag} ${statusBadge}
+              </div>
+              <div class="event-title">${e.title}</div>
+              <div class="event-meta" style="display:flex; align-items:center;">
+                ${avatarHTML} <span>${e.place} • hosted by @${e.user}</span>
+              </div>
+              ${displayDesc}
+              <div class="attendees">
+                <i class='bx bx-group'></i> Going (${attendeesCount}): ${attendeeNames}
+              </div>
+              
+              ${e.user === user 
+                ? `<div style="display:flex; gap:8px; margin-top:16px;">
+                     <button class="join" style="margin-top:0; flex:2;" onclick="openEventChat('${id}', '${e.title.replace(/'/g, "\\'")}')"><i class='bx bx-message-square-dots'></i> Open Chat</button>
+                     <button class="delete-btn" style="margin-top:0; flex:1;" onclick="openDeleteModal('${id}')"><i class='bx bx-slider'></i> Manage</button>
+                   </div>` 
+                : (hasJoined 
+                   ? `<div style="display:flex; gap:8px; margin-top:16px;">
+                        <button class="join" style="margin-top:0; flex:3;" onclick="openEventChat('${id}', '${e.title.replace(/'/g, "\\'")}')"><i class='bx bx-message-square-dots'></i> Open Chat</button>
+                        <button class="leave-btn" style="margin-top:0; flex:1;" onclick="leaveEvent('${id}')"><i class='bx bx-exit'></i></button>
+                      </div>` 
+                   : `<button class="join" onclick="joinEvent('${id}')">Join Hangout</button>`
+                  )
+              }
+            </div>`;
         }
       } else if (e.expiresAt > oneDayAgo) {
         if (matchesRecap) {
@@ -357,7 +386,8 @@ async function startChat(clickedUsername = null) {
 
 function openChat(chatId, otherUser) {
   currentChat = chatId; 
-  currentOtherUser = otherUser; 
+  currentOtherUser = otherUser;
+  currentChatType = "direct"; 
   
   const hAvatar = document.getElementById("chatHeaderAvatar"); 
   const hTitle = document.getElementById("chatWithTitle");
@@ -398,24 +428,30 @@ async function sendMessage() {
   const input = document.getElementById("msgInput"); if(!input) return; 
   const text = input.value.trim(); if (!text || !currentChat) return;
   
-  const otherUser = currentOtherUser; 
-  const chatRef = db.collection("chats").doc(currentChat); 
-  const chatDoc = await chatRef.get(); 
-  let newStatus = currentChatStatus;
-  
-  if (!chatDoc.exists || !chatDoc.data().status) {
-      const crossedPaths = await checkCrossedPaths(user, otherUser); 
-      newStatus = crossedPaths ? "unlocked" : "icebreaker";
-  } else {
-      if (currentChatStatus === "icebreaker" && currentChatInitiator === otherUser) newStatus = "unlocked"; 
-  }
-  
-  // 🔥 UPGRADE: We now save the 'time' into the Firebase database!
+  // Grab reply data if it exists
   const replyData = replyingToMessage ? { sender: replyingToMessage.sender, text: replyingToMessage.text, time: replyingToMessage.time } : null;
   replyingToMessage = null; 
-  
-  await chatRef.set({ users: [user, otherUser], unreadBy: otherUser, lastUpdated: Date.now(), status: newStatus, typing: "" }, { merge: true });
-  await db.collection("messages").add({ chatId: currentChat, sender: user, text: text, time: Date.now(), replyTo: replyData }); 
+
+  if (currentChatType === "event") {
+      // EVENT CHAT ROUTE: Just blast the message to the event room
+      await db.collection("messages").add({ chatId: currentChat, sender: user, text: text, time: Date.now(), replyTo: replyData });
+  } else {
+      // DIRECT CHAT ROUTE: Handle icebreakers and unread receipts
+      const otherUser = currentOtherUser; 
+      const chatRef = db.collection("chats").doc(currentChat); 
+      const chatDoc = await chatRef.get(); 
+      let newStatus = currentChatStatus;
+      
+      if (!chatDoc.exists || !chatDoc.data().status) {
+          const crossedPaths = await checkCrossedPaths(user, otherUser); 
+          newStatus = crossedPaths ? "unlocked" : "icebreaker";
+      } else {
+          if (currentChatStatus === "icebreaker" && currentChatInitiator === otherUser) newStatus = "unlocked"; 
+      }
+      
+      await chatRef.set({ users: [user, otherUser], unreadBy: otherUser, lastUpdated: Date.now(), status: newStatus, typing: "" }, { merge: true });
+      await db.collection("messages").add({ chatId: currentChat, sender: user, text: text, time: Date.now(), replyTo: replyData }); 
+  }
   
   input.value = "";
   updateChatFooterUI(); 
@@ -835,3 +871,23 @@ document.addEventListener("mouseup", handleDragEnd);
 document.addEventListener("touchstart", handleDragStart, { passive: false });
 document.addEventListener("touchmove", handleDragMove, { passive: false });
 document.addEventListener("touchend", handleDragEnd);
+
+// Event Chat System
+function openEventChat(eventId, eventTitle) {
+  currentChat = eventId; 
+  currentChatType = "event"; 
+  currentChatData = { status: "unlocked", typing: "" }; // Keeps footer happy
+  
+  const hAvatar = document.getElementById("chatHeaderAvatar"); 
+  const hTitle = document.getElementById("chatWithTitle");
+  if(hAvatar) hAvatar.innerText = "📅"; 
+  if(hTitle) hTitle.innerText = eventTitle;
+  
+  document.querySelector(".topbar")?.classList.add("hidden"); 
+  switchScreen("chatScreen");
+  
+  if(chatDocUnsubscribe) { chatDocUnsubscribe(); chatDocUnsubscribe = null; }
+  
+  updateChatFooterUI();
+  loadMessages();
+}
