@@ -447,28 +447,32 @@ function scrollToMessage(time) {
     const targetMsg = document.getElementById(`msg-${time}`);
     if (!targetMsg) return;
 
-    // 1. Smoothly scroll (the browser ignores this if already on screen, which is fine)
+    // 1. Trigger the smooth scroll to the message
     targetMsg.scrollIntoView({ behavior: "smooth", block: "center" });
 
-    // 2. Target the specific bubble for the thick border pulse
-    const bubble = targetMsg.querySelector(".msg-bubble");
-    if (bubble) {
-        // 3. Immediately strip the class to wipe the slate clean
-        bubble.classList.remove("flash-active");
+    // 2. WAIT 500ms for the scrolling to actually finish!
+    setTimeout(() => {
+        const bubble = targetMsg.querySelector(".msg-bubble");
+        const chatBox = document.getElementById("messages");
         
-        // 🔥 THE FIX: The Double requestAnimationFrame Sledgehammer!
-        // This forces the browser to stop being lazy and physically redraw the screen NOW.
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-                bubble.classList.add("flash-active");
-            });
-        });
+        if (bubble && chatBox) {
+            // 🔥 THE HACK: The 1-Pixel Jiggle to wake up mobile browsers
+            chatBox.scrollBy(0, 1);
+            chatBox.scrollBy(0, -1);
 
-        // 4. Clean up the class after 1.3 seconds so it can be triggered again later
-        setTimeout(() => {
+            // 3. Wipe the slate clean
             bubble.classList.remove("flash-active");
-        }, 1300);
-    }
+            void bubble.offsetWidth; // Force the browser to register the reset
+            
+            // 4. Slam the animation on now that the screen has stopped moving
+            bubble.classList.add("flash-active");
+
+            // 5. Clean up after the animation finishes
+            setTimeout(() => {
+                bubble.classList.remove("flash-active");
+            }, 1300);
+        }
+    }, 500); // Half-second delay perfectly matches native scroll speed
 }
 
 function updateReadReceipts() {
