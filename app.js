@@ -449,17 +449,14 @@ function scrollToMessage(time) {
         // Smoothly scroll the message right into the middle of the screen
         targetMsg.scrollIntoView({ behavior: "smooth", block: "center" });
         
-        // Grab the bubble and trigger the glow animation
-        const bubble = targetMsg.querySelector(".msg-bubble");
-        if (bubble) {
-            bubble.classList.remove("highlight-pulse"); // Reset if clicked twice
-            void bubble.offsetWidth; // Magic trick to restart CSS animations
-            bubble.classList.add("highlight-pulse");
-            
-            setTimeout(() => {
-                bubble.classList.remove("highlight-pulse");
-            }, 1500); // Removes the class after the animation finishes
-        }
+        // 🔥 THE FIX: Apply the glow to the whole wrapper so the browser doesn't block it!
+        targetMsg.classList.remove("highlight-pulse"); 
+        void targetMsg.offsetWidth; // Restart animation trick
+        targetMsg.classList.add("highlight-pulse");
+        
+        setTimeout(() => {
+            targetMsg.classList.remove("highlight-pulse");
+        }, 1500); 
     }
 }
 
