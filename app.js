@@ -600,41 +600,36 @@ function updateChatFooterUI() {
   const footer = document.querySelector(".chat-footer");
   if (!footer) return;
 
-  // 1. If it's an icebreaker, handle the lock
+  // 1. Icebreaker check
   if (currentChatStatus === "icebreaker" && currentChatInitiator === user && myMessageCount >= 1) {
-      footer.innerHTML = `<div style="width: 100%; text-align: center; color: var(--text-muted); font-size: 13px; font-weight: bold; padding: 10px;"><i class='bx bxs-lock-alt'></i> Icebreaker sent! Waiting for reply...</div>`;
+      footer.innerHTML = `<div style="width: 100%; text-align: center; color: var(--text-muted); font-size: 13px; font-weight: bold; padding: 10px;">Icebreaker sent! Waiting...</div>`;
       return;
   }
 
-  // 2. ONLY build the structure if it doesn't exist yet
-  if (!document.getElementById("msgInput")) {
-      footer.style.flexDirection = "column";
-      footer.style.alignItems = "stretch";
-      footer.innerHTML = `
-        <div id="replyPreviewContainer"></div>
-        <div style="display: flex; gap: 10px; width: 100%; margin-top: 12px; z-index: 1;">
-            <input id="msgInput" placeholder="Message..." autocomplete="off" oninput="handleTyping()" onkeydown="if(event.key === 'Enter') sendMessage()" style="margin-bottom:0;" />
-            <button onclick="sendMessage()"><i class='bx bxs-send'></i></button>
-        </div>`;
-  }
+  // 2. Locate the input (if it exists)
+  const input = document.getElementById("msgInput");
+  const currentVal = input ? input.value : "";
 
-  // 3. Update the Reply Bar (This doesn't touch the input, so text stays safe!)
+  // 3. Rebuild the whole footer structure
+  // By injecting the currentVal, we ensure your typing is never lost
+  footer.innerHTML = `
+    <div id="replyPreviewContainer" style="width: 100%;"></div>
+    <div style="display: flex; gap: 10px; width: 100%; z-index: 1;">
+        <input id="msgInput" value="${currentVal}" placeholder="Message..." autocomplete="off" oninput="handleTyping()" onkeydown="if(event.key === 'Enter') sendMessage()" style="margin-bottom:0;" />
+        <button onclick="sendMessage()"><i class='bx bxs-send'></i></button>
+    </div>`;
+
+  // 4. Update the Reply Bar (only if there is a message to reply to)
   const previewContainer = document.getElementById("replyPreviewContainer");
-  if (previewContainer) {
-      if (replyingToMessage) {
-          const name = replyingToMessage.sender === user ? "Yourself" : replyingToMessage.sender;
-          previewContainer.innerHTML = `
-            <div class="reply-preview-bar" style="background: rgba(79, 70, 229, 0.1); padding: 8px; border-radius: 12px; border-left: 4px solid var(--primary); margin-bottom: 8px;">
-               <div style="display: flex; justify-content: space-between; align-items: center;">
-                 <div style="color: var(--primary); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                    <b>Replying to ${name}:</b><br>${replyingToMessage.text}
-                 </div>
-                 <div onclick="cancelReply()" style="cursor: pointer; color: var(--danger);"><i class='bx bx-x' style="font-size: 18px;"></i></div>
-               </div>
-            </div>`;
-      } else {
-          previewContainer.innerHTML = "";
-      }
+  if (replyingToMessage && previewContainer) {
+      const name = replyingToMessage.sender === user ? "Yourself" : replyingToMessage.sender;
+      previewContainer.innerHTML = `
+        <div style="background: rgba(79, 70, 229, 0.1); padding: 8px 12px; border-radius: 12px; border-left: 4px solid var(--primary); margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+             <div style="color: var(--primary); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                <b>Replying to ${name}:</b><br>${replyingToMessage.text}
+             </div>
+             <div onclick="cancelReply()" style="cursor: pointer; color: var(--danger); margin-left: 10px;"><i class='bx bx-x' style="font-size: 20px;"></i></div>
+        </div>`;
   }
 }
 
