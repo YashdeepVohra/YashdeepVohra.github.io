@@ -451,59 +451,37 @@ function cancelReply() {
 
 function scrollToMessage(time) {
     const targetMsg = document.getElementById(`msg-${time}`);
-    const chatBox = document.getElementById("messages");
-    if (!targetMsg || !chatBox) return;
+    if (!targetMsg) return;
 
     const bubble = targetMsg.querySelector(".msg-bubble");
     if (!bubble) return;
 
-    // 1. Tell the browser to scroll to the message
-    targetMsg.scrollIntoView({ behavior: "smooth", block: "center" });
+    // 🔥 YOUR LOGIC: Force the message to the bottom of the visible chat area!
+    // This forces the browser to shift the layout and wakes up the graphics card.
+    targetMsg.scrollIntoView({ behavior: "smooth", block: "end" });
 
-    // 2. The Native GPU Graphics Engine
-    const playGlow = () => {
-        // Anti-spam: Stops the old animation instantly if you double-tap it
-        bubble.getAnimations().forEach(anim => anim.cancel());
+    // Native scroll physics max out around 400ms. 
+    // We wait exactly 500ms for it to finish arriving, then strike.
+    setTimeout(() => {
+        // Clear any stuck glitches just in case you double-tap
+        if (typeof bubble.getAnimations === 'function') {
+            bubble.getAnimations().forEach(anim => anim.cancel());
+        }
 
         const isSent = bubble.classList.contains("msg-sent");
         const glowColor = isSent ? "rgba(255, 255, 255, 0.9)" : "var(--primary)";
 
+        // Native GPU Command (Ignores all CSS rules)
         bubble.animate([
             { transform: "scale(1)", filter: "brightness(1)", boxShadow: "0 0 0 0px transparent" },
-            { transform: "scale(1.03)", filter: "brightness(1.15)", boxShadow: `0 0 0 4px ${glowColor}`, offset: 0.15 },
+            { transform: "scale(1.05)", filter: "brightness(1.2)", boxShadow: `0 0 0 4px ${glowColor}`, offset: 0.15 },
             { transform: "scale(1)", filter: "brightness(1)", boxShadow: "0 0 0 0px transparent" }
         ], {
-            duration: 1300,
+            duration: 1500, // Long, satisfying pulse
             easing: "cubic-bezier(0.175, 0.885, 0.32, 1.275)"
         });
-    };
-
-    // 3. THE RADAR: Tracks if the screen is actually moving
-    let lastScrollTop = chatBox.scrollTop;
-    let stationaryFrames = 0;
-
-    const checkScroll = setInterval(() => {
-        if (chatBox.scrollTop === lastScrollTop) {
-            // The screen didn't move! Add to the counter.
-            stationaryFrames++;
-            
-            // If it sits completely still for ~100ms, we have arrived (or we were already there!)
-            if (stationaryFrames >= 2) {
-                clearInterval(checkScroll);
-                playGlow();
-            }
-        } else {
-            // The screen is moving! Reset the counter and track the new position.
-            stationaryFrames = 0;
-            lastScrollTop = chatBox.scrollTop;
-        }
-    }, 50);
-
-    // 4. FAILSAFE: If anything ever glitches, force the flash after 1.5 seconds anyway
-    setTimeout(() => {
-        clearInterval(checkScroll);
-        playGlow();
-    }, 1500);
+        
+    }, 500); 
 }
 
 function updateReadReceipts() {
