@@ -454,49 +454,58 @@ function scrollToMessage(time) {
     if (!targetMsg) return;
 
     const bubble = targetMsg.querySelector(".msg-bubble");
-    if (!bubble) return;
+    const chatBox = document.getElementById("messages");
+    if (!bubble || !chatBox) return;
 
-    // The Engine that handles the flash
-    function triggerFlash() {
-        // Strip old classes and force the browser to register the clean slate
+    // 1. The Engine that triggers the beautiful flash
+    function playFlash() {
         bubble.classList.remove("flash-active-sent", "flash-active-received");
-        void bubble.offsetWidth; 
-
-        // A tiny 10ms micro-delay forces iOS/Android to redraw the frame 100% of the time
+        void bubble.offsetWidth; // Wipe the slate clean
+        
+        // A tiny 50ms delay forces iOS/Android graphics cards to paint the glow
         setTimeout(() => {
             const flashClass = bubble.classList.contains("msg-sent") ? "flash-active-sent" : "flash-active-received";
             bubble.classList.add(flashClass);
             
             setTimeout(() => {
                 bubble.classList.remove(flashClass);
-            }, 1300);
-        }, 10);
+            }, 1500); // Clean up after the animation finishes
+        }, 50); 
     }
 
-    // Check exactly where the message is right now
-    const rect = targetMsg.getBoundingClientRect();
-    const isInView = (rect.top >= 0 && rect.bottom <= window.innerHeight);
+    // 2. Check if it is ALREADY on screen (Math is now fixed to the chat box!)
+    const boxRect = chatBox.getBoundingClientRect();
+    const msgRect = targetMsg.getBoundingClientRect();
+    
+    // Is it fully visible between the top and bottom of the chat area?
+    const isFullyVisible = (msgRect.top >= boxRect.top) && (msgRect.bottom <= boxRect.bottom);
 
-    if (isInView) {
-        // 1. If it's already sitting right in front of us, flash it instantly!
-        triggerFlash();
+    if (isFullyVisible) {
+        // Already staring right at it? Boom. Instantly flash.
+        playFlash();
     } else {
-        // 2. If it's far away, start scrolling...
+        // 3. Not there? Start moving.
         targetMsg.scrollIntoView({ behavior: "smooth", block: "center" });
         
-        // 3. Turn on the Camera (Observer) to watch for it to arrive
-        const observer = new IntersectionObserver((entries) => {
-            if (entries[0].isIntersecting) {
-                // It just entered the screen! Let it settle for 100ms, then flash!
-                setTimeout(triggerFlash, 100);
-                observer.disconnect(); // Turn off the camera
-            }
-        }, { threshold: 0.5 }); // Triggers when 50% of the message is visible
+        // 4. The "Scroll Radar" - waits for the exact millisecond the screen stops moving
+        let scrollTimer;
+        const scrollWatcher = () => {
+            clearTimeout(scrollTimer);
+            
+            // If the scrolling stops for 150ms, it means we have arrived!
+            scrollTimer = setTimeout(() => {
+                chatBox.removeEventListener('scroll', scrollWatcher);
+                playFlash();
+            }, 150); 
+        };
         
-        observer.observe(targetMsg);
+        chatBox.addEventListener('scroll', scrollWatcher);
         
-        // Failsafe: Turn off the camera after 3 seconds just in case
-        setTimeout(() => observer.disconnect(), 3000);
+        // Failsafe: Just in case the scroll gets stuck, force the flash after 2 seconds
+        setTimeout(() => {
+            chatBox.removeEventListener('scroll', scrollWatcher);
+            playFlash(); 
+        }, 2000);
     }
 }
 
