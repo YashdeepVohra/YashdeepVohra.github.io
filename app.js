@@ -597,43 +597,40 @@ function loadMessages() {
 }
 
 function updateChatFooterUI() {
-  const footer = document.querySelector(".chat-footer"); if(!footer) return;
+  const footer = document.querySelector(".chat-footer");
+  if (!footer) return;
 
+  // 1. If it's an icebreaker, handle the lock
   if (currentChatStatus === "icebreaker" && currentChatInitiator === user && myMessageCount >= 1) {
       footer.innerHTML = `<div style="width: 100%; text-align: center; color: var(--text-muted); font-size: 13px; font-weight: bold; padding: 10px;"><i class='bx bxs-lock-alt'></i> Icebreaker sent! Waiting for reply...</div>`;
-      footer.style.flexDirection = "row";
       return;
   }
 
-  footer.style.flexDirection = "column"; 
-  footer.style.alignItems = "stretch";
-
-  // 🔥 THE FIX: We specifically look for the container, not the input
-  if (!document.getElementById("replyPreviewContainer")) {
-      const existingInput = document.getElementById("msgInput");
-      const currentVal = existingInput ? existingInput.value : "";
-      
-      // Builds the missing container AND keeps whatever you were typing
+  // 2. ONLY build the structure if it doesn't exist yet
+  if (!document.getElementById("msgInput")) {
+      footer.style.flexDirection = "column";
+      footer.style.alignItems = "stretch";
       footer.innerHTML = `
         <div id="replyPreviewContainer"></div>
         <div style="display: flex; gap: 10px; width: 100%; margin-top: 12px; z-index: 1;">
-            <input id="msgInput" value="${currentVal}" placeholder="Message..." autocomplete="off" oninput="handleTyping()" onkeydown="if(event.key === 'Enter') sendMessage()" style="margin-bottom:0;" />
+            <input id="msgInput" placeholder="Message..." autocomplete="off" oninput="handleTyping()" onkeydown="if(event.key === 'Enter') sendMessage()" style="margin-bottom:0;" />
             <button onclick="sendMessage()"><i class='bx bxs-send'></i></button>
         </div>`;
   }
 
-  // Now we know 100% that the container exists, so we inject the blue bar!
+  // 3. Update the Reply Bar (This doesn't touch the input, so text stays safe!)
   const previewContainer = document.getElementById("replyPreviewContainer");
   if (previewContainer) {
       if (replyingToMessage) {
           const name = replyingToMessage.sender === user ? "Yourself" : replyingToMessage.sender;
           previewContainer.innerHTML = `
-            <div class="reply-preview-bar">
-               <div class="reply-preview-content">
-                 <i class='bx bx-reply reply-preview-icon'></i>
-                 <div style="color: var(--primary);"><b>Replying to ${name}:</b><br><span style="color: #6366f1; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;">${replyingToMessage.text}</span></div>
+            <div class="reply-preview-bar" style="background: rgba(79, 70, 229, 0.1); padding: 8px; border-radius: 12px; border-left: 4px solid var(--primary); margin-bottom: 8px;">
+               <div style="display: flex; justify-content: space-between; align-items: center;">
+                 <div style="color: var(--primary); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                    <b>Replying to ${name}:</b><br>${replyingToMessage.text}
+                 </div>
+                 <div onclick="cancelReply()" style="cursor: pointer; color: var(--danger);"><i class='bx bx-x' style="font-size: 18px;"></i></div>
                </div>
-               <div onclick="cancelReply()" style="background: white; width: 26px; height: 26px; min-width: 26px; border-radius: 50%; display: flex; justify-content: center; align-items: center; cursor: pointer; color: var(--danger); box-shadow: var(--shadow-sm);"><i class='bx bx-x'></i></div>
             </div>`;
       } else {
           previewContainer.innerHTML = "";
