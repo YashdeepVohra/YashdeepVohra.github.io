@@ -457,55 +457,54 @@ function scrollToMessage(time) {
     const chatBox = document.getElementById("messages");
     if (!bubble || !chatBox) return;
 
-    // 1. The Engine that triggers the beautiful flash
-    function playFlash() {
-        bubble.classList.remove("flash-active-sent", "flash-active-received");
-        void bubble.offsetWidth; // Wipe the slate clean
-        
-        // A tiny 50ms delay forces iOS/Android graphics cards to paint the glow
-        setTimeout(() => {
-            const flashClass = bubble.classList.contains("msg-sent") ? "flash-active-sent" : "flash-active-received";
-            bubble.classList.add(flashClass);
-            
-            setTimeout(() => {
-                bubble.classList.remove(flashClass);
-            }, 1500); // Clean up after the animation finishes
-        }, 50); 
-    }
+    // 1. Trigger the native smooth scroll immediately
+    targetMsg.scrollIntoView({ behavior: "smooth", block: "center" });
 
-    // 2. Check if it is ALREADY on screen (Math is now fixed to the chat box!)
+    // 2. The Native GPU Animation Engine (Bypasses all CSS bugs)
+    const playGlow = () => {
+        const isSent = bubble.classList.contains("msg-sent");
+        
+        // Colors: Sent gets a bright white flash. Received gets a primary color flash.
+        const glowColor = isSent ? "rgba(255, 255, 255, 0.9)" : "var(--primary)";
+        
+        // This natively commands the browser to animate, ignoring CSS state
+        bubble.animate([
+            { transform: "scale(1)", filter: "brightness(1)", boxShadow: "0 0 0 0px transparent" },
+            { transform: "scale(1.02)", filter: "brightness(1.15)", boxShadow: `0 0 0 4px ${glowColor}`, offset: 0.15 },
+            { transform: "scale(1)", filter: "brightness(1)", boxShadow: "0 0 0 0px transparent" }
+        ], {
+            duration: 1300,
+            easing: "cubic-bezier(0.175, 0.885, 0.32, 1.275)"
+        });
+    };
+
+    // 3. The Math: Check if it's ALREADY visible inside the chat box
     const boxRect = chatBox.getBoundingClientRect();
     const msgRect = targetMsg.getBoundingClientRect();
     
-    // Is it fully visible between the top and bottom of the chat area?
-    const isFullyVisible = (msgRect.top >= boxRect.top) && (msgRect.bottom <= boxRect.bottom);
+    // Is the message physically inside the visible boundaries of the chat box?
+    const isVisible = (msgRect.top >= boxRect.top) && (msgRect.bottom <= boxRect.bottom);
 
-    if (isFullyVisible) {
-        // Already staring right at it? Boom. Instantly flash.
-        playFlash();
+    if (isVisible) {
+        // Boom. It's on screen. Play it instantly.
+        playGlow();
     } else {
-        // 3. Not there? Start moving.
-        targetMsg.scrollIntoView({ behavior: "smooth", block: "center" });
+        // 4. The Observer: Wait for the scroll to bring it into the chat box
+        const observer = new IntersectionObserver((entries) => {
+            if (entries[0].isIntersecting) {
+                // It arrived! Give it 50ms to settle, then flash.
+                setTimeout(playGlow, 50);
+                observer.disconnect(); // Turn the camera off
+            }
+        }, {
+            root: chatBox, // 🔥 CRITICAL FIX: The camera now ONLY looks inside the chat box
+            threshold: 0.5
+        });
         
-        // 4. The "Scroll Radar" - waits for the exact millisecond the screen stops moving
-        let scrollTimer;
-        const scrollWatcher = () => {
-            clearTimeout(scrollTimer);
-            
-            // If the scrolling stops for 150ms, it means we have arrived!
-            scrollTimer = setTimeout(() => {
-                chatBox.removeEventListener('scroll', scrollWatcher);
-                playFlash();
-            }, 150); 
-        };
+        observer.observe(targetMsg);
         
-        chatBox.addEventListener('scroll', scrollWatcher);
-        
-        // Failsafe: Just in case the scroll gets stuck, force the flash after 2 seconds
-        setTimeout(() => {
-            chatBox.removeEventListener('scroll', scrollWatcher);
-            playFlash(); 
-        }, 2000);
+        // Failsafe: Disconnect after 2.5 seconds so we don't leak memory
+        setTimeout(() => observer.disconnect(), 2500);
     }
 }
 
