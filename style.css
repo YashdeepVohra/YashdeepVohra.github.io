@@ -334,9 +334,8 @@ input[type="datetime-local"] { width: 100%; max-width: 100%; padding: 14px 16px;
   cursor: pointer; 
 }
 
-/* Forces the graphics card to prioritize this element */
 .msg-bubble {
-  will-change: transform, box-shadow;
+  will-change: transform, box-shadow; /* Warns the browser an animation is coming */
 }
 
 .msg-bubble.flash-active {
