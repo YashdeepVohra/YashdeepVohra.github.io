@@ -124,7 +124,7 @@ button:active { transform: translateY(1px); }
 
 .msg-wrapper { display: flex; flex-direction: column; width: 100%; cursor: pointer; }
 .msg-time { font-size: 11px; color: #94a3b8; max-height: 0; opacity: 0; overflow: hidden; transition: all 0.2s ease-out; padding: 0 4px; }
-.msg-wrapper.show-time .msg-time { max-height: 40px; opacity: 1; margin-bottom: 8px; margin-top: 2px; }
+.msg-wrapper.show-time .msg-time { max-height: 20px; opacity: 1; margin-bottom: 8px; margin-top: 2px; }
 
 .msg-bubble { padding: 10px 14px; font-size: 15px; font-weight: 500; max-width: 75%; word-wrap: break-word; line-height: 1.4; transition: all 0.2s; }
 
