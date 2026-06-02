@@ -310,24 +310,6 @@ input[type="datetime-local"] { width: 100%; max-width: 100%; padding: 14px 16px;
 }
 
 /* ==========================================
-   REPLY PREVIEW BAR UI
-   ========================================== */
-.reply-preview-bar {
-  width: 100%; display: flex; justify-content: space-between; align-items: center; 
-  background: #e0e7ff; padding: 10px 16px; border-radius: 16px 16px 0 0; 
-  font-size: 12px; margin-bottom: -12px; border: 1px solid #c7d2fe; 
-  border-bottom: none; z-index: 0;
-  animation: slideUp 0.2s ease-out;
-}
-.reply-preview-content {
-  display: flex; gap: 10px; align-items: center; width: 85%;
-}
-.reply-preview-icon {
-  color: var(--primary); font-size: 22px; background: white; 
-  border-radius: 50%; padding: 4px; box-shadow: var(--shadow-sm);
-}
-
-/* ==========================================
    SCROLL-TO-REPLY: SMART BORDER PULSE
    ========================================== */
 .msg-replied-to { cursor: pointer; }
@@ -336,9 +318,9 @@ input[type="datetime-local"] { width: 100%; max-width: 100%; padding: 14px 16px;
   will-change: transform, box-shadow; 
 }
 
-/* 1. RECEIVED MESSAGES (White Background -> Purple Pulse) */
+/* RECEIVED MESSAGES (White Background -> Purple Pulse) */
 .msg-bubble.flash-active-received {
-  animation: pulseReceived 1.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards !important;
+  animation: pulseReceived 1.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards !important;
 }
 @keyframes pulseReceived {
   0% { box-shadow: 0 0 0 0px rgba(79, 70, 229, 0); transform: scale(1); }
@@ -346,9 +328,9 @@ input[type="datetime-local"] { width: 100%; max-width: 100%; padding: 14px 16px;
   100% { box-shadow: 0 0 0 0px rgba(79, 70, 229, 0); transform: scale(1); }
 }
 
-/* 2. SENT MESSAGES (Purple Background -> Bright White Pulse) */
+/* SENT MESSAGES (Purple Background -> Bright White Pulse) */
 .msg-bubble.flash-active-sent {
-  animation: pulseSent 1.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards !important;
+  animation: pulseSent 1.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards !important;
 }
 @keyframes pulseSent {
   0% { box-shadow: 0 0 0 0px rgba(255, 255, 255, 0); transform: scale(1); filter: brightness(1); }
