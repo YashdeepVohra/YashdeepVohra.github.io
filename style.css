@@ -328,21 +328,24 @@ input[type="datetime-local"] { width: 100%; max-width: 100%; padding: 14px 16px;
 }
 
 /* ==========================================
-   SCROLL-TO-REPLY HIGHLIGHT (TRANSITION ENGINE)
+   SCROLL-TO-REPLY: BROAD BORDER PULSE
    ========================================== */
 .msg-replied-to { 
   cursor: pointer; 
 }
 
-/* 1. Ensure all bubbles can transition smoothly in both directions */
+/* Forces the graphics card to prioritize this element */
 .msg-bubble {
-  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.4s ease, filter 0.4s ease !important;
+  will-change: transform, box-shadow;
 }
 
-/* 2. The active flash state (Tight exactly to the bubble) */
 .msg-bubble.flash-active {
-  transform: scale(1.05) !important;
-  box-shadow: 0 8px 25px rgba(79, 70, 229, 0.5) !important;
-  filter: brightness(1.15) !important;
-  z-index: 10; /* Pops it above surrounding messages */
+  animation: broadBorderPulse 1.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards !important;
+}
+
+@keyframes broadBorderPulse {
+  0% { box-shadow: 0 0 0 0px rgba(79, 70, 229, 0); transform: scale(1); filter: brightness(1); }
+  /* The 4px creates a thick, solid border. The scale(1.02) gives it a slight pop! */
+  20% { box-shadow: 0 0 0 4px var(--primary); transform: scale(1.02); filter: brightness(1.1); }
+  100% { box-shadow: 0 0 0 0px rgba(79, 70, 229, 0); transform: scale(1); filter: brightness(1); }
 }
