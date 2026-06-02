@@ -451,30 +451,38 @@ function cancelReply() {
 
 function scrollToMessage(time) {
     const targetMsg = document.getElementById(`msg-${time}`);
-    if (!targetMsg) return;
+    const overlay = document.getElementById("highlight-overlay");
+    if (!targetMsg || !overlay) return;
 
-    const bubble = targetMsg.querySelector(".msg-bubble");
-    if (!bubble) return;
-
-    // 1. Scroll
+    // 1. Scroll to target
     targetMsg.scrollIntoView({ behavior: "smooth", block: "center" });
 
-    // 2. The Force-Render Pattern
-    // We wait 450ms for the scroll to finish, then force the browser to render
+    // 2. Wait for scroll physics to finish (400ms is the standard)
     setTimeout(() => {
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-                // Now apply the animation directly to the GPU
-                bubble.animate([
-                    { transform: "scale(1)", boxShadow: "0 0 0 0 rgba(79, 70, 229, 0.4)" },
-                    { transform: "scale(1.03)", boxShadow: "0 0 0 8px rgba(79, 70, 229, 0.4)" },
-                    { transform: "scale(1)", boxShadow: "0 0 0 0 rgba(79, 70, 229, 0)" }
-                ], {
-                    duration: 1500,
-                    easing: "ease-out"
-                });
-            });
-        });
+        const rect = targetMsg.getBoundingClientRect();
+        
+        // 3. Create the "Ghost" overlay
+        const ghost = document.createElement("div");
+        ghost.style.position = "fixed";
+        ghost.style.top = rect.top + "px";
+        ghost.style.left = rect.left + "px";
+        ghost.style.width = rect.width + "px";
+        ghost.style.height = rect.height + "px";
+        ghost.style.border = "4px solid #4f46e5"; // var(--primary)
+        ghost.style.borderRadius = "20px";
+        ghost.style.backgroundColor = "rgba(79, 70, 229, 0.1)";
+        ghost.style.zIndex = "9999";
+        ghost.style.pointerEvents = "none";
+        ghost.style.transition = "opacity 0.5s ease-out";
+        ghost.style.opacity = "1";
+        
+        overlay.appendChild(ghost);
+        
+        // 4. Fade it out and remove
+        setTimeout(() => {
+            ghost.style.opacity = "0";
+            setTimeout(() => ghost.remove(), 500);
+        }, 1000);
     }, 450);
 }
 
