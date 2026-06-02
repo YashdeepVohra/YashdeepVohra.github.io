@@ -310,29 +310,28 @@ input[type="datetime-local"] { width: 100%; max-width: 100%; padding: 14px 16px;
 }
 
 /* ==========================================
-   SCROLL-TO-REPLY: STABLE PULSE
+   HIGH-CONTRAST PULSE SYSTEM
    ========================================== */
-.msg-bubble {
-  transition: box-shadow 0.3s ease; /* Smooth transition */
-}
 
-/* RECEIVED (White background) -> Purple Pulse */
+/* Received (White Bubble): Pulse with a deep, bold Purple */
 .msg-bubble.flash-received {
   animation: pulseReceived 1.5s ease-out forwards;
 }
+
 @keyframes pulseReceived {
-  0% { box-shadow: 0 0 0 0 rgba(79, 70, 229, 0.4); }
-  50% { box-shadow: 0 0 0 6px rgba(79, 70, 229, 0.4); }
+  0% { box-shadow: 0 0 0 0 rgba(79, 70, 229, 0.6); }
+  50% { box-shadow: 0 0 0 8px rgba(79, 70, 229, 0.4); }
   100% { box-shadow: 0 0 0 0 rgba(79, 70, 229, 0); }
 }
 
-/* SENT (Purple background) -> Bright White Pulse */
+/* Sent (Purple Bubble): Pulse with a bright, luminous White */
 .msg-bubble.flash-sent {
   animation: pulseSent 1.5s ease-out forwards;
 }
+
 @keyframes pulseSent {
-  0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.5); }
-  50% { box-shadow: 0 0 0 6px rgba(255, 255, 255, 0.5); }
+  0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.8); }
+  50% { box-shadow: 0 0 0 8px rgba(255, 255, 255, 0.6); }
   100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
 }
 
