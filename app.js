@@ -451,39 +451,27 @@ function cancelReply() {
 
 function scrollToMessage(time) {
     const targetMsg = document.getElementById(`msg-${time}`);
-    const overlay = document.getElementById("highlight-overlay");
-    if (!targetMsg || !overlay) return;
+    if (!targetMsg) return;
 
-    // 1. Scroll to target
+    const bubble = targetMsg.querySelector(".msg-bubble");
+    if (!bubble) return;
+
+    // 1. Scroll
     targetMsg.scrollIntoView({ behavior: "smooth", block: "center" });
 
-    // 2. Wait for scroll physics to finish (400ms is the standard)
+    // 2. Determine color
+    const isSent = bubble.classList.contains("msg-sent");
+    const flashClass = isSent ? "flash-sent" : "flash-received";
+
+    // 3. Force browser to recognize the class change
+    bubble.classList.remove("flash-sent", "flash-received");
+    void bubble.offsetWidth; // The magic line that forces the browser to re-paint
+    bubble.classList.add(flashClass);
+
+    // 4. Cleanup
     setTimeout(() => {
-        const rect = targetMsg.getBoundingClientRect();
-        
-        // 3. Create the "Ghost" overlay
-        const ghost = document.createElement("div");
-        ghost.style.position = "fixed";
-        ghost.style.top = rect.top + "px";
-        ghost.style.left = rect.left + "px";
-        ghost.style.width = rect.width + "px";
-        ghost.style.height = rect.height + "px";
-        ghost.style.border = "4px solid #4f46e5"; // var(--primary)
-        ghost.style.borderRadius = "20px";
-        ghost.style.backgroundColor = "rgba(79, 70, 229, 0.1)";
-        ghost.style.zIndex = "9999";
-        ghost.style.pointerEvents = "none";
-        ghost.style.transition = "opacity 0.5s ease-out";
-        ghost.style.opacity = "1";
-        
-        overlay.appendChild(ghost);
-        
-        // 4. Fade it out and remove
-        setTimeout(() => {
-            ghost.style.opacity = "0";
-            setTimeout(() => ghost.remove(), 500);
-        }, 1000);
-    }, 450);
+        bubble.classList.remove(flashClass);
+    }, 1600);
 }
 
 function updateReadReceipts() {
