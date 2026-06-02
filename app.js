@@ -456,22 +456,32 @@ function scrollToMessage(time) {
     const bubble = targetMsg.querySelector(".msg-bubble");
     if (!bubble) return;
 
-    // 1. Scroll directly to the message
+    // 1. Scroll first
     targetMsg.scrollIntoView({ behavior: "smooth", block: "center" });
 
-    // 2. Clear previous classes
-    bubble.classList.remove("highlight-pulse");
-    
-    // 3. Force browser reflow (the "magic" fix for animations not playing)
-    void bubble.offsetWidth;
+    // 2. The Direct Animation (Bypasses CSS classes and transitions)
+    const playFlash = () => {
+        bubble.animate([
+            { transform: "scale(1)", boxShadow: "0 0 0 0 rgba(79, 70, 229, 0.4)" },
+            { transform: "scale(1.03)", boxShadow: "0 0 0 8px rgba(79, 70, 229, 0.4)" },
+            { transform: "scale(1)", boxShadow: "0 0 0 0 rgba(79, 70, 229, 0)" }
+        ], {
+            duration: 1500,
+            easing: "ease-out"
+        });
+    };
 
-    // 4. Apply animation class
-    bubble.classList.add("highlight-pulse");
+    // 3. Logic: If it's already on screen, play immediately.
+    // If not, wait for the scroll.
+    const rect = targetMsg.getBoundingClientRect();
+    const isVisible = rect.top >= 0 && rect.bottom <= window.innerHeight;
 
-    // 5. Clean up
-    setTimeout(() => {
-        bubble.classList.remove("highlight-pulse");
-    }, 1600);
+    if (isVisible) {
+        playFlash();
+    } else {
+        // Wait for the scroll to finish (approx 400ms for smooth scroll)
+        setTimeout(playFlash, 450);
+    }
 }
 
 function updateReadReceipts() {
