@@ -330,18 +330,17 @@ input[type="datetime-local"] { width: 100%; max-width: 100%; padding: 14px 16px;
 /* ==========================================
    SCROLL-TO-REPLY HIGHLIGHT ANIMATION
    ========================================== */
-.msg-replied-to {
-  cursor: pointer; 
+.msg-replied-to { cursor: pointer; }
+
+/* 🔥 THE FIX: Targets the bubble directly, and forces mobile hardware acceleration */
+.msg-bubble.highlight-pulse {
+  animation: tightBubblePulse 1.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards !important;
+  transform: translateZ(0); /* Stops mobile browsers from skipping the animation */
+  will-change: transform, filter, box-shadow;
 }
 
-/* 🔥 THE FIX: Highlights the entire row wrapper instead of the bubble */
-.msg-wrapper.highlight-pulse {
-  animation: rowPulse 1.5s ease-out !important;
-  border-radius: 12px; /* Softens the edges of the highlight box */
-}
-
-@keyframes rowPulse {
-  0% { background-color: rgba(79, 70, 229, 0); }
-  15% { background-color: rgba(79, 70, 229, 0.15); } /* Premium soft blue wash */
-  100% { background-color: rgba(79, 70, 229, 0); }
+@keyframes tightBubblePulse {
+  0% { transform: scale(1) translateZ(0); box-shadow: 0 0 0 rgba(79, 70, 229, 0); filter: brightness(1); }
+  30% { transform: scale(1.04) translateZ(0); box-shadow: 0 4px 15px rgba(79, 70, 229, 0.5); filter: brightness(1.15); }
+  100% { transform: scale(1) translateZ(0); box-shadow: 0 0 0 rgba(79, 70, 229, 0); filter: brightness(1); }
 }
