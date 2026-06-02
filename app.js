@@ -91,14 +91,23 @@ function handleMessageTap(event, element, sender, encodedText, time) {
     const currentTime = new Date().getTime();
     const tapLength = currentTime - lastTapTime;
     
+    // 1. Check if their finger specifically landed on the quoted context box
+    const replyBox = event.target.closest('.msg-replied-to');
+    
     if (tapLength < 300 && tapLength > 0) {
-        // 🔥 DOUBLE TAP DETECTED!
-        event.preventDefault(); // Stops the screen from zooming
+        // 🔥 DOUBLE TAP: Trigger Reply
+        event.preventDefault(); 
         initiateReply(sender, decodeURIComponent(encodedText), time);
-        if (navigator.vibrate) navigator.vibrate(50); // Premium haptic feedback
+        if (navigator.vibrate) navigator.vibrate(50); 
     } else {
-        // 👆 SINGLE TAP DETECTED!
-        toggleTime(element);
+        // 👆 SINGLE TAP: Decide what to do
+        if (replyBox && replyBox.getAttribute('data-target-time')) {
+            // They tapped the quoted message! Scroll to it.
+            scrollToMessage(replyBox.getAttribute('data-target-time'));
+        } else {
+            // They tapped the normal text bubble! Reveal the timestamp.
+            toggleTime(element);
+        }
     }
     lastTapTime = currentTime;
 }
@@ -540,8 +549,9 @@ function loadMessages() {
         let replyBlock = "";
         if (m.replyTo) {
             const replyName = m.replyTo.sender === user ? "You" : m.replyTo.sender;
-            const clickAction = m.replyTo.time ? `onclick="event.stopPropagation(); scrollToMessage(${m.replyTo.time})"` : "";
-            replyBlock = `<div class="msg-replied-to" ${clickAction}><b>${replyName}:</b> ${m.replyTo.text}</div>`;
+            // 🔥 THE FIX: We use a safe data tag instead of inline onclick!
+            const timeData = m.replyTo.time ? `data-target-time="${m.replyTo.time}"` : "";
+            replyBlock = `<div class="msg-replied-to" ${timeData}><b>${replyName}:</b> ${m.replyTo.text}</div>`;
         }
 
         const swipeIconHTML = isMe 
