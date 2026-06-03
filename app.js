@@ -656,7 +656,6 @@ function loadMessages() {
         let replyBlock = "";
         if (m.replyTo) {
             const replyName = m.replyTo.sender === user ? "You" : m.replyTo.sender;
-            // 🔥 THE FIX: We use a safe data tag instead of inline onclick!
             const timeData = m.replyTo.time ? `data-target-time="${m.replyTo.time}"` : "";
             replyBlock = `<div class="msg-replied-to" ${timeData}><b>${replyName}:</b> ${m.replyTo.text}</div>`;
         }
@@ -664,22 +663,40 @@ function loadMessages() {
         const swipeIconHTML = isMe 
             ? `<div class="swipe-reply-icon right"><i class='bx bx-reply' style="transform: scaleX(-1);"></i></div>` 
             : `<div class="swipe-reply-icon left"><i class='bx bx-reply'></i></div>`;
+
+        // 🔥 THE UPGRADE: Sender Name Tags for Event Chats!
+        let nameTagHTML = "";
+        // Only show the name if it's an Event Chat, it's not you, and it's the first message in their "block"
+        if (currentChatType === "event" && !isMe && !isSamePrev) {
+            nameTagHTML = `<div style="font-size: 11px; font-weight: 700; color: var(--text-muted); margin-left: 14px; margin-bottom: 2px;">@${m.sender}</div>`;
+        }
             
-        // 🔥 NEW: Added a span to hold the name of the person typing!
-      newHTML += `<div id="typingBubble" class="typing-indicator hidden" style="align-items: center;">
-                    <span id="typingName" style="font-size: 12px; font-weight: 700; color: var(--primary); margin-right: 8px;"></span>
-                    <div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>
-                  </div>`;
-      
-      box.innerHTML = newHTML;
+        // 🔥 THE FIX: Restored your message wrapper that was accidentally deleted
+        newHTML += `<div id="msg-${m.time}" class="msg-wrapper" data-sender="${m.sender}" data-time="${m.time}" data-text="${encodedText}" style="align-items: ${isMe ? 'flex-end' : 'flex-start'};" onclick="handleMessageTap(event, this, '${m.sender}', '${encodedText}', ${m.time})">
+                      ${swipeIconHTML}
+                      ${nameTagHTML}
+                      <div class="msg-bubble ${isMe ? 'msg-sent' : 'msg-received'} ${shape}">
+                         ${replyBlock}
+                         ${m.text}
+                      </div>
+                      <div class="msg-time" style="text-align: ${isMe ? 'right' : 'left'}">
+                         ${formatTime(m.time)}
+                      </div>
+                    </div>`;
         
-        if (i === msgs.length - 1 && isMe) {
+        // 🔥 THE FIX: "Sent/Read" text will ONLY show up in Direct Chats now
+        if (i === msgs.length - 1 && isMe && currentChatType === "direct") {
             let statusHtml = (currentChatData && currentChatData.unreadBy === "") ? `Read <i class='bx bx-check-double' style="color: var(--primary);"></i>` : `Sent <i class='bx bx-check'></i>`;
             newHTML += `<div class="msg-status" id="readReceipt">${statusHtml}</div>`; 
         }
       });
       
-      newHTML += `<div id="typingBubble" class="typing-indicator hidden"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>`;
+      // 🔥 THE FIX: Typing bubble safely placed OUTSIDE the message loop
+      newHTML += `<div id="typingBubble" class="typing-indicator hidden" style="align-items: center; margin-top: 8px;">
+                    <span id="typingName" style="font-size: 12px; font-weight: 700; color: var(--primary); margin-right: 8px;"></span>
+                    <div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>
+                  </div>`;
+      
       box.innerHTML = newHTML;
       
       if (currentChatStatus === "icebreaker" && theirMessageCount > 0 && currentChatInitiator === user) { db.collection("chats").doc(currentChat).update({ status: "unlocked" }); }
