@@ -429,15 +429,27 @@ async function sendMessage() {
   const input = document.getElementById("msgInput"); if(!input) return; 
   const text = input.value.trim(); if (!text || !currentChat) return;
   
-  // Grab reply data if it exists
+  // 1. Grab reply data if it exists
   const replyData = replyingToMessage ? { sender: replyingToMessage.sender, text: replyingToMessage.text, time: replyingToMessage.time } : null;
   replyingToMessage = null; 
 
+  // 2. ALWAYS send the message to the screen immediately
+  await db.collection("messages").add({ 
+      chatId: currentChat, 
+      sender: user, 
+      text: text, 
+      time: Date.now(), 
+      replyTo: replyData 
+  });
+
+  // 3. Route the background updates (Typing indicators & Read Receipts)
   if (currentChatType === "event") {
-      // EVENT CHAT ROUTE: Just blast the message to the event room
-      await db.collection("messages").add({ chatId: currentChat, sender: user, text: text, time: Date.now(), replyTo: replyData });
+      // EVENT ROUTE: Just clear the typing status
+      await db.collection("events").doc(currentChat).update({ 
+          typingUsers: firebase.firestore.FieldValue.arrayRemove(user) 
+      }).catch(()=>{}); // Catch prevents crashes if array doesn't exist yet
   } else {
-      // DIRECT CHAT ROUTE: Handle icebreakers and unread receipts
+      // DIRECT ROUTE: Update read receipts and Icebreakers
       const otherUser = currentOtherUser; 
       const chatRef = db.collection("chats").doc(currentChat); 
       const chatDoc = await chatRef.get(); 
@@ -450,17 +462,15 @@ async function sendMessage() {
           if (currentChatStatus === "icebreaker" && currentChatInitiator === otherUser) newStatus = "unlocked"; 
       }
       
-      await chatRef.set({ users: [user, otherUser], unreadBy: otherUser, lastUpdated: Date.now(), status: newStatus, typing: "" }, { merge: true });
-      await db.collection("messages").add({ chatId: currentChat, sender: user, text: text, time: Date.now(), replyTo: replyData }); 
+      await chatRef.set({ 
+          users: [user, otherUser], 
+          unreadBy: otherUser, 
+          lastUpdated: Date.now(), 
+          status: newStatus, 
+          typing: "" 
+      }, { merge: true });
   }
   
-  // 🔥 BUG FIX: Instantly clear typing status when message is sent
-  if (currentChatType === "event") {
-      await db.collection("events").doc(currentChat).update({ typingUsers: firebase.firestore.FieldValue.arrayRemove(user) });
-  } else {
-      await db.collection("chats").doc(currentChat).set({ typing: "" }, { merge: true });
-  }
-
   input.value = "";
   updateChatFooterUI(); 
 }
@@ -919,6 +929,7 @@ document.addEventListener("touchend", handleDragEnd);
 function openEventChat(eventId, eventTitle) {
   currentChat = eventId; 
   currentChatType = "event"; 
+  currentChatStatus = "unlocked"; // 🔥 PREVENTS FOOTER GLITCHES
   currentChatData = { status: "unlocked", typing: "" }; 
   
   const hAvatar = document.getElementById("chatHeaderAvatar"); 
@@ -931,7 +942,6 @@ function openEventChat(eventId, eventTitle) {
   
   if(chatDocUnsubscribe) { chatDocUnsubscribe(); chatDocUnsubscribe = null; }
   
-  // 🔥 NEW: Listen to the Event document for typing status!
   chatDocUnsubscribe = db.collection("events").doc(eventId).onSnapshot(doc => {
       if(doc.exists) {
           currentEventData = doc.data();
