@@ -81,7 +81,26 @@ button:active { transform: translateY(1px); }
 .join { background: var(--success); margin-top: 16px; }
 .leave-btn { background: #f1f5f9; color: var(--text-muted); margin-top: 16px; border: 1px solid var(--border); }
 .leave-btn:hover { background: #fee2e2; color: var(--danger); border-color: #fca5a5; }
-.attendees { font-size: 13px; color: var(--primary); margin-top: 12px; background: #e0e7ff; padding: 8px 14px; border-radius: 12px; display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+/* Event Attendees Box (No stretching!) */
+.attendees { 
+  font-size: 13px; 
+  color: var(--primary); 
+  margin-top: 12px; 
+  background: #e0e7ff; 
+  padding: 8px 14px; 
+  border-radius: 12px; 
+  display: flex; 
+  align-items: center; 
+  gap: 6px; 
+  font-weight: 600;
+  white-space: nowrap; /* Forces everything to stay on one line */
+  overflow-x: auto; /* Adds a clean horizontal swipe scroller */
+  -ms-overflow-style: none;  /* Hides ugly scrollbar on Windows */
+  scrollbar-width: none;  /* Hides ugly scrollbar on Firefox */
+}
+
+/* Hides ugly scrollbar on Chrome/Safari */
+.attendees::-webkit-scrollbar { display: none; }
 
 .tag-selector { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 12px; margin-bottom: 4px; -ms-overflow-style: none; scrollbar-width: none; }
 .tag-selector::-webkit-scrollbar { display: none; }
