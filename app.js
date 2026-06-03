@@ -27,6 +27,7 @@ let currentChatType = "direct";
 let messagesUnsubscribe = null, eventIdToManage = null;
 let currentSelectedTag = '☕ Chill', googlePfp = "", realName = "";
 let currentLiveFilter = 'All', currentRecapFilter = 'All';
+let currentEventData = null;
 
 function renderAvatar(avatarCode) {
   if (!avatarCode) return "👤";
@@ -453,17 +454,39 @@ async function sendMessage() {
       await db.collection("messages").add({ chatId: currentChat, sender: user, text: text, time: Date.now(), replyTo: replyData }); 
   }
   
+  // 🔥 BUG FIX: Instantly clear typing status when message is sent
+  if (currentChatType === "event") {
+      await db.collection("events").doc(currentChat).update({ typingUsers: firebase.firestore.FieldValue.arrayRemove(user) });
+  } else {
+      await db.collection("chats").doc(currentChat).set({ typing: "" }, { merge: true });
+  }
+
   input.value = "";
   updateChatFooterUI(); 
 }
 
 function handleTyping() {
   if (!currentChat) return;
-  db.collection("chats").doc(currentChat).set({ typing: user }, { merge: true });
-  clearTimeout(typingTimer);
-  typingTimer = setTimeout(() => {
-      if (currentChat) db.collection("chats").doc(currentChat).set({ typing: "" }, { merge: true });
-  }, 1500);
+
+  if (currentChatType === "event") {
+      // Event Chat: Add user to an array
+      db.collection("events").doc(currentChat).update({
+          typingUsers: firebase.firestore.FieldValue.arrayUnion(user)
+      });
+      
+      clearTimeout(typingTimer);
+      typingTimer = setTimeout(() => {
+          if (currentChat) db.collection("events").doc(currentChat).update({ typingUsers: firebase.firestore.FieldValue.arrayRemove(user) }).catch(()=>{});
+      }, 1500);
+  } else {
+      // Direct Chat: Simple string override
+      db.collection("chats").doc(currentChat).set({ typing: user }, { merge: true });
+      
+      clearTimeout(typingTimer);
+      typingTimer = setTimeout(() => {
+          if (currentChat) db.collection("chats").doc(currentChat).set({ typing: "" }, { merge: true });
+      }, 1500);
+  }
 }
 
 // 🔥 UPGRADE: Now accepts the 'time' parameter
@@ -522,11 +545,35 @@ function updateReadReceipts() {
 }
 
 function updateTypingIndicator() {
-  const bubble = document.getElementById("typingBubble"); const box = document.getElementById("messages");
-  if (bubble && currentChatData) {
-      const otherUser = currentOtherUser; // 🔥 FIXED
-      if (currentChatData.typing === otherUser) { bubble.classList.remove("hidden"); box.scrollTop = box.scrollHeight; } 
-      else { bubble.classList.add("hidden"); }
+  const bubble = document.getElementById("typingBubble"); 
+  const nameEl = document.getElementById("typingName");
+  const box = document.getElementById("messages");
+  
+  if (!bubble || !box) return;
+
+  if (currentChatType === "event" && currentEventData) {
+      // Group Chat Logic
+      const typists = (currentEventData.typingUsers || []).filter(u => u !== user);
+      
+      if (typists.length > 0) {
+          if (nameEl) {
+              nameEl.innerText = typists.length === 1 ? `@${typists[0]} is typing` : `${typists.length} people typing`;
+          }
+          bubble.classList.remove("hidden"); 
+          box.scrollTop = box.scrollHeight;
+      } else {
+          bubble.classList.add("hidden");
+      }
+      
+  } else if (currentChatType === "direct" && currentChatData) {
+      // 1-on-1 Chat Logic
+      if (currentChatData.typing === currentOtherUser) { 
+          if (nameEl) nameEl.innerText = ""; // Hide name in 1-on-1s
+          bubble.classList.remove("hidden"); 
+          box.scrollTop = box.scrollHeight; 
+      } else { 
+          bubble.classList.add("hidden"); 
+      }
   }
 }
 
@@ -608,17 +655,13 @@ function loadMessages() {
             ? `<div class="swipe-reply-icon right"><i class='bx bx-reply' style="transform: scaleX(-1);"></i></div>` 
             : `<div class="swipe-reply-icon left"><i class='bx bx-reply'></i></div>`;
             
-        // 🔥 THE UPGRADE: Added handleMessageTap, removed the button!
-        newHTML += `<div id="msg-${m.time}" class="msg-wrapper" data-sender="${m.sender}" data-time="${m.time}" data-text="${encodedText}" style="align-items: ${isMe ? 'flex-end' : 'flex-start'};" onclick="handleMessageTap(event, this, '${m.sender}', '${encodedText}', ${m.time})">
-                      ${swipeIconHTML}
-                      <div class="msg-bubble ${isMe ? 'msg-sent' : 'msg-received'} ${shape}">
-                         ${replyBlock}
-                         ${m.text}
-                      </div>
-                      <div class="msg-time" style="text-align: ${isMe ? 'right' : 'left'}">
-                         ${formatTime(m.time)}
-                      </div>
-                    </div>`;
+        // 🔥 NEW: Added a span to hold the name of the person typing!
+      newHTML += `<div id="typingBubble" class="typing-indicator hidden" style="align-items: center;">
+                    <span id="typingName" style="font-size: 12px; font-weight: 700; color: var(--primary); margin-right: 8px;"></span>
+                    <div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>
+                  </div>`;
+      
+      box.innerHTML = newHTML;
         
         if (i === msgs.length - 1 && isMe) {
             let statusHtml = (currentChatData && currentChatData.unreadBy === "") ? `Read <i class='bx bx-check-double' style="color: var(--primary);"></i>` : `Sent <i class='bx bx-check'></i>`;
@@ -876,7 +919,7 @@ document.addEventListener("touchend", handleDragEnd);
 function openEventChat(eventId, eventTitle) {
   currentChat = eventId; 
   currentChatType = "event"; 
-  currentChatData = { status: "unlocked", typing: "" }; // Keeps footer happy
+  currentChatData = { status: "unlocked", typing: "" }; 
   
   const hAvatar = document.getElementById("chatHeaderAvatar"); 
   const hTitle = document.getElementById("chatWithTitle");
@@ -887,6 +930,14 @@ function openEventChat(eventId, eventTitle) {
   switchScreen("chatScreen");
   
   if(chatDocUnsubscribe) { chatDocUnsubscribe(); chatDocUnsubscribe = null; }
+  
+  // 🔥 NEW: Listen to the Event document for typing status!
+  chatDocUnsubscribe = db.collection("events").doc(eventId).onSnapshot(doc => {
+      if(doc.exists) {
+          currentEventData = doc.data();
+          updateTypingIndicator();
+      }
+  });
   
   updateChatFooterUI();
   loadMessages();
