@@ -298,7 +298,21 @@ function loadEvents() {
     let activeCount = 0; let recapCount = 0; const currentTime = Date.now(); const oneDayAgo = currentTime - (24 * 60 * 60 * 1000);
     snapshot.forEach(doc => {
       const e = doc.data(); const id = doc.id; const attendeesCount = e.participants ? e.participants.length : 1;
-      const attendeeNames = e.participants ? e.participants.map(p => `<span onclick="event.stopPropagation(); startChat('${p}')" style="color: var(--primary); cursor: pointer;">@${p}</span>`).join(", ") : `<span onclick="event.stopPropagation(); startChat('${e.user}')" style="color: var(--primary); cursor: pointer;">@${e.user}</span>`;
+      
+      // 🔥 THE FIX: Smart Truncation for Attendees (Max 3 names)
+      let attendeeNames = "";
+      if (e.participants && e.participants.length > 0) {
+          const visibleParticipants = e.participants.slice(0, 3); // Grab only the first 3
+          attendeeNames = visibleParticipants.map(p => `<span onclick="event.stopPropagation(); startChat('${p}')" style="color: var(--primary); cursor: pointer;">@${p}</span>`).join(", ");
+          
+          // If there are more than 3, add the +X more text!
+          if (e.participants.length > 3) {
+              const extraCount = e.participants.length - 3;
+              attendeeNames += ` <span style="color: var(--text-muted); font-size: 12px; margin-left: 4px;">+${extraCount} more</span>`;
+          }
+      } else {
+          attendeeNames = `<span onclick="event.stopPropagation(); startChat('${e.user}')" style="color: var(--primary); cursor: pointer;">@${e.user}</span>`;
+      }
       const displayTag = e.tag ? `<div class="event-tag-badge">${e.tag}</div>` : '';
       const displayDesc = e.description ? `<button class="read-more-btn" onclick="toggleEventDesc('${id}')">Read details...</button><div class="event-desc-box">${e.description}</div>` : '';
       let statusBadge = (currentTime < e.startTime) ? `<span style="background: #fef08a; color: #854d0e; padding: 4px 8px; border-radius: 12px; font-size: 10px; font-weight: 800; text-transform: uppercase;">Upcoming</span>` : `<span style="background: #fee2e2; color: #dc2626; padding: 4px 8px; border-radius: 12px; font-size: 10px; font-weight: 800; text-transform: uppercase;"><i class='bx bx-radio-circle-marked bx-burst'></i> Live</span>`;
