@@ -46,11 +46,9 @@ function renderAvatar(avatarCode) {
 // ==========================================
 // 🎵 SMART LINK PREVIEWS (Spotify, YouTube, Links)
 // ==========================================
-function formatMessage(text) {
-    // 1. Sanitize text to block hackers (XSS Security)
+function formatMessage(text, isMediaOnly = false) {
+    // 1. Sanitize text to block hackers
     let safeText = text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-    // 2. The Magic Regex that finds ANY web link
     const urlRegex = /(https?:\/\/[^\s]+)/g;
 
     return safeText.replace(urlRegex, function(url) {
@@ -58,24 +56,24 @@ function formatMessage(text) {
         // --- 🔴 YOUTUBE PREVIEW ---
         if (url.includes("youtube.com/watch") || url.includes("youtu.be/")) {
             let videoId = "";
-            if (url.includes("youtube.com/watch")) {
-                videoId = new URL(url).searchParams.get("v");
-            } else {
-                videoId = url.split("youtu.be/")[1]?.split("?")[0];
-            }
+            if (url.includes("youtube.com/watch")) videoId = new URL(url).searchParams.get("v");
+            else videoId = url.split("youtu.be/")[1]?.split("?")[0];
+            
             if (videoId) {
-                return `<br><div style="margin-top: 8px; border-radius: 12px; overflow: hidden; width: 100%; max-width: 280px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-                            <iframe width="100%" height="160" src="https://www.youtube.com/embed/${videoId}" frameborder="0" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
+                const margin = isMediaOnly ? "0" : "8px";
+                return `${isMediaOnly ? "" : "<br>"}<div style="margin-top: ${margin}; border-radius: 16px; overflow: hidden; width: 100%; max-width: 280px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+                            <iframe width="100%" height="160" src="https://www.youtube.com/embed/${videoId}" frameborder="0" allowfullscreen></iframe>
                         </div>`;
             }
         }
         
         // --- 🟢 SPOTIFY PREVIEW ---
-        if (url.includes("open.spotify.com/")) {
-            // Converts open.spotify.com/track/123 to the special embed URL
-            const embedUrl = url.split("?")[0].replace("open.spotify.com/", "open.spotify.com/embed/");
-            return `<br><div style="margin-top: 8px; max-width: 280px;">
-                        <iframe style="border-radius:12px" src="${embedUrl}" width="100%" height="152" frameborder="0" allowfullscreen="" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>
+        if (url.includes("spotify.com/track") || url.includes("spotify.com/playlist") || url.includes("spotify.com/album")) {
+            // Converts standard Spotify link directly to an embed link!
+            const embedUrl = url.split("?")[0].replace("spotify.com/", "spotify.com/embed/");
+            const margin = isMediaOnly ? "0" : "8px";
+            return `${isMediaOnly ? "" : "<br>"}<div style="margin-top: ${margin}; width: 100%; max-width: 280px; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+                        <iframe src="${embedUrl}" width="100%" height="152" frameborder="0" allowfullscreen="" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>
                     </div>`;
         }
 
@@ -744,17 +742,14 @@ function loadMessages() {
       // ==========================================
       // 🧠 THE SMART CACHE DICTIONARY ENGINE
       // ==========================================
-      // 1. Find all unique usernames in this chat
       const uniqueSenders = [...new Set(msgs.map(m => m.sender))];
       
-      // 2. Fetch missing profiles from Firebase (Costs max 1 read per unique person!)
       for (let s of uniqueSenders) {
           if (!userCache[s]) {
               const doc = await db.collection("users").doc(s).get();
               userCache[s] = doc.exists ? doc.data() : { displayName: s, avatar: "👤" };
           }
       }
-      // ==========================================
 
       let newHTML = "";
 
@@ -775,9 +770,15 @@ function loadMessages() {
         const safeText = m.text.replace(/[`$'\\]/g, ""); 
         const encodedText = encodeURIComponent(m.text); 
         
+        // 🔥 THE NEW CHECK: Is this message ONLY a Youtube or Spotify link?
+        const rawText = m.text.trim();
+        const isMediaOnly = /^https?:\/\/[^\s]+$/.test(rawText) && (rawText.includes("youtube.com") || rawText.includes("youtu.be") || rawText.includes("spotify.com"));
+        
+        // 🔥 THE NEW CLASS: Applies the invisible background if true
+        const bubbleClass = isMediaOnly ? 'msg-bubble media-only' : 'msg-bubble';
+
         let replyBlock = "";
         if (m.replyTo) {
-            // Grab the display name from the cache for the reply block!
             const replyName = m.replyTo.sender === user ? "You" : (userCache[m.replyTo.sender]?.displayName || m.replyTo.sender);
             const timeData = m.replyTo.time ? `data-target-time="${m.replyTo.time}"` : "";
             replyBlock = `<div class="msg-replied-to" ${timeData}><b>${replyName}:</b> ${m.replyTo.text}</div>`;
@@ -789,19 +790,17 @@ function loadMessages() {
 
         let nameTagHTML = "";
         
-        // 🔥 THE CLICKABLE NAME TAG (Uses Cache!)
         if (currentChatType === "event" && !isMe && !isSamePrev) {
             const senderDisplayName = userCache[m.sender]?.displayName || m.sender;
-            // event.stopPropagation() prevents the chat timestamp from opening when you click their name!
             nameTagHTML = `<div style="font-size: 11px; font-weight: 700; color: var(--text-muted); margin-left: 14px; margin-bottom: 2px; cursor: pointer; display: inline-block;" onclick="event.stopPropagation(); openProfileScreen('${m.sender}')">${senderDisplayName}</div>`;
         }
             
         newHTML += `<div id="msg-${m.time}" class="msg-wrapper" data-sender="${m.sender}" data-time="${m.time}" data-text="${encodedText}" style="align-items: ${isMe ? 'flex-end' : 'flex-start'};" onclick="handleMessageTap(event, this, '${m.sender}', '${encodedText}', ${m.time})">
                       ${swipeIconHTML}
                       ${nameTagHTML}
-                      <div class="msg-bubble ${isMe ? 'msg-sent' : 'msg-received'} ${shape}">
+                      <div class="${bubbleClass} ${isMe ? 'msg-sent' : 'msg-received'} ${shape}">
                          ${replyBlock}
-                         ${formatMessage(m.text)}
+                         ${formatMessage(m.text, isMediaOnly)}
                       </div>
                       <div class="msg-time" style="text-align: ${isMe ? 'right' : 'left'}">
                          ${formatTime(m.time)}
