@@ -154,7 +154,15 @@
       </div>
 
       <label class="settings-label">Display Name</label>
-      <input type="text" id="editDisplayNameInput" placeholder="New Display Name" maxlength="20" class="settings-input">
+      <input type="text" 
+             id="editDisplayNameInput" 
+             placeholder="New Display Name" 
+             maxlength="20" 
+             class="settings-input" 
+             autocomplete="off" 
+             spellcheck="false" 
+             data-form-type="other" 
+             data-lpignore="true">
 
       <button id="saveProfileBtn" onclick="saveProfileData()" class="save-settings-btn"><i class='bx bx-save'></i> Save Changes</button>
       
