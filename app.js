@@ -825,34 +825,51 @@ function showTab(tab) {
 }
 
 function openProfileScreen() {
-  try {
-    const dName = document.getElementById("profileDisplayName"); const uName = document.getElementById("profileUsername"); const pAvatar = document.getElementById("profileLargeAvatar");
-    if(dName) dName.innerText = typeof realName !== 'undefined' ? realName : "Student";
-    if(uName) uName.innerText = "@" + (typeof user !== 'undefined' ? user : "username");
-    if(pAvatar) pAvatar.innerHTML = renderAvatar(typeof userAvatar !== 'undefined' ? userAvatar : "👤");
-    document.querySelector(".topbar")?.classList.add("hidden"); switchScreen("profileScreen"); loadMyEvents();
-  } catch (error) { alert("Profile Screen Error: " + error.message); }
+    document.getElementById("home").classList.add("hidden");
+    document.getElementById("profileScreen").classList.remove("hidden");
+    loadProfileUI(); // Force data to refresh when opened
 }
 
-function closeProfileScreen() { document.querySelector(".topbar")?.classList.remove("hidden"); switchScreen("home"); }
+function closeProfileScreen() {
+    document.getElementById("profileScreen").classList.add("hidden");
+    document.getElementById("home").classList.remove("hidden");
+}
 
 function loadMyEvents() {
-  const myEventsBox = document.getElementById("myProfileEvents"); if(!myEventsBox) return;
-  myEventsBox.innerHTML = "<p style='text-align:center; color:gray;'>Loading...</p>";
-  
-  // 🔥 FIX 3: Removed orderBy() here as well to prevent the Profile screen from crashing
-  db.collection("events").where("user", "==", user).get().then(snapshot => {
-    myEventsBox.innerHTML = "";
-    if (snapshot.empty) { myEventsBox.innerHTML = `<div class="empty-state"><i class='bx bx-ghost'></i><p>You haven't hosted any events yet.</p></div>`; return; }
+    const list = document.getElementById("myProfileEvents");
+    if (!list) return;
     
-    let evts = [];
-    snapshot.forEach(doc => evts.push(doc.data()));
-    evts.sort((a, b) => b.startTime - a.startTime); // Sorted locally
-
-    evts.forEach(e => { 
-        myEventsBox.innerHTML += `<div class="event card" style="padding: 16px;"><div class="event-title" style="font-size: 16px;">${e.title}</div><div class="event-meta" style="font-size: 13px;">${e.tag || ''} • ${e.place}</div></div>`; 
-    });
-  });
+    // Only fetch events where YOU are the host
+    db.collection("events")
+      .where("user", "==", user)
+      .onSnapshot(snapshot => {
+          list.innerHTML = "";
+          let count = 0;
+          
+          let eventsArray = [];
+          snapshot.forEach(doc => eventsArray.push({ id: doc.id, ...doc.data() }));
+          // Sort them locally to prevent Firebase indexing errors
+          eventsArray.sort((a, b) => b.startTime - a.startTime);
+          
+          eventsArray.forEach(e => {
+              count++;
+              // Draw a mini, un-clickable version of the event card just for the profile
+              list.innerHTML += `
+                <div class="card" style="padding: 16px; margin-bottom: 12px; box-shadow: none; border: 1px solid var(--border);">
+                  <div style="font-size: 16px; font-weight: 700; margin-bottom: 4px;">${e.title}</div>
+                  <div style="font-size: 12px; color: var(--text-muted);"><i class='bx bx-map'></i> ${e.place}</div>
+                  <button class="delete-btn" style="margin-top: 12px; padding: 8px; font-size: 13px;" onclick="openDeleteModal('${e.id}')">Manage Event</button>
+                </div>
+              `;
+          });
+          
+          if (count === 0) {
+              list.innerHTML = `<div class="empty-state" style="padding: 20px;"><i class='bx bx-ghost'></i><p>You aren't hosting anything right now.</p></div>`;
+          }
+      }, error => {
+          console.error("Error loading hosted events:", error);
+          list.innerHTML = `<p style="color: var(--danger); font-size: 12px;">Failed to load events.</p>`;
+      });
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -987,31 +1004,32 @@ function openEventChat(eventId, eventTitle) {
 
 // Call this function whenever you switch to the Profile screen
 async function loadProfileUI() {
+    if (!user) return; // Crash prevention if not logged in
+
     const avatarEl = document.getElementById("profileAvatarDisplay");
     const nameInput = document.getElementById("profileDisplayNameInput");
     const usernameDisplay = document.getElementById("profileUsernameDisplay");
     
-    // Set basic UI
-    if (avatarEl) avatarEl.innerText = renderAvatar(userAvatar);
+    if (avatarEl) avatarEl.innerText = userAvatar; 
+    
+    // 🔥 THE FIX: Explicitly set the username label!
     if (usernameDisplay) usernameDisplay.innerText = `@${user}`;
     
-    // Fetch their saved Display Name from the 'users' database
     try {
         const userDoc = await db.collection("users").doc(user).get();
         if (userDoc.exists) {
             const data = userDoc.data();
-            userDisplayName = data.displayName || user; // Fallback to username if no display name
+            userDisplayName = data.displayName || user; 
             nameInput.value = userDisplayName;
-            
-            // Optional: You can load their stats here too!
             document.getElementById("statEventsHosted").innerText = data.hostedCount || 0;
             document.getElementById("statEventsJoined").innerText = data.joinedCount || 0;
         } else {
-            nameInput.value = user; // Default to username
+            nameInput.value = user; 
         }
-    } catch(e) {
-        console.error("Error loading profile data:", e);
-    }
+        
+        // Load the events AFTER profile data loads
+        loadMyEvents();
+    } catch(e) { console.error("Profile load error:", e); }
 }
 
 // Function triggered by the "Save Profile" button
