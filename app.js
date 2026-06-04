@@ -1007,14 +1007,17 @@ async function loadProfileUI(targetUser) {
     const nameDisplay = document.getElementById("profileDisplayNameDisplay");
     const usernameDisplay = document.getElementById("profileUsernameDisplay");
     const settingsGear = document.getElementById("profileSettingsBtn");
-    const editInput = document.getElementById("editDisplayNameInput"); // Grab the input box
+    const editInput = document.getElementById("editDisplayNameInput"); 
     
-    // Reset UI while loading
-    if (avatarEl) avatarEl.innerHTML = "👤";
+    // 🔥 BUG 1 FIX: Instantly load your avatar if viewing yourself, otherwise default to a blank one until Firebase replies
+    if (avatarEl) {
+        avatarEl.innerHTML = (targetUser === user) ? renderAvatar(userAvatar) : renderAvatar("👤");
+    }
+    
     if (nameDisplay) nameDisplay.innerText = "Loading...";
     if (usernameDisplay) usernameDisplay.innerText = `@${targetUser}`;
     
-    // Show/Hide Settings Gear based on who is viewing
+    // Show/Hide Settings Gear
     if (targetUser === user) {
         settingsGear.classList.remove("hidden"); 
     } else {
@@ -1022,14 +1025,15 @@ async function loadProfileUI(targetUser) {
     }
     
     try {
-        // Fetch their public data FIRST
         const userDoc = await db.collection("users").doc(targetUser).get();
         if (userDoc.exists) {
             const data = userDoc.data();
-            if (avatarEl) avatarEl.innerHTML = renderAvatar(data.avatar);
+            
+            // 🔥 BUG 1 FIX: Safely render their fetched avatar
+            if (avatarEl) avatarEl.innerHTML = renderAvatar(data.avatar || "👤");
+            
             if (nameDisplay) nameDisplay.innerText = data.displayName || targetUser;
 
-            // 🔥 THE FIX: Inject the name into the settings input AFTER Firebase loads it!
             if (targetUser === user && editInput) {
                 userDisplayName = data.displayName || targetUser;
                 editInput.value = userDisplayName;
