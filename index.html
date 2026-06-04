@@ -87,7 +87,9 @@
       <div class="chat-avatar" id="chatHeaderAvatar" style="width: 36px; height: 36px; font-size: 14px;">?</div>
       <div id="chatWithTitle" style="font-weight: 700; font-size: 18px;">User</div>
     </div>
+    
     <div id="messages"></div>
+    
     <div class="chat-footer" style="flex-direction: column;">
         <div id="icebreakerMsg" class="hidden" style="width: 100%; text-align: center; color: var(--text-muted); font-size: 13px; font-weight: bold; padding: 10px;">
             <i class='bx bxs-lock-alt'></i> Icebreaker sent! Waiting for reply...
@@ -102,9 +104,6 @@
     </div>
   </div>
 
-  <!-- ========================================== -->
-  <!-- PUBLIC PROFILE SCREEN -->
-  <!-- ========================================== -->
   <div id="profileScreen" class="hidden profile-screen-wrapper">
     
     <div class="chat-header profile-header-layout">
@@ -112,7 +111,6 @@
         <button class="back-btn" onclick="closeProfileScreen()"><i class='bx bx-left-arrow-alt'></i></button>
         <div class="header-title">Profile</div>
       </div>
-      <!-- 🔥 The Settings Gear -->
       <button id="profileSettingsBtn" class="hidden settings-gear-btn" onclick="openSettingsModal()">
         <i class='bx bx-cog'></i>
       </button>
@@ -120,7 +118,6 @@
     
     <div class="profile-scroll-body">
       
-      <!-- The Clean, Public Profile Card -->
       <div class="profile-clean-card">
         <div class="profile-card-header">
           <div class="profile-avatar-pro" id="profileAvatarDisplay" style="cursor: default;">👤</div>
@@ -148,9 +145,6 @@
     </div>
   </div>
 
-  <!-- ========================================== -->
-  <!-- THE SETTINGS MODAL -->
-  <!-- ========================================== -->
   <div id="settingsModal" class="modal-overlay hidden settings-modal-overlay">
     <div class="modal-content settings-modal-content">
       
@@ -191,7 +185,20 @@
     
     <div style="position: relative;">
       <span style="position: absolute; left: 16px; top: 14px; color: var(--text-muted); font-weight: 700;">@</span>
-      <input id="newUsername" placeholder="username" autocomplete="new-password" autocorrect="off" autocapitalize="none" spellcheck="false" style="padding-left: 36px;" oninput="checkUsernameAvailability()">
+      
+      <input type="text" style="display:none" autocomplete="username">
+      
+      <input id="newUsername" 
+             type="text" 
+             placeholder="username" 
+             autocomplete="off" 
+             autocorrect="off" 
+             autocapitalize="none" 
+             spellcheck="false" 
+             readonly 
+             onfocus="this.removeAttribute('readonly');" 
+             style="padding-left: 36px;" 
+             oninput="checkUsernameAvailability()">
     </div>
     
     <div id="usernameStatus" style="font-size: 12px; font-weight: 600; margin-top: -4px; margin-bottom: 16px; min-height: 16px;"></div>
