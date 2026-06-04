@@ -229,6 +229,11 @@ function initializeUserApp(userData) {
   const topAvatarEl = document.getElementById("topAvatar");
   if(topAvatarEl) { topAvatarEl.innerHTML = renderAvatar(userAvatar); topAvatarEl.classList.remove("hidden"); }
   
+  // 🔥 THE FIX: Sync your private avatar to your public username document!
+  db.collection("users").doc(user).set({
+      avatar: userAvatar
+  }, { merge: true });
+  
   switchScreen("home"); 
   loadChatList(); loadEvents();
   document.getElementById("loading-screen")?.classList.add("hidden");
@@ -798,9 +803,10 @@ function updateChatFooterUI() {
 }
 
 function loadChatList() {
-  db.collection("chats").where("users", "array-contains", user).onSnapshot(snapshot => {
+  // Notice the async added here!
+  db.collection("chats").where("users", "array-contains", user).onSnapshot(async (snapshot) => {
       const list = document.getElementById("chatList"); if(!list) return;
-      list.innerHTML = ""; let hasGlobalUnread = false; let chatsArray = [];
+      let hasGlobalUnread = false; let chatsArray = [];
       
       snapshot.docChanges().forEach(change => { 
         if (change.type === "modified") { 
@@ -817,32 +823,51 @@ function loadChatList() {
       snapshot.forEach(doc => { chatsArray.push({ id: doc.id, ...doc.data() }); }); 
       chatsArray.sort((a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0));
       
-      if (chatsArray.length === 0) list.innerHTML = `<div class="empty-state" style="padding-top: 20px;"><i class='bx bx-message-square-x'></i><p>No messages yet.</p></div>`;
+      // ==========================================
+      // 🧠 CHAT LIST DICTIONARY SYNC
+      // ==========================================
+      const uniqueOthers = [...new Set(chatsArray.map(chat => 
+          (chat.users && Array.isArray(chat.users)) ? chat.users.find(u => u !== user) : chat.id.replace(user, "").replace("_", "")
+      ))];
+      
+      // Fetch missing profiles into the cache
+      for (let other of uniqueOthers) {
+          if (!userCache[other]) {
+              const doc = await db.collection("users").doc(other).get();
+              userCache[other] = doc.exists ? doc.data() : { displayName: other, avatar: "👤" };
+          }
+      }
+      // ==========================================
+
+      list.innerHTML = "";
+      if (chatsArray.length === 0) {
+          list.innerHTML = `<div class="empty-state" style="padding-top: 20px;"><i class='bx bx-message-square-x'></i><p>No messages yet.</p></div>`;
+          return;
+      }
       
       chatsArray.forEach(chat => {
-        let other = "Unknown";
-        if (chat.users && Array.isArray(chat.users)) {
-            other = chat.users.find(u => u !== user) || "Unknown";
-        } else {
-            other = chat.id.replace(user, "").replace("_", "");
-            db.collection("chats").doc(chat.id).set({ users: [user, other] }, { merge: true });
-        }
+        let other = (chat.users && Array.isArray(chat.users)) ? chat.users.find(u => u !== user) : chat.id.replace(user, "").replace("_", "");
 
         if (chat.unreadBy === user && currentChat === chat.id) { db.collection("chats").doc(chat.id).set({ unreadBy: "" }, { merge: true }); chat.unreadBy = ""; }
         
-        const initial = other.charAt(0).toUpperCase(); 
         const isUnread = chat.unreadBy === user; 
         if (isUnread) hasGlobalUnread = true;
         
-        // 🔥 THE FIX: Using the unbreakable, pulsing CSS class!
+        // 🔥 Pull their data out of the Cache!
+        const cachedUser = userCache[other] || {};
+        const displayName = cachedUser.displayName || other;
+        const avatarCode = cachedUser.avatar || "👤";
+        
         const unreadStyles = isUnread ? 'background: #e0e7ff; border-left: 4px solid var(--primary);' : '';
         const nameStyles = isUnread ? 'font-weight: 800;' : '';
         const dotHTML = isUnread ? `<div class="unread-pulse-dot"></div>` : '';
         
         list.innerHTML += `
           <div class="chat-item" onclick="openChat('${chat.id}', '${other}')" style="${unreadStyles}">
-            <div class="chat-avatar">${initial}</div>
-            <div class="chat-name" style="${nameStyles}">${other}</div>
+            <div class="chat-avatar" style="background: transparent; border: 1px solid var(--border); padding: 0; overflow: hidden;">
+                ${renderAvatar(avatarCode)}
+            </div>
+            <div class="chat-name" style="${nameStyles}; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${displayName}</div>
             ${dotHTML}
           </div>
         `;
@@ -1051,43 +1076,42 @@ async function loadProfileUI(targetUser) {
     const settingsGear = document.getElementById("profileSettingsBtn");
     const editInput = document.getElementById("editDisplayNameInput"); 
     
-    // 🔥 BUG 1 FIX: Instantly load your avatar if viewing yourself, otherwise default to a blank one until Firebase replies
+    // 🧠 INSTANT LOAD: Check Dictionary First!
+    let cachedUser = userCache[targetUser];
+    
     if (avatarEl) {
-        avatarEl.innerHTML = (targetUser === user) ? renderAvatar(userAvatar) : renderAvatar("👤");
+        if (cachedUser && cachedUser.avatar) avatarEl.innerHTML = renderAvatar(cachedUser.avatar);
+        else if (targetUser === user) avatarEl.innerHTML = renderAvatar(userAvatar);
+        else avatarEl.innerHTML = renderAvatar("👤");
     }
     
-    if (nameDisplay) nameDisplay.innerText = "Loading...";
+    if (nameDisplay) {
+        if (cachedUser && cachedUser.displayName) nameDisplay.innerText = cachedUser.displayName;
+        else nameDisplay.innerText = "Loading...";
+    }
+    
     if (usernameDisplay) usernameDisplay.innerText = `@${targetUser}`;
     
     // Show/Hide Settings Gear
-    if (targetUser === user) {
-        settingsGear.classList.remove("hidden"); 
-    } else {
-        settingsGear.classList.add("hidden"); 
-    }
+    if (targetUser === user) { settingsGear.classList.remove("hidden"); } 
+    else { settingsGear.classList.add("hidden"); }
     
     try {
+        // Fetch fresh data in the background to ensure it's up to date
         const userDoc = await db.collection("users").doc(targetUser).get();
         if (userDoc.exists) {
             const data = userDoc.data();
+            userCache[targetUser] = data; // Update Dictionary
             
-            // 🔥 BUG 1 FIX: Safely render their fetched avatar
-            if (avatarEl) avatarEl.innerHTML = renderAvatar(data.avatar || (targetUser === user ? userAvatar : null) || "👤");
-            
+            if (avatarEl) avatarEl.innerHTML = renderAvatar(data.avatar || "👤");
             if (nameDisplay) nameDisplay.innerText = data.displayName || targetUser;
 
             if (targetUser === user && editInput) {
                 userDisplayName = data.displayName || targetUser;
                 editInput.value = userDisplayName;
             }
-        } else {
-            if (nameDisplay) nameDisplay.innerText = targetUser;
-            if (targetUser === user && editInput) {
-                editInput.value = targetUser;
-            }
         }
         
-        // Dynamically count their stats
         db.collection("events").where("user", "==", targetUser).get().then(snap => {
             const hostEl = document.getElementById("statEventsHosted");
             if(hostEl) hostEl.innerText = snap.size || 0;
@@ -1097,7 +1121,6 @@ async function loadProfileUI(targetUser) {
             if(joinEl) joinEl.innerText = snap.size || 0;
         });
 
-        // Load their specific events
         loadUserEvents(targetUser);
     } catch(e) { console.error("Profile load error:", e); }
 }
