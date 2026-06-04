@@ -469,3 +469,11 @@ input[type="datetime-local"] { width: 100%; max-width: 100%; padding: 14px 16px;
   height: 100%; 
   object-fit: cover; 
 }
+
+/* Premium floating media widgets */
+.msg-bubble.media-only {
+    background: transparent !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    border: none !important;
+}
