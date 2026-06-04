@@ -444,7 +444,10 @@ input[type="datetime-local"] { width: 100%; max-width: 100%; padding: 14px 16px;
 .hosted-events-title { color: var(--text-muted); font-size: 13px; text-transform: uppercase; letter-spacing: 1px; margin-top: 24px; margin-bottom: 12px; }
 
 /* Scrollable Events */
-.profile-events-scroll { max-height: 350px; overflow-y: auto; padding-right: 4px; }
+.profile-events-scroll { 
+  /* We removed max-height and overflow-y completely */
+  padding-bottom: 40px; /* Gives nice breathing room at the bottom of the screen */
+}
 .profile-events-scroll::-webkit-scrollbar { width: 4px; }
 .profile-events-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
 
@@ -460,3 +463,9 @@ input[type="datetime-local"] { width: 100%; max-width: 100%; padding: 14px 16px;
 .settings-input { margin-bottom: 16px; }
 .save-settings-btn { margin-bottom: 16px; }
 .settings-divider { border: 0; border-top: 1px solid var(--border); margin-bottom: 16px; }
+
+.profile-avatar-pro img { 
+  width: 100%; 
+  height: 100%; 
+  object-fit: cover; 
+}
