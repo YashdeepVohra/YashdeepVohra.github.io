@@ -29,6 +29,7 @@ let currentSelectedTag = '☕ Chill', googlePfp = "", realName = "";
 let currentLiveFilter = 'All', currentRecapFilter = 'All';
 let currentEventData = null;
 let userDisplayName = ""; // Holds the user's custom name in memory
+let currentProfileView = "";
 
 function renderAvatar(avatarCode) {
   if (!avatarCode) return "👤";
@@ -824,36 +825,37 @@ function showTab(tab) {
   else { document.getElementById("chatsTab")?.classList.remove("hidden"); if(navItems[2]) navItems[2].classList.add("active"); }
 }
 
-function openProfileScreen() {
+function openProfileScreen(targetUsername = null) {
     document.getElementById("home").classList.add("hidden");
     document.getElementById("profileScreen").classList.remove("hidden");
-    loadProfileUI(); // Force data to refresh when opened
+    
+    // If no target provided, default to yourself
+    currentProfileView = targetUsername || user; 
+    loadProfileUI(currentProfileView); 
 }
 
 function closeProfileScreen() {
     document.getElementById("profileScreen").classList.add("hidden");
     document.getElementById("home").classList.remove("hidden");
+    currentProfileView = ""; 
 }
 
-function loadMyEvents() {
+function loadUserEvents(targetUser) {
     const list = document.getElementById("myProfileEvents");
     if (!list) return;
     
-    // Only fetch events where YOU are the host
-    db.collection("events")
-      .where("user", "==", user)
-      .onSnapshot(snapshot => {
+    db.collection("events").where("user", "==", targetUser).onSnapshot(snapshot => {
           list.innerHTML = "";
-          let count = 0;
-          
           let eventsArray = [];
           snapshot.forEach(doc => eventsArray.push({ id: doc.id, ...doc.data() }));
-          // Sort them locally to prevent Firebase indexing errors
           eventsArray.sort((a, b) => b.startTime - a.startTime);
           
+          if (eventsArray.length === 0) {
+              list.innerHTML = `<div class="empty-state" style="padding: 20px;"><i class='bx bx-ghost'></i><p>No hosted events yet.</p></div>`;
+              return;
+          }
+
           eventsArray.forEach(e => {
-              count++;
-              // Draw a mini, un-clickable version of the event card just for the profile
               list.innerHTML += `
                 <div class="card" style="padding: 16px; margin-bottom: 12px; box-shadow: none; border: 1px solid var(--border);">
                   <div style="font-size: 16px; font-weight: 700; margin-bottom: 4px;">${e.title}</div>
@@ -861,14 +863,7 @@ function loadMyEvents() {
                 </div>
               `;
           });
-          
-          if (count === 0) {
-              list.innerHTML = `<div class="empty-state" style="padding: 20px;"><i class='bx bx-ghost'></i><p>You aren't hosting anything right now.</p></div>`;
-          }
-      }, error => {
-          console.error("Error loading hosted events:", error);
-          list.innerHTML = `<p style="color: var(--danger); font-size: 12px;">Failed to load events.</p>`;
-      });
+      }, error => { console.error("Error loading events:", error); });
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -1004,83 +999,89 @@ function openEventChat(eventId, eventTitle) {
 // ==========================================
 // BUG 1 & 5 FIX: DYNAMIC STATS & AVATAR
 // ==========================================
-async function loadProfileUI() {
-    if (!user) return; // Crash prevention
+async function loadProfileUI(targetUser) {
+    if (!targetUser) return; 
 
     const avatarEl = document.getElementById("profileAvatarDisplay");
-    const nameInput = document.getElementById("profileDisplayNameInput");
+    const nameDisplay = document.getElementById("profileDisplayNameDisplay");
     const usernameDisplay = document.getElementById("profileUsernameDisplay");
+    const settingsGear = document.getElementById("profileSettingsBtn");
     
-    // 🔥 BUG 1 FIX: Use innerHTML and renderAvatar so Google Images load!
-    if (avatarEl) avatarEl.innerHTML = renderAvatar(userAvatar); 
+    // Reset UI while loading
+    if (avatarEl) avatarEl.innerHTML = "👤";
+    if (nameDisplay) nameDisplay.innerText = "Loading...";
+    if (usernameDisplay) usernameDisplay.innerText = `@${targetUser}`;
     
-    if (usernameDisplay) usernameDisplay.innerText = `@${user}`;
+    // 🔥 THE MAGIC: Show/Hide Settings Gear
+    if (targetUser === user) {
+        settingsGear.classList.remove("hidden"); 
+        const nameInput = document.getElementById("editDisplayNameInput");
+        if(nameInput) nameInput.value = userDisplayName || user; // Prep the edit input
+    } else {
+        settingsGear.classList.add("hidden"); 
+    }
     
     try {
-        const userDoc = await db.collection("users").doc(user).get();
+        // Fetch their public data
+        const userDoc = await db.collection("users").doc(targetUser).get();
         if (userDoc.exists) {
             const data = userDoc.data();
-            userDisplayName = data.displayName || user; 
-            nameInput.value = userDisplayName;
+            if (avatarEl) avatarEl.innerHTML = renderAvatar(data.avatar);
+            if (nameDisplay) nameDisplay.innerText = data.displayName || targetUser;
         } else {
-            nameInput.value = user; 
+            if (nameDisplay) nameDisplay.innerText = targetUser;
         }
         
-        // 🔥 BUG 5 FIX: Dynamically count your real stats from the database!
-        db.collection("events").where("user", "==", user).get().then(snap => {
+        // Dynamically count their stats
+        db.collection("events").where("user", "==", targetUser).get().then(snap => {
             const hostEl = document.getElementById("statEventsHosted");
             if(hostEl) hostEl.innerText = snap.size || 0;
         });
-        
-        db.collection("events").where("participants", "array-contains", user).get().then(snap => {
+        db.collection("events").where("participants", "array-contains", targetUser).get().then(snap => {
             const joinEl = document.getElementById("statEventsJoined");
             if(joinEl) joinEl.innerText = snap.size || 0;
         });
 
-        // Load the events list
-        loadMyEvents();
+        // Load their specific events
+        loadUserEvents(targetUser);
     } catch(e) { console.error("Profile load error:", e); }
 }
 
 // Function triggered by the "Save Profile" button
 async function saveProfileData() {
-    const nameInput = document.getElementById("profileDisplayNameInput");
+    const nameInput = document.getElementById("editDisplayNameInput");
     const btn = document.getElementById("saveProfileBtn");
-    
     const newName = nameInput.value.trim();
-    if (!newName) {
-        alert("Your Display Name cannot be empty!");
-        return;
-    }
+    if (!newName) return alert("Display Name cannot be empty!");
 
-    // Button loading state
     const originalText = btn.innerHTML;
     btn.innerHTML = `<i class='bx bx-loader-alt bx-spin'></i> Saving...`;
     btn.disabled = true;
 
     try {
-        // Save to Firebase 'users' collection
-        await db.collection("users").doc(user).set({
-            displayName: newName,
-            updatedAt: Date.now()
-        }, { merge: true }); // Merge true ensures we don't overwrite their stats/avatar!
-
+        await db.collection("users").doc(user).set({ displayName: newName, updatedAt: Date.now() }, { merge: true });
+        
         userDisplayName = newName; // Update local memory
         
-        // Success State
+        // Instantly update the public card behind the modal
+        const displayEl = document.getElementById("profileDisplayNameDisplay");
+        if (displayEl) displayEl.innerText = newName;
+        
         btn.style.background = "var(--success)";
         btn.innerHTML = `<i class='bx bx-check'></i> Saved!`;
         
         setTimeout(() => {
-            btn.style.background = "var(--text)";
+            btn.style.background = "var(--primary)";
             btn.innerHTML = originalText;
             btn.disabled = false;
-        }, 2000);
+            closeSettingsModal(); // Auto-close the modal!
+        }, 800);
 
     } catch (e) {
-        console.error("Error saving profile:", e);
         alert("Failed to save profile. Please check your connection.");
-        btn.innerHTML = originalText;
-        btn.disabled = false;
+        btn.innerHTML = originalText; btn.disabled = false;
     }
 }
+
+function openSettingsModal() { document.getElementById("settingsModal")?.classList.remove("hidden"); }
+function closeSettingsModal() { document.getElementById("settingsModal")?.classList.add("hidden"); }
