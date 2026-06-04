@@ -858,7 +858,6 @@ function loadMyEvents() {
                 <div class="card" style="padding: 16px; margin-bottom: 12px; box-shadow: none; border: 1px solid var(--border);">
                   <div style="font-size: 16px; font-weight: 700; margin-bottom: 4px;">${e.title}</div>
                   <div style="font-size: 12px; color: var(--text-muted);"><i class='bx bx-map'></i> ${e.place}</div>
-                  <button class="delete-btn" style="margin-top: 12px; padding: 8px; font-size: 13px;" onclick="openDeleteModal('${e.id}')">Manage Event</button>
                 </div>
               `;
           });
@@ -1002,17 +1001,19 @@ function openEventChat(eventId, eventTitle) {
   loadMessages();
 }
 
-// Call this function whenever you switch to the Profile screen
+// ==========================================
+// BUG 1 & 5 FIX: DYNAMIC STATS & AVATAR
+// ==========================================
 async function loadProfileUI() {
-    if (!user) return; // Crash prevention if not logged in
+    if (!user) return; // Crash prevention
 
     const avatarEl = document.getElementById("profileAvatarDisplay");
     const nameInput = document.getElementById("profileDisplayNameInput");
     const usernameDisplay = document.getElementById("profileUsernameDisplay");
     
-    if (avatarEl) avatarEl.innerText = userAvatar; 
+    // 🔥 BUG 1 FIX: Use innerHTML and renderAvatar so Google Images load!
+    if (avatarEl) avatarEl.innerHTML = renderAvatar(userAvatar); 
     
-    // 🔥 THE FIX: Explicitly set the username label!
     if (usernameDisplay) usernameDisplay.innerText = `@${user}`;
     
     try {
@@ -1021,13 +1022,22 @@ async function loadProfileUI() {
             const data = userDoc.data();
             userDisplayName = data.displayName || user; 
             nameInput.value = userDisplayName;
-            document.getElementById("statEventsHosted").innerText = data.hostedCount || 0;
-            document.getElementById("statEventsJoined").innerText = data.joinedCount || 0;
         } else {
             nameInput.value = user; 
         }
         
-        // Load the events AFTER profile data loads
+        // 🔥 BUG 5 FIX: Dynamically count your real stats from the database!
+        db.collection("events").where("user", "==", user).get().then(snap => {
+            const hostEl = document.getElementById("statEventsHosted");
+            if(hostEl) hostEl.innerText = snap.size || 0;
+        });
+        
+        db.collection("events").where("participants", "array-contains", user).get().then(snap => {
+            const joinEl = document.getElementById("statEventsJoined");
+            if(joinEl) joinEl.innerText = snap.size || 0;
+        });
+
+        // Load the events list
         loadMyEvents();
     } catch(e) { console.error("Profile load error:", e); }
 }
