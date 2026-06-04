@@ -62,7 +62,7 @@ function formatMessage(text, isMediaOnly = false) {
             if (videoId) {
                 const margin = isMediaOnly ? "0" : "8px";
                 return `${isMediaOnly ? "" : "<br>"}<div style="margin-top: ${margin}; border-radius: 16px; overflow: hidden; width: 100%; max-width: 280px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
-                            <iframe width="100%" height="160" src="https://www.youtube.com/embed/${videoId}" frameborder="0" allowfullscreen></iframe>
+                            <iframe width="100%" height="160" src="https://www.youtube.com/embed/${videoId}" frameborder="0" style="display: block;" allowfullscreen></iframe>
                         </div>`;
             }
         }
@@ -73,7 +73,7 @@ function formatMessage(text, isMediaOnly = false) {
             const embedUrl = url.split("?")[0].replace("spotify.com/", "spotify.com/embed/");
             const margin = isMediaOnly ? "0" : "8px";
             return `${isMediaOnly ? "" : "<br>"}<div style="margin-top: ${margin}; width: 100%; max-width: 280px; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
-                        <iframe src="${embedUrl}" width="100%" height="152" frameborder="0" allowfullscreen="" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>
+                        <iframe src="${embedUrl}" width="100%" height="152" frameborder="0" style="display: block;" allowfullscreen="" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>
                     </div>`;
         }
 
