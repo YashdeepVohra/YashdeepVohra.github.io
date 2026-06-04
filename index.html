@@ -102,7 +102,7 @@
     </div>
   </div>
 
-  <div id="profileScreen" class="hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100dvh; background: var(--bg); z-index: 1000; display: flex; flex-direction: column;">
+  <div id="profileScreen" class="hidden" style="position: fixed; top: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 500px; height: 100dvh; background: var(--bg); z-index: 1000; display: flex; flex-direction: column;">
     
     <div class="chat-header">
       <button class="back-btn" onclick="closeProfileScreen()"><i class='bx bx-left-arrow-alt'></i></button>
@@ -114,8 +114,10 @@
       <div class="profile-clean-card">
         <div style="display: flex; gap: 16px; align-items: center; margin-bottom: 20px;">
           <div class="profile-avatar-pro" id="profileAvatarDisplay" onclick="openAvatarModal()">👤</div>
-          <div style="flex: 1;">
+          
+          <div style="flex: 1; position: relative;">
             <input type="text" id="profileDisplayNameInput" class="profile-name-pro" placeholder="Display Name" maxlength="20">
+            <i class='bx bx-pencil' style="position: absolute; right: 0; top: 12px; color: var(--text-muted);"></i>
             <div class="profile-handle-pro" id="profileUsernameDisplay">@username</div>
           </div>
         </div>
@@ -136,8 +138,7 @@
 
       <h3 style="color: var(--text-muted); font-size: 13px; text-transform: uppercase; letter-spacing: 1px; margin-top: 24px; margin-bottom: 12px;"><i class='bx bx-calendar-star'></i> Events I'm Hosting</h3>
       
-      <div id="myProfileEvents" class="profile-events-scroll">
-        </div>
+      <div id="myProfileEvents" class="profile-events-scroll"></div>
       
       <button class="logoutBtn" onclick="logout()" style="width: 100%; margin-top: 24px; background: #fee2e2; color: var(--danger);"><i class='bx bx-log-out'></i> Logout</button>
     </div>
