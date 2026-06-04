@@ -37,22 +37,6 @@
     </div>
   </div>
 
-  <div id="usernameModal" class="modal-overlay hidden" style="z-index: 3000;">
-    <div class="modal-content" style="max-width: 320px;">
-      <div style="font-size: 40px; margin-bottom: 10px;">👋</div>
-      <h3 style="margin-top:0;">Pick a Username</h3>
-      <p style="font-size:13px; color: var(--text-muted); margin-bottom: 20px;">This will be your unique campus handle.</p>
-      
-      <div style="position: relative;">
-        <span style="position: absolute; left: 16px; top: 14px; color: var(--text-muted); font-weight: 700;">@</span>
-        <input id="newUsername" placeholder="username" style="padding-left: 36px;" oninput="checkUsernameAvailability()">
-      </div>
-      
-      <div id="usernameStatus" style="font-size: 12px; font-weight: 600; margin-top: -4px; margin-bottom: 16px; min-height: 16px;"></div>
-      <button id="claimBtn" onclick="claimUsername()" style="background: #cbd5e1; cursor: not-allowed;" disabled>Claim Handle</button>
-    </div>
-  </div>
-
   <div class="container hidden" id="home">
     
     <div id="eventsTab">
@@ -97,21 +81,7 @@
       <div id="chatList"></div>
     </div>
 
-    <nav class="bottom-nav">
-      <button class="nav-item active" onclick="showTab('events')">
-        <i class='bx bx-bolt-circle'></i><span>Live Now</span>
-      </button>
-      <button class="nav-item" onclick="showTab('recap')">
-        <i class='bx bx-history'></i><span>Recap</span>
-      </button>
-      <button class="nav-item" onclick="showTab('chats')" style="position: relative;">
-        <div id="chatBadge" class="nav-badge hidden"></div>
-        <i class='bx bx-message-rounded-dots'></i><span>Chats</span>
-      </button>
-    </nav>
-  </div>
-
-  <div id="chatScreen" class="hidden">
+  </div> <div id="chatScreen" class="hidden">
     <div class="chat-header">
       <button class="back-btn" onclick="closeChat()"><i class='bx bx-left-arrow-alt'></i></button>
       <div class="chat-avatar" id="chatHeaderAvatar" style="width: 36px; height: 36px; font-size: 14px;">?</div>
@@ -132,30 +102,64 @@
     </div>
   </div>
 
-  <div id="profileScreen" class="hidden">
-    <div class="chat-header">
-      <button class="back-btn" onclick="closeProfileScreen()"><i class='bx bx-left-arrow-alt'></i></button>
-      <div style="font-weight: 700; font-size: 18px;">My Profile</div>
-    </div>
-    
-    <div style="padding: 32px 20px; text-align: center;">
-      <div id="profileLargeAvatar" onclick="openProfileModal()" style="width: 110px; height: 110px; border-radius: 50%; margin: 0 auto 16px; font-size: 56px; display: flex; align-items: center; justify-content: center; background: #e2e8f0; border: 4px solid white; box-shadow: var(--shadow-sm); overflow: hidden; cursor: pointer; position: relative;">
+  <div id="profileScreen" class="container hidden">
+    <div class="profile-header-card">
+      <div class="profile-avatar-large" id="profileAvatarDisplay" onclick="openAvatarModal()">👨‍🎓</div>
+      
+      <input type="text" id="profileDisplayNameInput" class="profile-name-input" placeholder="Your Display Name..." maxlength="20">
+      
+      <div class="profile-username-label" id="profileUsernameDisplay">@username</div>
+      
+      <div class="profile-stats-row">
+        <div class="stat-box">
+          <span class="stat-num" id="statEventsJoined">0</span>
+          <span class="stat-label">Joined</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-num" id="statEventsHosted">0</span>
+          <span class="stat-label">Hosted</span>
+        </div>
       </div>
-      <div style="font-size: 12px; color: var(--primary); font-weight: 700; margin-top: -8px; margin-bottom: 16px; cursor: pointer;" onclick="openProfileModal()">EDIT AVATAR</div>
       
-      <h2 id="profileDisplayName" style="margin-bottom: 4px; font-size: 24px;">Name</h2>
-      <p id="profileUsername" style="color: var(--text-muted); font-weight: 600; font-size: 16px; margin-top: 0; margin-bottom: 24px;">@username</p>
-      
-      <button onclick="logout()" style="background: #fee2e2; color: var(--danger); width: auto; padding: 10px 32px; margin: 0 auto; border-radius: 20px;"><i class='bx bx-log-out'></i> Logout</button>
+      <button id="saveProfileBtn" class="save-profile-btn" onclick="saveProfileData()"><i class='bx bx-save'></i> Save Profile</button>
     </div>
+
+    <h3 style="margin-top: 24px; color: var(--text-muted); font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">Events I'm Hosting</h3>
+    <div id="myProfileEvents"></div>
     
-    <div style="padding: 0 16px; flex: 1; overflow-y: auto;">
-      <h3 style="font-size: 15px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">My Hosted Events</h3>
-      <div id="myProfileEvents"></div>
-    </div>
+    <button class="logoutBtn" onclick="logout()" style="width: 100%; margin-top: 24px; background: #fee2e2; color: var(--danger);"><i class='bx bx-log-out'></i> Logout</button>
   </div>
 
-</div> <div id="deleteModal" class="modal-overlay hidden">
+  <nav class="bottom-nav">
+    <button class="nav-item active" onclick="showTab('events')">
+      <i class='bx bx-bolt-circle'></i><span>Live Now</span>
+    </button>
+    <button class="nav-item" onclick="showTab('recap')">
+      <i class='bx bx-history'></i><span>Recap</span>
+    </button>
+    <button class="nav-item" onclick="showTab('chats')" style="position: relative;">
+      <div id="chatBadge" class="nav-badge hidden"></div>
+      <i class='bx bx-message-rounded-dots'></i><span>Chats</span>
+    </button>
+  </nav>
+
+</div> <div id="usernameModal" class="modal-overlay hidden" style="z-index: 3000;">
+  <div class="modal-content" style="max-width: 320px;">
+    <div style="font-size: 40px; margin-bottom: 10px;">👋</div>
+    <h3 style="margin-top:0;">Pick a Username</h3>
+    <p style="font-size:13px; color: var(--text-muted); margin-bottom: 20px;">This will be your unique campus handle.</p>
+    
+    <div style="position: relative;">
+      <span style="position: absolute; left: 16px; top: 14px; color: var(--text-muted); font-weight: 700;">@</span>
+      <input id="newUsername" placeholder="username" style="padding-left: 36px;" oninput="checkUsernameAvailability()">
+    </div>
+    
+    <div id="usernameStatus" style="font-size: 12px; font-weight: 600; margin-top: -4px; margin-bottom: 16px; min-height: 16px;"></div>
+    <button id="claimBtn" onclick="claimUsername()" style="background: #cbd5e1; cursor: not-allowed;" disabled>Claim Handle</button>
+  </div>
+</div>
+
+<div id="deleteModal" class="modal-overlay hidden">
   <div class="modal-content">
     <div style="font-size: 40px; color: var(--primary); margin-bottom: 10px;"><i class='bx bx-slider-alt'></i></div>
     <h3 style="margin-top:0; font-size: 20px;">Manage Live Event</h3>
