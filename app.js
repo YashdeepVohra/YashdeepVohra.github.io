@@ -44,6 +44,47 @@ function renderAvatar(avatarCode) {
 }
 
 // ==========================================
+// 🎵 SMART LINK PREVIEWS (Spotify, YouTube, Links)
+// ==========================================
+function formatMessage(text) {
+    // 1. Sanitize text to block hackers (XSS Security)
+    let safeText = text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+    // 2. The Magic Regex that finds ANY web link
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+
+    return safeText.replace(urlRegex, function(url) {
+        
+        // --- 🔴 YOUTUBE PREVIEW ---
+        if (url.includes("youtube.com/watch") || url.includes("youtu.be/")) {
+            let videoId = "";
+            if (url.includes("youtube.com/watch")) {
+                videoId = new URL(url).searchParams.get("v");
+            } else {
+                videoId = url.split("youtu.be/")[1]?.split("?")[0];
+            }
+            if (videoId) {
+                return `<br><div style="margin-top: 8px; border-radius: 12px; overflow: hidden; width: 100%; max-width: 280px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                            <iframe width="100%" height="160" src="https://www.youtube.com/embed/${videoId}" frameborder="0" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
+                        </div>`;
+            }
+        }
+        
+        // --- 🟢 SPOTIFY PREVIEW ---
+        if (url.includes("open.spotify.com/")) {
+            // Converts open.spotify.com/track/123 to the special embed URL
+            const embedUrl = url.split("?")[0].replace("open.spotify.com/", "open.spotify.com/embed/");
+            return `<br><div style="margin-top: 8px; max-width: 280px;">
+                        <iframe style="border-radius:12px" src="${embedUrl}" width="100%" height="152" frameborder="0" allowfullscreen="" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>
+                    </div>`;
+        }
+
+        // --- 🔵 NORMAL LINK PREVIEW ---
+        return `<a href="${url}" target="_blank" style="color: inherit; font-weight: 700; text-decoration: underline; word-break: break-all;">${url}</a>`;
+    });
+}
+
+// ==========================================
 // 🔔 IN-APP NOTIFICATION SYSTEM (CLEAN MOBILE)
 // ==========================================
 function showNotification(senderUsername, chatId) {
@@ -760,7 +801,7 @@ function loadMessages() {
                       ${nameTagHTML}
                       <div class="msg-bubble ${isMe ? 'msg-sent' : 'msg-received'} ${shape}">
                          ${replyBlock}
-                         ${m.text}
+                         ${formatMessage(m.text)}
                       </div>
                       <div class="msg-time" style="text-align: ${isMe ? 'right' : 'left'}">
                          ${formatTime(m.time)}
