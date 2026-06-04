@@ -458,6 +458,8 @@ function openChat(chatId, otherUser) {
   
   document.querySelector(".topbar")?.classList.add("hidden"); 
   switchScreen("chatScreen");
+
+  history.pushState({ modalOpen: true }, '', window.location.href);
   
   if(chatDocUnsubscribe) chatDocUnsubscribe();
   chatDocUnsubscribe = db.collection("chats").doc(chatId).onSnapshot(doc => {
@@ -911,6 +913,8 @@ function showTab(tab) {
 function openProfileScreen(targetUsername = null) {
     document.getElementById("home").classList.add("hidden");
     document.getElementById("profileScreen").classList.remove("hidden");
+
+    history.pushState({ screen: 'profile' }, '', window.location.href);
     
     // If no target provided, default to yourself
     currentProfileView = targetUsername || user; 
@@ -1191,3 +1195,15 @@ async function saveProfileData() {
 
 function openSettingsModal() { document.getElementById("settingsModal")?.classList.remove("hidden"); }
 function closeSettingsModal() { document.getElementById("settingsModal")?.classList.add("hidden"); }
+
+// ==========================================
+// 🛡️ STEALTH MODE NATIVE BACK BUTTON
+// ==========================================
+window.addEventListener('popstate', (event) => {
+    // If they swipe back, we check what is currently open and close it!
+    if (currentChat) {
+        closeChat();
+    } else if (currentProfileView && currentProfileView !== "") {
+        closeProfileScreen();
+    }
+});
