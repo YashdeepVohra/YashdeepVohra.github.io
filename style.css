@@ -301,11 +301,16 @@ input[type="datetime-local"] { width: 100%; max-width: 100%; padding: 14px 16px;
   border-radius: 10px; 
   margin-bottom: 6px; 
   color: var(--text-muted); 
+  border-left: 3px solid rgba(0, 0, 0, 0.2);
+  
+  /* 🔥 THE BUG FIX: Smart Line Clamping & Link Breaking */
   display: -webkit-box; 
-  -webkit-line-clamp: 1; 
+  -webkit-line-clamp: 2; /* Expanded to 2 lines for better previews */
   -webkit-box-orient: vertical; 
   overflow: hidden; 
-  border-left: 3px solid rgba(0, 0, 0, 0.2);
+  text-overflow: ellipsis;
+  word-break: break-word; /* Forces incredibly long links to wrap */
+  white-space: normal; /* Fixes paragraph stretching */
 }
 
 /* If the reply is inside a blue 'Sent' bubble, make it look white/glassy */
