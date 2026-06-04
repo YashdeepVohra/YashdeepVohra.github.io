@@ -102,27 +102,36 @@
     </div>
   </div>
 
-  <div id="profileScreen" class="hidden" style="position: fixed; top: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 500px; height: 100dvh; background: var(--bg); z-index: 1000; display: flex; flex-direction: column;">
+  <!-- ========================================== -->
+  <!-- PUBLIC PROFILE SCREEN -->
+  <!-- ========================================== -->
+  <div id="profileScreen" class="hidden profile-screen-wrapper">
     
-    <div class="chat-header">
-      <button class="back-btn" onclick="closeProfileScreen()"><i class='bx bx-left-arrow-alt'></i></button>
-      <div style="font-weight: 700; font-size: 18px; margin-left: 8px;">Profile</div>
+    <div class="chat-header profile-header-layout">
+      <div class="header-left">
+        <button class="back-btn" onclick="closeProfileScreen()"><i class='bx bx-left-arrow-alt'></i></button>
+        <div class="header-title">Profile</div>
+      </div>
+      <!-- 🔥 The Settings Gear -->
+      <button id="profileSettingsBtn" class="hidden settings-gear-btn" onclick="openSettingsModal()">
+        <i class='bx bx-cog'></i>
+      </button>
     </div>
     
-    <div style="flex: 1; overflow-y: auto; padding: 20px 16px;">
+    <div class="profile-scroll-body">
       
+      <!-- The Clean, Public Profile Card -->
       <div class="profile-clean-card">
-        <div style="display: flex; gap: 16px; align-items: center; margin-bottom: 20px;">
-          <div class="profile-avatar-pro" id="profileAvatarDisplay" onclick="openAvatarModal()">👤</div>
+        <div class="profile-card-header">
+          <div class="profile-avatar-pro" id="profileAvatarDisplay" style="cursor: default;">👤</div>
           
-          <div style="flex: 1; position: relative;">
-            <input type="text" id="profileDisplayNameInput" class="profile-name-pro" placeholder="Display Name" maxlength="20">
-            <i class='bx bx-pencil' style="position: absolute; right: 0; top: 12px; color: var(--text-muted);"></i>
+          <div class="profile-name-group">
+            <div id="profileDisplayNameDisplay" class="profile-name-pro read-only-name">Display Name</div>
             <div class="profile-handle-pro" id="profileUsernameDisplay">@username</div>
           </div>
         </div>
         
-        <div class="profile-stats-pro">
+        <div class="profile-stats-pro no-margin-bottom">
           <div class="stat-box-pro">
             <span class="stat-num" id="statEventsJoined">0</span>
             <span class="stat-label">Joined</span>
@@ -132,15 +141,35 @@
             <span class="stat-label">Hosted</span>
           </div>
         </div>
-        
-        <button id="saveProfileBtn" class="save-profile-btn" onclick="saveProfileData()"><i class='bx bx-save'></i> Save Changes</button>
       </div>
 
-      <h3 style="color: var(--text-muted); font-size: 13px; text-transform: uppercase; letter-spacing: 1px; margin-top: 24px; margin-bottom: 12px;"><i class='bx bx-calendar-star'></i> Events I'm Hosting</h3>
-      
+      <h3 class="hosted-events-title"><i class='bx bx-calendar-star'></i> Hosted Events</h3>
       <div id="myProfileEvents" class="profile-events-scroll"></div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- THE SETTINGS MODAL -->
+  <!-- ========================================== -->
+  <div id="settingsModal" class="modal-overlay hidden settings-modal-overlay">
+    <div class="modal-content settings-modal-content">
       
-      <button class="logoutBtn" onclick="logout()" style="width: 100%; margin-top: 24px; background: #fee2e2; color: var(--danger);"><i class='bx bx-log-out'></i> Logout</button>
+      <div class="modal-header">
+        <h3 class="modal-title">Edit Profile</h3>
+        <button onclick="closeSettingsModal()" class="close-modal-btn"><i class='bx bx-x'></i></button>
+      </div>
+
+      <label class="settings-label">Change Avatar</label>
+      <button onclick="openAvatarModal()" class="change-avatar-btn"><i class='bx bx-image-alt'></i> Choose New Avatar</button>
+
+      <label class="settings-label">Display Name</label>
+      <input type="text" id="editDisplayNameInput" placeholder="New Display Name" maxlength="20" class="settings-input">
+
+      <button id="saveProfileBtn" onclick="saveProfileData()" class="save-settings-btn"><i class='bx bx-save'></i> Save Changes</button>
+      
+      <hr class="settings-divider">
+      
+      <button class="logoutBtn logout-settings-btn" onclick="logout()"><i class='bx bx-log-out'></i> Logout</button>
     </div>
   </div>
 
