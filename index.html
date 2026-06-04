@@ -83,7 +83,7 @@
 
   </div> <div id="chatScreen" class="hidden">
     <div class="chat-header">
-      <button class="back-btn" onclick="closeChat()"><i class='bx bx-left-arrow-alt'></i></button>
+      <button class="back-btn" onclick="history.back()"><i class='bx bx-left-arrow-alt'></i></button>
       <div class="chat-avatar" id="chatHeaderAvatar" style="width: 36px; height: 36px; font-size: 14px;">?</div>
       <div id="chatWithTitle" style="font-weight: 700; font-size: 18px;">User</div>
     </div>
@@ -108,7 +108,7 @@
     
     <div class="chat-header profile-header-layout">
       <div class="header-left">
-        <button class="back-btn" onclick="closeProfileScreen()"><i class='bx bx-left-arrow-alt'></i></button>
+        <button class="back-btn" onclick="history.back()"><i class='bx bx-left-arrow-alt'></i></button>
         <div class="header-title">Profile</div>
       </div>
       <button id="profileSettingsBtn" class="hidden settings-gear-btn" onclick="openSettingsModal()">
