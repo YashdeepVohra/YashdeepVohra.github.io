@@ -1076,6 +1076,15 @@ async function loadProfileUI(targetUser) {
     const settingsGear = document.getElementById("profileSettingsBtn");
     const editInput = document.getElementById("editDisplayNameInput"); 
     
+    // 🔥 BUG 1 FIX: Instantly wipe the old stats and events so you don't see the previous person's data!
+    const statJoined = document.getElementById("statEventsJoined");
+    const statHosted = document.getElementById("statEventsHosted");
+    const eventsList = document.getElementById("myProfileEvents");
+    
+    if (statJoined) statJoined.innerText = "-";
+    if (statHosted) statHosted.innerText = "-";
+    if (eventsList) eventsList.innerHTML = `<div style="text-align:center; padding:20px; color:var(--text-muted); font-size: 13px;"><i class='bx bx-loader-alt bx-spin'></i> Loading...</div>`;
+    
     // 🧠 INSTANT LOAD: Check Dictionary First!
     let cachedUser = userCache[targetUser];
     
@@ -1113,12 +1122,10 @@ async function loadProfileUI(targetUser) {
         }
         
         db.collection("events").where("user", "==", targetUser).get().then(snap => {
-            const hostEl = document.getElementById("statEventsHosted");
-            if(hostEl) hostEl.innerText = snap.size || 0;
+            if(statHosted) statHosted.innerText = snap.size || 0;
         });
         db.collection("events").where("participants", "array-contains", targetUser).get().then(snap => {
-            const joinEl = document.getElementById("statEventsJoined");
-            if(joinEl) joinEl.innerText = snap.size || 0;
+            if(statJoined) statJoined.innerText = snap.size || 0;
         });
 
         loadUserEvents(targetUser);
