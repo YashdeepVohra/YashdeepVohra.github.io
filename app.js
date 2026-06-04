@@ -30,6 +30,7 @@ let currentLiveFilter = 'All', currentRecapFilter = 'All';
 let currentEventData = null;
 let userDisplayName = ""; // Holds the user's custom name in memory
 let currentProfileView = "";
+let userCache = {}; // 🧠 The Smart Cache Dictionary
 
 function renderAvatar(avatarCode) {
   if (!avatarCode) return "👤";
@@ -413,10 +414,30 @@ function openChat(chatId, otherUser) {
   
   const hAvatar = document.getElementById("chatHeaderAvatar"); 
   const hTitle = document.getElementById("chatWithTitle");
-  if(hAvatar) hAvatar.innerText = otherUser.charAt(0).toUpperCase(); 
-  if(hTitle) hTitle.innerText = otherUser;
   
-  document.querySelector(".topbar")?.classList.add("hidden"); switchScreen("chatScreen");
+  // Set defaults instantly to prevent lag
+  if(hAvatar) hAvatar.innerHTML = renderAvatar("👤"); 
+  if(hTitle) hTitle.innerText = `@${otherUser}`;
+  
+  // 🧠 THE CACHE UPGRADE: Fetch their real profile for the header
+  db.collection("users").doc(otherUser).get().then(doc => {
+      if (doc.exists) {
+          const d = doc.data();
+          // Memorize them in the cache!
+          userCache[otherUser] = d; 
+          if(hAvatar) hAvatar.innerHTML = renderAvatar(d.avatar || "👤");
+          if(hTitle) hTitle.innerText = d.displayName || otherUser;
+          
+          // Make the header clickable to view their profile!
+          hAvatar.style.cursor = "pointer";
+          hAvatar.onclick = () => openProfileScreen(otherUser);
+          hTitle.style.cursor = "pointer";
+          hTitle.onclick = () => openProfileScreen(otherUser);
+      }
+  });
+  
+  document.querySelector(".topbar")?.classList.add("hidden"); 
+  switchScreen("chatScreen");
   
   if(chatDocUnsubscribe) chatDocUnsubscribe();
   chatDocUnsubscribe = db.collection("chats").doc(chatId).onSnapshot(doc => {
@@ -425,10 +446,9 @@ function openChat(chatId, otherUser) {
          currentChatStatus = currentChatData.status || "unlocked"; 
          currentChatInitiator = currentChatData.initiatedBy || ""; 
          
-         // 🔥 THE FIX: ONLY wipe the unread tag if the message was actually unread by YOU
          if (currentChatData.unreadBy === user) {
              db.collection("chats").doc(chatId).set({ unreadBy: "" }, { merge: true });
-             currentChatData.unreadBy = ""; // Instantly update locally so UI doesn't lag
+             currentChatData.unreadBy = ""; 
          }
          
          updateReadReceipts();
@@ -652,9 +672,26 @@ function loadMessages() {
   
   if (!box.dataset.hasScrollListener) { box.addEventListener("scroll", handleChatScroll); box.dataset.hasScrollListener = "true"; }
   
-  messagesUnsubscribe = db.collection("messages").where("chatId", "==", currentChat).onSnapshot(snapshot => {
+  // Notice the 'async' added here!
+  messagesUnsubscribe = db.collection("messages").where("chatId", "==", currentChat).onSnapshot(async (snapshot) => {
       let lastDateString = ""; myMessageCount = 0; let theirMessageCount = 0;
       let msgs = []; snapshot.forEach(doc => msgs.push(doc.data())); msgs.sort((a, b) => a.time - b.time); 
+      
+      // ==========================================
+      // 🧠 THE SMART CACHE DICTIONARY ENGINE
+      // ==========================================
+      // 1. Find all unique usernames in this chat
+      const uniqueSenders = [...new Set(msgs.map(m => m.sender))];
+      
+      // 2. Fetch missing profiles from Firebase (Costs max 1 read per unique person!)
+      for (let s of uniqueSenders) {
+          if (!userCache[s]) {
+              const doc = await db.collection("users").doc(s).get();
+              userCache[s] = doc.exists ? doc.data() : { displayName: s, avatar: "👤" };
+          }
+      }
+      // ==========================================
+
       let newHTML = "";
 
       msgs.forEach((m, i) => {
@@ -676,7 +713,8 @@ function loadMessages() {
         
         let replyBlock = "";
         if (m.replyTo) {
-            const replyName = m.replyTo.sender === user ? "You" : m.replyTo.sender;
+            // Grab the display name from the cache for the reply block!
+            const replyName = m.replyTo.sender === user ? "You" : (userCache[m.replyTo.sender]?.displayName || m.replyTo.sender);
             const timeData = m.replyTo.time ? `data-target-time="${m.replyTo.time}"` : "";
             replyBlock = `<div class="msg-replied-to" ${timeData}><b>${replyName}:</b> ${m.replyTo.text}</div>`;
         }
@@ -685,14 +723,15 @@ function loadMessages() {
             ? `<div class="swipe-reply-icon right"><i class='bx bx-reply' style="transform: scaleX(-1);"></i></div>` 
             : `<div class="swipe-reply-icon left"><i class='bx bx-reply'></i></div>`;
 
-        // 🔥 THE UPGRADE: Sender Name Tags for Event Chats!
         let nameTagHTML = "";
-        // Only show the name if it's an Event Chat, it's not you, and it's the first message in their "block"
+        
+        // 🔥 THE CLICKABLE NAME TAG (Uses Cache!)
         if (currentChatType === "event" && !isMe && !isSamePrev) {
-            nameTagHTML = `<div style="font-size: 11px; font-weight: 700; color: var(--text-muted); margin-left: 14px; margin-bottom: 2px;">@${m.sender}</div>`;
+            const senderDisplayName = userCache[m.sender]?.displayName || m.sender;
+            // event.stopPropagation() prevents the chat timestamp from opening when you click their name!
+            nameTagHTML = `<div style="font-size: 11px; font-weight: 700; color: var(--text-muted); margin-left: 14px; margin-bottom: 2px; cursor: pointer; display: inline-block;" onclick="event.stopPropagation(); openProfileScreen('${m.sender}')">${senderDisplayName}</div>`;
         }
             
-        // 🔥 THE FIX: Restored your message wrapper that was accidentally deleted
         newHTML += `<div id="msg-${m.time}" class="msg-wrapper" data-sender="${m.sender}" data-time="${m.time}" data-text="${encodedText}" style="align-items: ${isMe ? 'flex-end' : 'flex-start'};" onclick="handleMessageTap(event, this, '${m.sender}', '${encodedText}', ${m.time})">
                       ${swipeIconHTML}
                       ${nameTagHTML}
@@ -705,14 +744,12 @@ function loadMessages() {
                       </div>
                     </div>`;
         
-        // 🔥 THE FIX: "Sent/Read" text will ONLY show up in Direct Chats now
         if (i === msgs.length - 1 && isMe && currentChatType === "direct") {
             let statusHtml = (currentChatData && currentChatData.unreadBy === "") ? `Read <i class='bx bx-check-double' style="color: var(--primary);"></i>` : `Sent <i class='bx bx-check'></i>`;
             newHTML += `<div class="msg-status" id="readReceipt">${statusHtml}</div>`; 
         }
       });
       
-      // 🔥 THE FIX: Typing bubble safely placed OUTSIDE the message loop
       newHTML += `<div id="typingBubble" class="typing-indicator hidden" style="align-items: center; margin-top: 8px;">
                     <span id="typingName" style="font-size: 12px; font-weight: 700; color: var(--primary); margin-right: 8px;"></span>
                     <div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>
