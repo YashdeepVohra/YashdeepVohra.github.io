@@ -33,7 +33,12 @@ let currentProfileView = "";
 
 function renderAvatar(avatarCode) {
   if (!avatarCode) return "👤";
-  if (typeof avatarCode === 'string' && avatarCode.startsWith("http")) return `<img src="${avatarCode}" style="width:100%; height:100%; border-radius:50%; object-fit:cover;">`;
+  
+  // 🔥 THE FIX: Added referrerpolicy="no-referrer" so Google doesn't block the image!
+  if (typeof avatarCode === 'string' && avatarCode.startsWith("http")) {
+    return `<img src="${avatarCode}" referrerpolicy="no-referrer" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block;">`;
+  }
+  
   return avatarCode;
 }
 
@@ -1030,7 +1035,7 @@ async function loadProfileUI(targetUser) {
             const data = userDoc.data();
             
             // 🔥 BUG 1 FIX: Safely render their fetched avatar
-            if (avatarEl) avatarEl.innerHTML = renderAvatar(data.avatar || "👤");
+            if (avatarEl) avatarEl.innerHTML = renderAvatar(data.avatar || (targetUser === user ? userAvatar : null) || "👤");
             
             if (nameDisplay) nameDisplay.innerText = data.displayName || targetUser;
 
