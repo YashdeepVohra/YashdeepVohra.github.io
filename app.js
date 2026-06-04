@@ -229,9 +229,10 @@ function initializeUserApp(userData) {
   const topAvatarEl = document.getElementById("topAvatar");
   if(topAvatarEl) { topAvatarEl.innerHTML = renderAvatar(userAvatar); topAvatarEl.classList.remove("hidden"); }
   
-  // 🔥 THE FIX: Sync your private avatar to your public username document!
+  // 🔥 SECURITY FIX: Sync your private avatar AND your digital UID stamp!
   db.collection("users").doc(user).set({
-      avatar: userAvatar
+      avatar: userAvatar,
+      uid: auth.currentUser.uid
   }, { merge: true });
   
   switchScreen("home"); 
@@ -299,7 +300,21 @@ function addEvent() {
   const startTimestamp = new Date(startTimeStr).getTime(); const endTimestamp = new Date(endTimeStr).getTime();
   if (endTimestamp <= startTimestamp) return alert("Your event end time must be AFTER the start time.");
   if (endTimestamp < Date.now()) return alert("You cannot schedule an event to end in the past.");
-  db.collection("events").add({ title, place, description, tag: currentSelectedTag, user, hostAvatar: userAvatar, startTime: startTimestamp, expiresAt: endTimestamp, participants: [user] });
+  
+  // 🔥 SECURITY FIX: Stamped with auth.currentUser.uid
+  db.collection("events").add({ 
+      title, 
+      place, 
+      description, 
+      tag: currentSelectedTag, 
+      user, 
+      hostAvatar: userAvatar, 
+      startTime: startTimestamp, 
+      expiresAt: endTimestamp, 
+      participants: [user],
+      uid: auth.currentUser.uid 
+  });
+  
   if(document.getElementById("title")) document.getElementById("title").value = ""; if(document.getElementById("place")) document.getElementById("place").value = ""; if(document.getElementById("description")) document.getElementById("description").value = ""; closeCreateModal();
 }
 
@@ -485,7 +500,8 @@ async function sendMessage() {
       sender: user, 
       text: text, 
       time: Date.now(), 
-      replyTo: replyData 
+      replyTo: replyData,
+      uid: auth.currentUser.uid // 🔥 SECURITY FIX: Un-fakeable ID stamp
   });
 
   // 3. Route the background updates (Typing indicators & Read Receipts)
@@ -1144,7 +1160,12 @@ async function saveProfileData() {
     btn.disabled = true;
 
     try {
-        await db.collection("users").doc(user).set({ displayName: newName, updatedAt: Date.now() }, { merge: true });
+        // 🔥 SECURITY FIX: Stamping the UID so the database knows you own this profile
+        await db.collection("users").doc(user).set({ 
+            displayName: newName, 
+            updatedAt: Date.now(),
+            uid: auth.currentUser.uid
+        }, { merge: true });
         
         userDisplayName = newName; // Update local memory
         
