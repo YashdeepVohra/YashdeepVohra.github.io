@@ -28,6 +28,7 @@ let messagesUnsubscribe = null, eventIdToManage = null;
 let currentSelectedTag = '☕ Chill', googlePfp = "", realName = "";
 let currentLiveFilter = 'All', currentRecapFilter = 'All';
 let currentEventData = null;
+let userDisplayName = ""; // Holds the user's custom name in memory
 
 function renderAvatar(avatarCode) {
   if (!avatarCode) return "👤";
@@ -982,4 +983,76 @@ function openEventChat(eventId, eventTitle) {
   
   updateChatFooterUI();
   loadMessages();
+}
+
+// Call this function whenever you switch to the Profile screen
+async function loadProfileUI() {
+    const avatarEl = document.getElementById("profileAvatarDisplay");
+    const nameInput = document.getElementById("profileDisplayNameInput");
+    const usernameDisplay = document.getElementById("profileUsernameDisplay");
+    
+    // Set basic UI
+    if (avatarEl) avatarEl.innerText = renderAvatar(userAvatar);
+    if (usernameDisplay) usernameDisplay.innerText = `@${user}`;
+    
+    // Fetch their saved Display Name from the 'users' database
+    try {
+        const userDoc = await db.collection("users").doc(user).get();
+        if (userDoc.exists) {
+            const data = userDoc.data();
+            userDisplayName = data.displayName || user; // Fallback to username if no display name
+            nameInput.value = userDisplayName;
+            
+            // Optional: You can load their stats here too!
+            document.getElementById("statEventsHosted").innerText = data.hostedCount || 0;
+            document.getElementById("statEventsJoined").innerText = data.joinedCount || 0;
+        } else {
+            nameInput.value = user; // Default to username
+        }
+    } catch(e) {
+        console.error("Error loading profile data:", e);
+    }
+}
+
+// Function triggered by the "Save Profile" button
+async function saveProfileData() {
+    const nameInput = document.getElementById("profileDisplayNameInput");
+    const btn = document.getElementById("saveProfileBtn");
+    
+    const newName = nameInput.value.trim();
+    if (!newName) {
+        alert("Your Display Name cannot be empty!");
+        return;
+    }
+
+    // Button loading state
+    const originalText = btn.innerHTML;
+    btn.innerHTML = `<i class='bx bx-loader-alt bx-spin'></i> Saving...`;
+    btn.disabled = true;
+
+    try {
+        // Save to Firebase 'users' collection
+        await db.collection("users").doc(user).set({
+            displayName: newName,
+            updatedAt: Date.now()
+        }, { merge: true }); // Merge true ensures we don't overwrite their stats/avatar!
+
+        userDisplayName = newName; // Update local memory
+        
+        // Success State
+        btn.style.background = "var(--success)";
+        btn.innerHTML = `<i class='bx bx-check'></i> Saved!`;
+        
+        setTimeout(() => {
+            btn.style.background = "var(--text)";
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }, 2000);
+
+    } catch (e) {
+        console.error("Error saving profile:", e);
+        alert("Failed to save profile. Please check your connection.");
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
 }
