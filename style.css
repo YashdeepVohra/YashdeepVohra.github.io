@@ -296,7 +296,8 @@ input[type="datetime-local"] { width: 100%; max-width: 100%; padding: 14px 16px;
 /* The quoted message sitting inside the new bubble */
 .msg-replied-to { 
   font-size: 12px;
-  line-height: 1.4; 
+  line-height: 16px; /* 🔥 THE FIX: Locks each line to exactly 16 pixels */
+  max-height: 44px; 
   background: rgba(0, 0, 0, 0.06); 
   padding: 6px 10px; 
   border-radius: 10px; 
