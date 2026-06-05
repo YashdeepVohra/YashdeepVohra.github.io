@@ -48,12 +48,12 @@ function renderAvatar(avatarCode) {
 // ==========================================
 function formatMessage(text, isMediaOnly = false) {
     // 1. Sanitize text to block hackers
-    let safeText = text.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    let safeText = text.replace(/</g, "<").replace(/>/g, ">");
     const urlRegex = /(https?:\/\/[^\s]+)/g;
 
     return safeText.replace(urlRegex, function(url) {
         
-        // --- 🔴 YOUTUBE PREVIEW ---
+        // --- 🔴 YOUTUBE PREVIEW (With Skeleton Loader) ---
         if (url.includes("youtube.com/watch") || url.includes("youtu.be/")) {
             let videoId = "";
             if (url.includes("youtube.com/watch")) videoId = new URL(url).searchParams.get("v");
@@ -61,19 +61,27 @@ function formatMessage(text, isMediaOnly = false) {
             
             if (videoId) {
                 const margin = isMediaOnly ? "0" : "8px";
-                return `${isMediaOnly ? "" : "<br>"}<div style="margin-top: ${margin}; border-radius: 16px; overflow: hidden; width: 100%; max-width: 280px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
-                            <iframe width="100%" height="160" src="https://www.youtube.com/embed/${videoId}" frameborder="0" style="display: block;" allowfullscreen></iframe>
+                return `${isMediaOnly ? "" : "<br>"}
+                        <div style="margin-top: ${margin}; width: 100%; max-width: 280px; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.15); background: #18181b; position: relative; min-height: 160px;">
+                            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #ff0000; font-size: 36px; z-index: 1;">
+                                <i class='bx bxl-youtube bx-flashing'></i>
+                            </div>
+                            <iframe width="100%" height="160" src="https://www.youtube.com/embed/${videoId}" frameborder="0" style="display: block; position: relative; z-index: 2;" allowfullscreen></iframe>
                         </div>`;
             }
         }
         
-        // --- 🟢 SPOTIFY PREVIEW ---
-        if (url.includes("spotify.com/track") || url.includes("spotify.com/playlist") || url.includes("spotify.com/album")) {
+        // --- 🟢 SPOTIFY PREVIEW (With Skeleton Loader) ---
+        if (url.includes("open.spotify.com/track") || url.includes("open.spotify.com/playlist") || url.includes("open.spotify.com/album")) {
             // Converts standard Spotify link directly to an embed link!
-            const embedUrl = url.split("?")[0].replace("spotify.com/", "spotify.com/embed/");
+            const embedUrl = url.split("?")[0].replace("open.spotify.com", "open.spotify.com/embed");
             const margin = isMediaOnly ? "0" : "8px";
-            return `${isMediaOnly ? "" : "<br>"}<div style="margin-top: ${margin}; width: 100%; max-width: 280px; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
-                        <iframe src="${embedUrl}" width="100%" height="152" frameborder="0" style="display: block;" allowfullscreen="" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>
+            return `${isMediaOnly ? "" : "<br>"}
+                    <div style="margin-top: ${margin}; width: 100%; max-width: 280px; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.15); background: #121212; position: relative; min-height: 152px;">
+                        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #1ed760; font-size: 32px; z-index: 1;">
+                            <i class='bx bxl-spotify bx-flashing'></i>
+                        </div>
+                        <iframe src="${embedUrl}" width="100%" height="152" frameborder="0" style="display: block; position: relative; z-index: 2;" allowfullscreen="" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>
                     </div>`;
         }
 
