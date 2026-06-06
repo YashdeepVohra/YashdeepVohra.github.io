@@ -434,7 +434,8 @@ function loadEvents() {
       const hypeIcon = hasHyped ? "bxs-hot" : "bx-hot";
       const hypeHTML = `<button class="${hypeClass}" onclick="toggleHype('${id}', ${hasHyped})"><i class='bx ${hypeIcon}'></i> ${hypeCount > 0 ? hypeCount : 'Hype'}</button>`;
       
-      const displayTag = e.tag ? `<div class="event-tag-badge">${e.tag}</div>` : '';
+      // 🔥 THE FIX: Added style="margin-bottom: 0;" to perfectly align the tag!
+      const displayTag = e.tag ? `<div class="event-tag-badge" style="margin-bottom: 0;">${e.tag}</div>` : '';
       const displayDesc = e.description ? `<button class="read-more-btn" onclick="toggleEventDesc('${id}')">Read details...</button><div class="event-desc-box">${e.description}</div>` : '';
       let statusBadge = (currentTime < e.startTime) ? `<span style="background: #fef08a; color: #854d0e; padding: 4px 8px; border-radius: 12px; font-size: 10px; font-weight: 800; text-transform: uppercase;">Upcoming</span>` : `<span style="background: #fee2e2; color: #dc2626; padding: 4px 8px; border-radius: 12px; font-size: 10px; font-weight: 800; text-transform: uppercase;"><i class='bx bx-radio-circle-marked bx-burst'></i> Live</span>`;
       const avatarHTML = `<div style="display:inline-block; width:24px; height:24px; border-radius:50%; vertical-align:middle; overflow:hidden; border:1px solid var(--border); margin-right:4px;">${renderAvatar(e.hostAvatar)}</div>`;
@@ -447,8 +448,8 @@ function loadEvents() {
           liveList.innerHTML += `
             <div class="event card" id="event-${id}">
               
-              <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                <div style="display: flex; gap: 8px; align-items: flex-start;">${displayTag} ${statusBadge}</div>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <div style="display: flex; gap: 8px; align-items: center;">${displayTag} ${statusBadge}</div>
                 ${hypeHTML}
               </div>
               
@@ -481,8 +482,8 @@ function loadEvents() {
           recapCount++;
           recapList.innerHTML += `
             <div class="event card" style="background: #f9fafb; border: none; box-shadow: none;">
-              <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                <div style="display: flex; gap: 8px;">${displayTag}</div>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <div style="display: flex; gap: 8px; align-items: center;">${displayTag}</div>
                 ${hypeHTML}
               </div>
               <div class="event-title" style="color: #4b5563;">${e.title}</div>
