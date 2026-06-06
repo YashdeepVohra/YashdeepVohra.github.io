@@ -379,3 +379,42 @@ input[type="datetime-local"] { width: 100%; max-width: 100%; padding: 14px 16px;
 #loading-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 9999; }
 .spinner { border: 4px solid rgba(99, 102, 241, 0.2); border-top: 4px solid var(--primary); border-radius: 50%; width: 48px; height: 48px; animation: spin 1s linear infinite; }
 @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+/* ==========================================
+   🔥 QUICK FIXES: UI & BUTTONS
+   ========================================== */
+
+/* 1. Stop the Nav Bar from stealing button styles */
+.bottom-nav .nav-item {
+    background: transparent !important;
+    box-shadow: none !important;
+    padding: 6px 0 !important;
+    border-radius: 0 !important;
+}
+
+/* 2. Restore colors and spacing to Event Action Buttons */
+.delete-btn { 
+    background: #fee2e2 !important; 
+    color: var(--danger) !important; 
+    box-shadow: none !important; 
+}
+.delete-btn:hover { 
+    background: #fca5a5 !important; 
+}
+
+.join { 
+    background: var(--primary-gradient) !important; 
+    color: white !important; 
+}
+
+.leave-btn { 
+    background: #f1f5f9 !important; 
+    color: var(--text-muted) !important; 
+    box-shadow: none !important; 
+    border: 1px solid var(--border) !important; 
+}
+.leave-btn:hover { 
+    background: #fee2e2 !important; 
+    color: var(--danger) !important; 
+    border-color: #fca5a5 !important; 
+}
