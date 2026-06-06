@@ -1377,47 +1377,81 @@ async function loadProfileUI(targetUser) {
 }
 
 // Function triggered by the "Save Profile" button
-async function saveProfileData() {
-    const nameInput = document.getElementById("editDisplayNameInput");
-    const btn = document.getElementById("saveProfileBtn");
-    const newName = nameInput.value.trim();
-    if (!newName) return alert("Display Name cannot be empty!");
+function saveProfileData() {
+    const newName = document.getElementById("editDisplayNameInput").value.trim();
+    const saveBtn = document.getElementById("saveProfileBtn");
+    
+    if (!newName) return alert("Display name cannot be empty.");
+    
+    // Lock the button
+    saveBtn.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Saving...";
+    saveBtn.disabled = true;
 
-    const originalText = btn.innerHTML;
-    btn.innerHTML = `<i class='bx bx-loader-alt bx-spin'></i> Saving...`;
-    btn.disabled = true;
+    db.collection("users").doc(user).update({
+        displayName: newName,
+        avatar: pendingSettingsAvatar // Save the new avatar!
+    }).then(() => {
+        // Optimistic UI Update: Change it on the screen instantly
+        userAvatar = pendingSettingsAvatar;
+        document.getElementById("profileDisplayNameDisplay").innerText = newName;
+        
+        const avatarDisplay = document.getElementById("profileAvatarDisplay");
+        if(avatarDisplay) {
+            avatarDisplay.innerHTML = pendingSettingsAvatar.startsWith('http') 
+                ? `<img src="${pendingSettingsAvatar}" alt="avatar" style="width:100%; height:100%; object-fit:cover;">` 
+                : pendingSettingsAvatar;
+        }
 
-    try {
-        // 🔥 SECURITY FIX: Stamping the UID so the database knows you own this profile
-        await db.collection("users").doc(user).set({ 
-            displayName: newName, 
-            updatedAt: Date.now(),
-            uid: auth.currentUser.uid
-        }, { merge: true });
-        
-        userDisplayName = newName; // Update local memory
-        
-        // Instantly update the public card behind the modal
-        const displayEl = document.getElementById("profileDisplayNameDisplay");
-        if (displayEl) displayEl.innerText = newName;
-        
-        btn.style.background = "var(--success)";
-        btn.innerHTML = `<i class='bx bx-check'></i> Saved!`;
-        
-        setTimeout(() => {
-            btn.style.background = "var(--primary)";
-            btn.innerHTML = originalText;
-            btn.disabled = false;
-            closeSettingsScreen(); // Auto-close the modal!
-        }, 800);
-
-    } catch (e) {
-        alert("Failed to save profile. Please check your connection.");
-        btn.innerHTML = originalText; btn.disabled = false;
-    }
+        // Close and unlock
+        closeSettingsScreen();
+        saveBtn.innerHTML = "Save Changes";
+        saveBtn.disabled = false;
+    }).catch(err => {
+        console.error(err);
+        alert("Failed to save changes. Check your connection.");
+        saveBtn.innerHTML = "Save Changes";
+        saveBtn.disabled = false;
+    });
 }
 
-function openSettingsScreen() { document.getElementById("settingsScreen")?.classList.remove("hidden"); }
+let pendingSettingsAvatar = null;
+
+function openSettingsScreen() { 
+    document.getElementById("settingsScreen")?.classList.remove("hidden");
+    
+    // 1. Pre-fill the name input
+    const nameInput = document.getElementById("editDisplayNameInput");
+    if(nameInput) nameInput.value = document.getElementById("profileDisplayNameDisplay").innerText;
+
+    // 2. Set the pending avatar to their current one
+    pendingSettingsAvatar = userAvatar; 
+    
+    // 3. Visually highlight their current emoji (if they have one)
+    document.querySelectorAll('#settingsAvatarGrid .avatar-option').forEach(el => {
+        el.classList.remove('selected');
+        if (el.innerText === userAvatar) el.classList.add('selected');
+    });
+}
+
+// 🔥 THE FIX: Bulletproof selection logic
+function selectSettingsAvatar(element, avatarChoice) {
+    // Remove the blue highlight from all emojis
+    document.querySelectorAll('#settingsAvatarGrid .avatar-option').forEach(el => el.classList.remove('selected'));
+    
+    if (avatarChoice === 'google') {
+        // Grab the actual URL from their Google login, not the word "google"!
+        pendingSettingsAvatar = auth.currentUser.photoURL;
+        
+        // Show a quick visual success message on the button
+        const originalText = element.innerHTML;
+        element.innerHTML = "<i class='bx bx-check'></i> Selected!";
+        setTimeout(() => element.innerHTML = originalText, 1500);
+    } else {
+        // Set it to the emoji and highlight the box
+        pendingSettingsAvatar = avatarChoice;
+        element.classList.add('selected');
+    }
+}
 function closeSettingsScreen() { document.getElementById("settingsScreen")?.classList.add("hidden"); }
 
 // ==========================================
