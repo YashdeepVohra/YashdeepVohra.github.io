@@ -184,15 +184,14 @@ function handleMessageTap(event, element, sender, encodedText, time) {
 function switchScreen(screenId) {
   document.getElementById("login")?.classList.add("hidden");
   document.getElementById("home")?.classList.add("hidden");
-  document.getElementById("usernameModal")?.classList.add("hidden");
+  document.getElementById("usernameScreen")?.classList.add("hidden"); // Updated ID
   document.getElementById("profileScreen")?.classList.add("hidden");
   document.getElementById("chatScreen")?.classList.add("hidden");
   if (screenId) document.getElementById(screenId)?.classList.remove("hidden");
 
-  // 🔥 BUG 1 FIX: Hide the bottom navigation bar on login/username screens!
   const bottomNav = document.querySelector(".bottom-nav");
   if (bottomNav) {
-      if (screenId === "login" || screenId === "usernameModal" || !screenId) {
+      if (screenId === "login" || screenId === "usernameScreen" || !screenId) {
           bottomNav.classList.add("hidden");
       } else {
           bottomNav.classList.remove("hidden");
@@ -259,7 +258,7 @@ auth.onAuthStateChanged(async (userAuth) => {
 
       if (!doc.data().username) {
         document.getElementById("topAvatar")?.classList.add("hidden");
-        switchScreen("usernameModal"); 
+        switchScreen("usernameScreen"); 
         document.getElementById("loading-screen")?.classList.add("hidden");
         return; 
       }
@@ -353,8 +352,15 @@ function selectTag(element, tag) { document.querySelectorAll('#tagSelector .tag'
 function setLiveFilter(element, tag) { currentLiveFilter = tag; document.querySelectorAll('#liveFilters .filter-pill').forEach(pill => pill.classList.remove('active')); element.classList.add('active'); loadEvents(); }
 function setRecapFilter(element, tag) { currentRecapFilter = tag; document.querySelectorAll('#recapFilters .filter-pill').forEach(pill => pill.classList.remove('active')); element.classList.add('active'); loadEvents(); }
 function toggleEventDesc(eventId) { const eventCard = document.getElementById(`event-${eventId}`); if(!eventCard) return; eventCard.classList.toggle('expanded'); const btn = eventCard.querySelector('.read-more-btn'); if(btn) btn.innerText = eventCard.classList.contains('expanded') ? "Hide details" : "Read details..."; }
-function openCreateModal() { document.getElementById("createModal")?.classList.remove("hidden"); const now = new Date(); const inTwoHours = new Date(now.getTime() + (2 * 60 * 60 * 1000)); const formatForInput = (date) => (new Date(date - (date.getTimezoneOffset() * 60000))).toISOString().slice(0, 16); const startEl = document.getElementById("startTime"); const endEl = document.getElementById("endTime"); if(startEl) startEl.value = formatForInput(now); if(endEl) endEl.value = formatForInput(inTwoHours); }
-function closeCreateModal() { document.getElementById("createModal")?.classList.add("hidden"); }
+function openCreateScreen() { 
+    document.getElementById("createScreen")?.classList.remove("hidden"); 
+    // Standardize time inputs
+    const now = new Date(); const inTwoHours = new Date(now.getTime() + (2 * 60 * 60 * 1000)); 
+    const formatForInput = (date) => (new Date(date - (date.getTimezoneOffset() * 60000))).toISOString().slice(0, 16); 
+    const startEl = document.getElementById("startTime"); const endEl = document.getElementById("endTime"); 
+    if(startEl) startEl.value = formatForInput(now); if(endEl) endEl.value = formatForInput(inTwoHours); 
+}
+function closeCreateScreen() { document.getElementById("createScreen")?.classList.add("hidden"); }
 
 function addEvent() {
   const btn = event.target.closest('button'); // Grab the button that was clicked
@@ -400,7 +406,7 @@ function addEvent() {
       if(document.getElementById("place")) document.getElementById("place").value = ""; 
       if(document.getElementById("description")) document.getElementById("description").value = ""; 
       if(document.getElementById("maxCapacity")) document.getElementById("maxCapacity").value = ""; 
-      closeCreateModal();
+      closeCreateScreen();
       
       // Reset button just in case the modal opens again
       if (btn) { btn.disabled = false; btn.innerHTML = `Publish to Campus <i class='bx bx-send'></i>`; }
@@ -1402,7 +1408,7 @@ async function saveProfileData() {
             btn.style.background = "var(--primary)";
             btn.innerHTML = originalText;
             btn.disabled = false;
-            closeSettingsModal(); // Auto-close the modal!
+            closeSettingsScreen(); // Auto-close the modal!
         }, 800);
 
     } catch (e) {
@@ -1411,8 +1417,8 @@ async function saveProfileData() {
     }
 }
 
-function openSettingsModal() { document.getElementById("settingsModal")?.classList.remove("hidden"); }
-function closeSettingsModal() { document.getElementById("settingsModal")?.classList.add("hidden"); }
+function openSettingsScreen() { document.getElementById("settingsScreen")?.classList.remove("hidden"); }
+function closeSettingsScreen() { document.getElementById("settingsScreen")?.classList.add("hidden"); }
 
 // ==========================================
 // 🛡️ STEALTH MODE NATIVE BACK BUTTON
