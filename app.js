@@ -545,20 +545,35 @@ function closeDeleteModal() { eventIdToManage = null; document.getElementById("d
 function confirmMoveToRecap() { 
     if (!eventIdToManage) return; 
     
-    // 🔥 INSTANT UI UPDATE: Hide the card instantly before the database even finishes
+    // 1. Instantly hide the element
     const eventCard = document.getElementById(`event-${eventIdToManage}`);
-    if(eventCard) eventCard.classList.add("hidden");
+    if (eventCard) {
+        eventCard.style.transition = "all 0.3s ease";
+        eventCard.style.opacity = "0";
+        eventCard.style.transform = "scale(0.9)";
+        setTimeout(() => eventCard.classList.add("hidden"), 300);
+    }
     
-    db.collection("events").doc(eventIdToManage).update({ expiresAt: Date.now() - 1 }).then(() => closeDeleteModal()); 
+    // 2. Perform the DB update
+    closeDeleteModal();
+    db.collection("events").doc(eventIdToManage).update({ expiresAt: Date.now() - 1 }); 
 }
+
 function confirmDeletePermanently() { 
     if (!eventIdToManage) return; 
     
-    // 🔥 INSTANT UI UPDATE: Destroy the card instantly before the database even finishes
+    // 1. Instantly remove the element
     const eventCard = document.getElementById(`event-${eventIdToManage}`);
-    if(eventCard) eventCard.remove();
+    if (eventCard) {
+        eventCard.style.transition = "all 0.3s ease";
+        eventCard.style.opacity = "0";
+        eventCard.style.transform = "scale(0.9)";
+        setTimeout(() => eventCard.remove(), 300);
+    }
     
-    db.collection("events").doc(eventIdToManage).delete().then(() => closeDeleteModal()); 
+    // 2. Perform the DB deletion
+    closeDeleteModal();
+    db.collection("events").doc(eventIdToManage).delete(); 
 }
 
 // ==========================================
