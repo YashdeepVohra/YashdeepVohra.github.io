@@ -1,431 +1,273 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-
-
+  <meta charset="UTF-8">
   <title>livesociya</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  
+  <meta name="theme-color" content="#4f46e5">
+
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
+
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
-  <style>
-    body {
-      margin: 0;
-      font-family: system-ui;
-      background: #f3f4f6;
-    }
-    header {
-      background: white;
-      padding: 14px;
-      font-weight: 700;
-      border-bottom: 1px solid #e5e7eb;
-    }
-    .container {
-      padding: 16px;
-    }
-    .card {
-      background: white;
-      padding: 16px;
-      border-radius: 12px;
-      margin-bottom: 14px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-    }
-    input {
-      width: 98%;
-      padding: 12px;
-      border-radius: 10px;
-      border: 1px solid #d1d5db;
-      margin-bottom: 10px;
-    }
-    button {
-      width: 100%;
-      padding: 12px;
-      border-radius: 10px;
-      border: none;
-      background: #2563eb;
-      color: white;
-      font-size: 15px;
-    }
-    .hidden { display: none; }
-    .tabs {
-      display: flex;
-      margin-bottom: 16px;
-    }
-    .tab {
-      flex: 1;
-      padding: 12px;
-      text-align: center;
-      background: white;
-      border-bottom: 2px solid transparent;
-    }
-    .tab.active {
-      border-bottom: 2px solid #2563eb;
-      font-weight: bold;
-    }
-    .event {
-      background: white;
-      padding: 14px;
-      border-radius: 12px;
-      margin-bottom: 12px;
-    }
-    .join { background:#10b981;margin-top:10px; }
-    .topbar {
-  background: white;
-  padding: 14px 16px;
-  border-bottom: 1px solid #e5e7eb;
-
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.title {
-  font-weight: 700;
-  font-size: 18px;
-}
-
-.logoutBtn {
-  background: #ef4444;
-  color: white;
-  border: none;
-  padding: 6px 12px;
-  border-radius: 8px;
-  font-size: 13px;
-}
-  </style>
+  <link rel="stylesheet" href="style.css">
 </head>
-
 <body>
 
-<header class="topbar">
-  <div class="title">livesociya</div>
-  <button class="logoutBtn" onclick="logout()">Logout</button>
-</header>
+<div class="app-frame">
 
-<!-- LOGIN -->
-<div class="container" id="login">
-  <div class="card">
-    <h2>Login</h2>
-    <input id="name" placeholder="Your name">
-    <input id="password" type="password" placeholder="Password">
-    <button onclick="login()">Continue</button>
-  </div>
-</div>
+  <header class="topbar">
+    <div class="title">livesociya</div>
+    <button class="profileBtn hidden" onclick="openProfileScreen()" id="topAvatar">👤</button>
+  </header>
 
-<!-- HOME -->
-<div class="container hidden" id="home">
-
-  <div class="tabs">
-    <div class="tab active" onclick="showTab('events')">Events</div>
-    <div class="tab" onclick="showTab('chats')">Chats</div>
+  <div class="container" id="login" class="screen hidden">
+    <div class="card" style="margin-top: 40px; text-align: center; padding: 40px 20px;">
+      <div style="font-size: 56px; margin-bottom: 16px; color: var(--primary);"><i class='bx bxs-bolt-circle'></i></div>
+      <h2 style="font-size: 28px; margin-bottom: 8px;">livesociya</h2>
+      <p style="color: var(--text-muted); font-size: 15px; margin-bottom: 32px;">The campus live feed. Verified students only.</p>
+      
+      <button id="login-btn" type="button" style="background: var(--surface); color: var(--text); border: 1px solid var(--border); font-weight: 600; font-size: 16px; padding: 12px; border-radius: 24px;">
+        <img src="https://www.svgrepo.com/show/475656/google-color.svg" style="width: 20px; margin-right: 12px;"> Continue with Google
+      </button>
+    </div>
   </div>
 
-  <!-- EVENTS -->
-  <div id="eventsTab">
-    <div class="card">
-      <input id="title" placeholder="What are you doing?">
-      <input id="place" placeholder="Where?">
-      <button onclick="addEvent()">Create Event</button>
+  <div class="container hidden" id="home">
+    
+    <div id="eventsTab">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h3 style="margin: 0; display: flex; align-items: center; gap: 8px;"><i class='bx bx-bolt-circle' style="color: var(--primary);"></i> The Campus Feed</h3>
+        <button onclick="openCreateScreen()" style="width: auto; padding: 8px 16px; font-size: 13px; border-radius: 20px; box-shadow: var(--shadow-sm);">+ New Event</button>
+      </div>
+
+      <div class="feed-filters" id="liveFilters">
+        <div class="filter-pill active" onclick="setLiveFilter(this, 'All')">All</div>
+        <div class="filter-pill" onclick="setLiveFilter(this, '☕ Chill')">☕ Chill</div>
+        <div class="filter-pill" onclick="setLiveFilter(this, '🍕 Food')">🍕 Food</div>
+        <div class="filter-pill" onclick="setLiveFilter(this, '🎉 Party')">🎉 Party</div>
+        <div class="filter-pill" onclick="setLiveFilter(this, '📚 Study')">📚 Study</div>
+        <div class="filter-pill" onclick="setLiveFilter(this, '🏀 Sports')">🏀 Sports</div>
+      </div>
+
+      <div id="events"></div>
     </div>
 
-    <div id="events"></div>
-  </div>
+    <div id="recapTab" class="hidden">
+      <h3 style="display: flex; align-items: center; gap: 8px;"><i class='bx bx-time-five' style="color: var(--primary);"></i> Campus Recap</h3>
+      <p style="font-size: 14px; color: var(--text-muted); margin-top:-10px; margin-bottom:16px;">Everything that went down on campus in the last 24 hours.</p>
+      
+      <div class="feed-filters" id="recapFilters">
+        <div class="filter-pill active" onclick="setRecapFilter(this, 'All')">All</div>
+        <div class="filter-pill" onclick="setRecapFilter(this, '☕ Chill')">☕ Chill</div>
+        <div class="filter-pill" onclick="setRecapFilter(this, '🍕 Food')">🍕 Food</div>
+        <div class="filter-pill" onclick="setRecapFilter(this, '🎉 Party')">🎉 Party</div>
+        <div class="filter-pill" onclick="setRecapFilter(this, '📚 Study')">📚 Study</div>
+        <div class="filter-pill" onclick="setRecapFilter(this, '🏀 Sports')">🏀 Sports</div>
+      </div>
+      <div id="recapEvents"></div>
+    </div>
 
-  <!-- CHATS -->
-  <div id="chatsTab" class="hidden">
+    <div id="chatsTab" class="hidden">
+      <h3 style="display: flex; align-items: center; gap: 8px;"><i class='bx bx-message-square-dots' style="color: var(--primary);"></i> Messages</h3>
+      <div style="display: flex; gap: 10px; margin-bottom: 24px;">
+        <input id="chatUser" placeholder="Search exact username..." style="margin-bottom: 0;" onkeydown="if(event.key === 'Enter') startChat()" />
+        <button onclick="startChat()" style="width: auto; white-space: nowrap; padding: 0 20px;">Start</button>
+      </div>
+      <div id="chatList"></div>
+    </div>
 
-  <h3>Chats</h3>
-
-  <!-- Start new chat -->
-  <input id="chatUser" placeholder="Start new chat" />
-  <button onclick="startChat()">Start</button>
-
-  <!-- Chat list -->
-  <div id="chatList"></div>
-
-  <!-- Chat box -->
-  <div id="chatBox" class="hidden">
+  </div> <div id="chatScreen" class="hidden">
+    <div class="chat-header">
+      <button class="back-btn" onclick="history.back()"><i class='bx bx-left-arrow-alt'></i></button>
+      <div class="chat-avatar" id="chatHeaderAvatar" style="width: 36px; height: 36px; font-size: 14px;">?</div>
+      <div id="chatWithTitle" style="font-weight: 700; font-size: 18px;">User</div>
+    </div>
+    
     <div id="messages"></div>
-
-    <input id="msgInput" placeholder="Type message..." />
-    <button onclick="sendMessage()">Send</button>
+    
+    <div class="chat-footer" style="flex-direction: column;">
+        <div id="icebreakerMsg" class="hidden" style="width: 100%; text-align: center; color: var(--text-muted); font-size: 13px; font-weight: bold; padding: 10px;">
+            <i class='bx bxs-lock-alt'></i> Icebreaker sent! Waiting for reply...
+        </div>
+  
+        <div id="replyPreviewContainer" style="width: 100%;"></div>
+  
+        <div id="inputWrapper" class="input-wrapper" style="display: flex; gap: 10px; width: 100%;">
+            <input id="msgInput" placeholder="Message..." autocomplete="off" oninput="handleTyping()" onkeydown="if(event.key === 'Enter') sendMessage()" style="margin-bottom:0;" />
+            <button onclick="sendMessage()" style="height: 50px; width: 50px; flex-shrink: 0;"><i class='bx bxs-send'></i></button>
+        </div>
+    </div>
   </div>
 
+  <div id="profileScreen" class="hidden profile-screen-wrapper">
+    
+    <div class="chat-header profile-header-layout">
+      <div class="header-left">
+        <button class="back-btn" onclick="history.back()"><i class='bx bx-left-arrow-alt'></i></button>
+        <div class="header-title">Profile</div>
+      </div>
+      <button id="profileSettingsBtn" class="hidden settings-gear-btn" onclick="openSettingsScreen()">
+        <i class='bx bx-cog'></i>
+      </button>
+    </div>
+    
+    <div class="profile-scroll-body">
+      
+      <div class="profile-clean-card">
+        <div class="profile-card-header">
+          <div class="profile-avatar-pro" id="profileAvatarDisplay" style="cursor: default;">👤</div>
+          
+          <div class="profile-name-group">
+            <div id="profileDisplayNameDisplay" class="profile-name-pro read-only-name">Display Name</div>
+            <div class="profile-handle-pro" id="profileUsernameDisplay">@username</div>
+          </div>
+        </div>
+        
+        <div class="profile-stats-pro no-margin-bottom">
+          <div class="stat-box-pro">
+            <span class="stat-num" id="statEventsJoined">0</span>
+            <span class="stat-label">Joined</span>
+          </div>
+          <div class="stat-box-pro">
+            <span class="stat-num" id="statEventsHosted">0</span>
+            <span class="stat-label">Hosted</span>
+          </div>
+        </div>
+      </div>
+
+      <h3 class="hosted-events-title"><i class='bx bx-calendar-star'></i> Hosted Events</h3>
+      <div id="myProfileEvents" class="profile-events-scroll"></div>
+    </div>
+  </div>
+
+  <div id="settingsScreen" class="full-screen-view hidden">
+  <div class="screen-header">
+    <button class="back-btn" onclick="closeSettingsScreen()"><i class='bx bx-left-arrow-alt'></i></button>
+    <div class="header-title" style="font-size: 18px; font-weight: 800;">Settings</div>
+    <div style="width: 44px;"></div> </div>
+  
+  <div class="screen-body">
+    <div class="card" style="border-radius: 20px; padding: 20px;">
+      <label class="settings-label" style="margin-top: 0;">Display Name</label>
+      <input type="text" id="editDisplayNameInput" placeholder="New Display Name" maxlength="20" class="settings-input" autocomplete="off" spellcheck="false" data-form-type="other" data-lpignore="true">
+      <button id="saveProfileBtn" onclick="saveProfileData()" class="save-settings-btn" style="margin-bottom: 0;">Save Changes</button>
+    </div>
+    
+    <button class="logoutBtn" onclick="logout()" style="margin-top: 24px; padding: 16px; font-size: 15px; font-weight: 800;">
+      <i class='bx bx-log-out'></i> Log Out of livesociya
+    </button>
+  </div>
 </div>
 
+  <nav class="bottom-nav">
+    <button class="nav-item active" onclick="showTab('events')">
+      <i class='bx bx-bolt-circle'></i><span>Live Now</span>
+    </button>
+    <button class="nav-item" onclick="showTab('recap')">
+      <i class='bx bx-history'></i><span>Recap</span>
+    </button>
+    <button class="nav-item" onclick="showTab('chats')" style="position: relative;">
+      <div id="chatBadge" class="nav-badge hidden"></div>
+      <i class='bx bx-message-rounded-dots'></i><span>Chats</span>
+    </button>
+  </nav>
+
+</div> <div id="usernameScreen" class="full-screen-view onboarding-screen hidden">
+  <div style="font-size: 56px; margin-bottom: 16px;">👋</div>
+  <h2 style="font-size: 28px; margin-bottom: 8px;">Claim Your Handle</h2>
+  <p style="font-size:15px; color: var(--text-muted); margin-bottom: 32px;">This is your unique campus identity.</p>
+  
+  <div style="position: relative; width: 100%; max-width: 320px;">
+    <span style="position: absolute; left: 16px; top: 18px; color: var(--text-muted); font-weight: 800; font-size: 16px;">@</span>
+    <input type="text" style="display:none" autocomplete="username">
+    <input id="newUsername" type="text" placeholder="username" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" readonly onfocus="this.removeAttribute('readonly');" style="padding-left: 38px; font-weight: 700; font-size: 16px;" oninput="checkUsernameAvailability()">
+  </div>
+  
+  <div id="usernameStatus" style="font-size: 13px; font-weight: 600; margin-top: -4px; margin-bottom: 24px; min-height: 18px;"></div>
+  
+  <button id="claimBtn" onclick="claimUsername()" style="background: #cbd5e1; cursor: not-allowed; max-width: 320px;" disabled>Join Campus</button>
 </div>
-<script>
-  const firebaseConfig = {
-  apiKey: "AIzaSyBvcJJ2wz2yteRUYdasRUe8oaTt_Vp9kGQ",
-  authDomain: "livesociyaweb.firebaseapp.com",
-  projectId: "livesociyaweb",
-  storageBucket: "livesociyaweb.firebasestorage.app",
-  messagingSenderId: "676740518716",
-  appId: "1:676740518716:web:c552e59b56a93f5a35c439"
-};
 
-  firebase.initializeApp(firebaseConfig);
-  const auth = firebase.auth();
-  const db = firebase.firestore();
-</script>
-
-
-<script>
-let currentChat = null;
-let user = "";
-let events = [];
-
-function login() {
-
-  const name = document.getElementById("name").value;
-  const password = document.getElementById("password").value;
-
-  if (!name || !password) return;
-
-  const email = name.toLowerCase() + "@livesociya.com";
-
-  auth.signInWithEmailAndPassword(email, password)
-
-    .catch(() => {
-
-      return auth.createUserWithEmailAndPassword(email, password)
-        .then(() => {
-
-          // ⭐ Save real name here FIRST
-          return db.collection("users").doc(email).set({
-            name: name
-          });
-
-        });
-
-    })
-
-    .catch(err => {
-      alert(err.message);
-    });
-
-}
-
-
-auth.onAuthStateChanged(async (userAuth) => {
-
-  if (!userAuth) {
-    document.getElementById("home").classList.add("hidden");
-    document.getElementById("login").classList.remove("hidden");
-    return;
-  }
-
-  const email = userAuth.email;
-  const userRef = db.collection("users").doc(email);
-
-  let doc = await userRef.get();
-
-  if (!doc.exists) {
-
-    const fallback = email.replace("@livesociya.com", "");
-
-    await userRef.set({
-      name: fallback
-    });
-
-    user = fallback;
-
-  } else {
-
-    user = doc.data().name;
-
-  }
-
-  document.getElementById("login").classList.add("hidden");
-  document.getElementById("home").classList.remove("hidden");
-
-  loadChatList();
-  loadEvents();
-
-});
-
-function logout() {
-  auth.signOut();
-}
-
-function startChat() {
-  const other = document.getElementById("chatUser").value;
-  if (!other) return;
-
-  const chatId = [user, other].sort().join("_");
-  currentChat = chatId;
-
-  db.collection("chats").doc(chatId).set({
-    users: [user, other]
-  });
-
-  document.getElementById("chatBox").classList.remove("hidden");
-
-  loadMessages();
-}
-
-function sendMessage() {
-  const text = document.getElementById("msgInput").value;
-  if (!text || !currentChat) return;
-
-  db.collection("messages").add({
-    chatId: currentChat,
-    sender: user,
-    text,
-    time: Date.now()
-  });
-
-  document.getElementById("msgInput").value = "";
-}
-
-function loadEvents() {
-
-  db.collection("events")
-    .orderBy("time", "desc")
-    .onSnapshot(snapshot => {
-
-      const list = document.getElementById("events");
-      list.innerHTML = "";
-
-      snapshot.forEach(doc => {
-        const e = doc.data();
-
-        list.innerHTML += `
-          <div class="event">
-            <b>${e.title}</b><br>
-            <small>${e.place} • by ${e.user}</small>
-            ${e.user === user ? `<button onclick="deleteEvent('${doc.id}')">Delete</button>` : ""}
-            <button class="join">Join</button>
-          </div>
-        `;
-      });
-
-    });
-
-}
-
-function loadMessages() {
-
-  db.collection("messages")
-    .where("chatId", "==", currentChat)
-    .orderBy("time", "asc")
-    .onSnapshot(snapshot => {
-
-      const box = document.getElementById("messages");
-      box.innerHTML = "";
-
-      snapshot.forEach(doc => {
-        const m = doc.data();
-        box.innerHTML += `
-          <div>
-            <b>${m.sender}:</b> ${m.text}
-          </div>
-        `;
-      });
-
-    });
-
-}
-
-
-function openChat(chatId) {
-  currentChat = chatId;
-  document.getElementById("chatBox").classList.remove("hidden");
-  loadMessages();
-}
-
-function loadChatList() {
-
-  db.collection("chats")
-    .where("users", "array-contains", user)
-    .onSnapshot(snapshot => {
-
-      const list = document.getElementById("chatList");
-      list.innerHTML = "";
-
-      snapshot.forEach(doc => {
-
-        const chat = doc.data();
-        const other = chat.users.find(u => u !== user);
-
-        list.innerHTML += `
-          <div onclick="openChat('${doc.id}')"
-               style="padding:12px;background:white;margin-bottom:8px;border-radius:10px;">
-            ${other}
-          </div>
-        `;
-      });
-
-    });
-
-}
-
-
-
-function showTab(tab) {
-  document.getElementById("eventsTab").classList.add("hidden");
-  document.getElementById("chatsTab").classList.add("hidden");
-
-  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
-
-  if (tab === "events") {
-    document.getElementById("eventsTab").classList.remove("hidden");
-    document.querySelectorAll(".tab")[0].classList.add("active");
-  } else {
-    document.getElementById("chatsTab").classList.remove("hidden");
-    document.querySelectorAll(".tab")[1].classList.add("active");
-  }
-}
-
-function addEvent() {
-  const title = document.getElementById("title").value;
-  const place = document.getElementById("place").value;
-  if (!title || !place) return;
-
-  db.collection("events").add({
-    title,
-    place,
-    user,
-    time: Date.now()
-  });
-
-  document.getElementById("title").value = "";
-  document.getElementById("place").value = "";
-}
-
-
-  function deleteEvent(id) {
-  db.collection("events").doc(id).delete();
-}
-
-</script>
-
+<div id="deleteModal" class="modal-overlay hidden">
+  <div class="modal-content">
+    <div style="font-size: 40px; color: var(--primary); margin-bottom: 10px;"><i class='bx bx-slider-alt'></i></div>
+    <h3 style="margin-top:0; font-size: 20px;">Manage Live Event</h3>
+    <p style="font-size:14px; color: var(--text-muted); margin-bottom: 24px;">Are you wrapping up early or do you want to completely erase this broadcast?</p>
+    <button onclick="confirmMoveToRecap()" style="background: var(--success);">Send to Campus Recap</button>
+    <button onclick="confirmDeletePermanently()" style="background: var(--danger);">Delete Completely</button>
+    <button onclick="closeDeleteModal()" style="background: #f1f5f9; color: var(--text);">Cancel</button>
+  </div>
+</div>
+
+<div id="profileModal" class="modal-overlay hidden">
+  <div class="modal-content" style="max-width: 320px;">
+    <h3 style="margin-top:0;">Choose Your Avatar</h3>
+    <p style="font-size:13px; color: var(--text-muted); margin-bottom: 20px;">This is how campus will see you.</p>
+    <div class="avatar-grid" id="avatarGrid">
+      <div class="avatar-option" onclick="selectAvatar(this, '🦊')">🦊</div>
+      <div class="avatar-option" onclick="selectAvatar(this, '🐼')">🐼</div>
+      <div class="avatar-option" onclick="selectAvatar(this, '🐯')">🐯</div>
+      <div class="avatar-option" onclick="selectAvatar(this, '🐸')">🐸</div>
+      <div class="avatar-option" onclick="selectAvatar(this, '🐶')">🐶</div>
+      <div class="avatar-option" onclick="selectAvatar(this, '🐱')">🐱</div>
+      <div class="avatar-option" onclick="selectAvatar(this, '🦄')">🦄</div>
+      <div class="avatar-option" onclick="selectAvatar(this, '👽')">👽</div>
+      <div class="avatar-option" onclick="selectAvatar(this, '👻')">👻</div>
+    </div>
+    <button onclick="selectAvatar(this, 'google')" style="background: #e0e7ff; color: var(--primary); margin-bottom: 12px;"><i class='bx bxl-google'></i> Use Google Photo</button>
+    <button onclick="closeProfileModal()" style="background: #f1f5f9; color: var(--text);">Cancel</button>
+  </div>
+</div>
+
+<div id="createScreen" class="full-screen-view hidden">
+  <div class="screen-header">
+    <button class="back-btn" onclick="closeCreateScreen()"><i class='bx bx-x'></i></button>
+    <div class="header-title" style="font-size: 18px; font-weight: 800;">New Broadcast</div>
+    <button class="text-action-btn" onclick="addEvent()">Publish</button>
+  </div>
+  
+  <div class="screen-body">
+    <label class="settings-label">What's the vibe?</label>
+    <div class="tag-selector" id="tagSelector">
+      <div class="tag active" onclick="selectTag(this, '☕ Chill')">☕ Chill</div>
+      <div class="tag" onclick="selectTag(this, '🍕 Food')">🍕 Food</div>
+      <div class="tag" onclick="selectTag(this, '🎉 Party')">🎉 Party</div>
+      <div class="tag" onclick="selectTag(this, '📚 Study')">📚 Study</div>
+      <div class="tag" onclick="selectTag(this, '🏀 Sports')">🏀 Sports</div>
+    </div>
+
+    <label class="settings-label" style="margin-top: 24px;">The Details</label>
+    <input id="title" placeholder="Event Title">
+    <input id="place" placeholder="Location">
+    <textarea id="description" placeholder="Add a short note or vibe check (optional)..." rows="3"></textarea>
+
+    <label class="settings-label" style="margin-top: 16px;">Schedule & Limits</label>
+    <div class="time-stack">
+      <div>
+        <label style="font-size: 11px; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Start Time</label>
+        <input type="datetime-local" id="startTime">
+      </div>
+      <div>
+        <label style="font-size: 11px; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">End Time</label>
+        <input type="datetime-local" id="endTime">
+      </div>
+    </div>
+
+    <input type="number" id="maxCapacity" placeholder="Max Capacity (e.g., 5)" min="2">
+    <p style="font-size: 12px; color: var(--text-muted); margin-top: -8px;">Leave blank for unlimited attendees.</p>
+  </div>
+</div>
+
+<div id="loading-screen">
+  <div class="spinner"></div>
+  <p>Logging you in...</p>
+</div>
+
+<script src="app.js"></script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
