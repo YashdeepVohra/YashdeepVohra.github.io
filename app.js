@@ -243,7 +243,6 @@ auth.onAuthStateChanged(async (userAuth) => {
 
   if (userAuth) {
     localStorage.removeItem("isRedirecting"); 
-    document.getElementById("loading-screen")?.classList.remove("hidden");
     
     try {
       userEmail = userAuth.email || userAuth.uid; 
@@ -273,10 +272,11 @@ auth.onAuthStateChanged(async (userAuth) => {
       document.getElementById("loading-screen")?.classList.add("hidden");
     }
   } else {
+    // 🔥 BUG 2 FIX: Only show the login screen AFTER Firebase confirms they are logged out!
     if (!localStorage.getItem("isRedirecting")) {
       switchScreen("login");
       document.getElementById("topAvatar")?.classList.add("hidden");
-      document.getElementById("loading-screen")?.classList.add("hidden");
+      document.getElementById("loading-screen")?.classList.add("hidden"); // Drop the shield
     }
   }
 });
@@ -288,12 +288,14 @@ function initializeUserApp(userData) {
   const topAvatarEl = document.getElementById("topAvatar");
   if(topAvatarEl) { topAvatarEl.innerHTML = renderAvatar(userAvatar); topAvatarEl.classList.remove("hidden"); }
   
-  // 🔥 THE FIX: Tell the database to save their Real Name as the default Display Name!
   db.collection("users").doc(user).set({
       displayName: realName, 
       avatar: userAvatar,
       uid: auth.currentUser.uid
   }, { merge: true });
+  
+  // 🔥 BUG 1 FIX: Erase the messy Google Auth loop from the browser's back button history!
+  history.replaceState({ screen: 'home' }, '', window.location.pathname);
   
   switchScreen("home"); 
   loadChatList(); loadEvents();
