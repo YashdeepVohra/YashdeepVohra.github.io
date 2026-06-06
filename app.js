@@ -1387,10 +1387,14 @@ function saveProfileData() {
     saveBtn.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Saving...";
     saveBtn.disabled = true;
 
-    db.collection("users").doc(user).update({
+    // 🔥 THE FIX: Use .set() with {merge: true} instead of .update()
+    // This stops it from crashing if the document is new or slightly broken!
+    db.collection("users").doc(user).set({
         displayName: newName,
-        avatar: pendingSettingsAvatar // Save the new avatar!
-    }).then(() => {
+        avatar: pendingSettingsAvatar,
+        uid: auth.currentUser.uid // 🔥 Re-stamp the UID just in case!
+    }, { merge: true }).then(() => {
+        
         // Optimistic UI Update: Change it on the screen instantly
         userAvatar = pendingSettingsAvatar;
         document.getElementById("profileDisplayNameDisplay").innerText = newName;
@@ -1406,9 +1410,11 @@ function saveProfileData() {
         closeSettingsScreen();
         saveBtn.innerHTML = "Save Changes";
         saveBtn.disabled = false;
+        
     }).catch(err => {
-        console.error(err);
-        alert("Failed to save changes. Check your connection.");
+        // Log the exact error to the console just in case
+        console.error("Profile Save Error:", err);
+        alert("Failed to save changes. Try again!");
         saveBtn.innerHTML = "Save Changes";
         saveBtn.disabled = false;
     });
