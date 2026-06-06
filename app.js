@@ -357,13 +357,24 @@ function openCreateModal() { document.getElementById("createModal")?.classList.r
 function closeCreateModal() { document.getElementById("createModal")?.classList.add("hidden"); }
 
 function addEvent() {
-  const title = document.getElementById("title")?.value.trim(); const place = document.getElementById("place")?.value.trim(); const description = document.getElementById("description")?.value.trim(); const startTimeStr = document.getElementById("startTime")?.value; const endTimeStr = document.getElementById("endTime")?.value;
+  const title = document.getElementById("title")?.value.trim(); 
+  const place = document.getElementById("place")?.value.trim(); 
+  const description = document.getElementById("description")?.value.trim(); 
+  const startTimeStr = document.getElementById("startTime")?.value; 
+  const endTimeStr = document.getElementById("endTime")?.value;
+  
+  // 🔥 THE FIX: Grab the Max Capacity value!
+  const capacityRaw = document.getElementById("maxCapacity")?.value;
+  const maxCapacity = capacityRaw ? parseInt(capacityRaw) : null;
+
   if (!title || !place || !startTimeStr || !endTimeStr) return alert("Please fill out all event details.");
-  const startTimestamp = new Date(startTimeStr).getTime(); const endTimestamp = new Date(endTimeStr).getTime();
+  const startTimestamp = new Date(startTimeStr).getTime(); 
+  const endTimestamp = new Date(endTimeStr).getTime();
+  
   if (endTimestamp <= startTimestamp) return alert("Your event end time must be AFTER the start time.");
   if (endTimestamp < Date.now()) return alert("You cannot schedule an event to end in the past.");
+  if (maxCapacity !== null && maxCapacity < 2) return alert("Capacity must be at least 2 people.");
   
-  // 🔥 SECURITY FIX: Stamped with auth.currentUser.uid
   db.collection("events").add({ 
       title, 
       place, 
@@ -375,10 +386,15 @@ function addEvent() {
       expiresAt: endTimestamp, 
       participants: [user],
       uid: auth.currentUser.uid, 
-      hypedBy: []
+      hypedBy: [],
+      maxCapacity: maxCapacity // 🔥 THE FIX: Save it to the database!
   });
   
-  if(document.getElementById("title")) document.getElementById("title").value = ""; if(document.getElementById("place")) document.getElementById("place").value = ""; if(document.getElementById("description")) document.getElementById("description").value = ""; closeCreateModal();
+  if(document.getElementById("title")) document.getElementById("title").value = ""; 
+  if(document.getElementById("place")) document.getElementById("place").value = ""; 
+  if(document.getElementById("description")) document.getElementById("description").value = ""; 
+  if(document.getElementById("maxCapacity")) document.getElementById("maxCapacity").value = ""; // Clear it
+  closeCreateModal();
 }
 
 function loadEvents() {
@@ -434,7 +450,27 @@ function loadEvents() {
       const hypeIcon = hasHyped ? "bxs-hot" : "bx-hot";
       const hypeHTML = `<button class="${hypeClass}" onclick="toggleHype('${id}', ${hasHyped})"><i class='bx ${hypeIcon}'></i> ${hypeCount > 0 ? hypeCount : 'Hype'}</button>`;
       
-      // 🔥 THE FIX: Added style="margin-bottom: 0;" to perfectly align the tag!
+      // 🔥 THE FOMO CAPACITY CALCULATOR
+      const isFull = e.maxCapacity && attendeesCount >= e.maxCapacity;
+      let capacityHTML = "";
+      
+      if (e.maxCapacity) {
+          const percent = Math.min((attendeesCount / e.maxCapacity) * 100, 100);
+          const barColor = isFull ? "var(--danger)" : "var(--primary)";
+          
+          capacityHTML = `
+            <div style="margin-top: 12px; margin-bottom: 4px;">
+              <div style="display: flex; justify-content: space-between; font-size: 11px; font-weight: 700; color: var(--text-muted); margin-bottom: 4px;">
+                <span><i class='bx bx-user'></i> Capacity</span>
+                <span style="color: ${isFull ? 'var(--danger)' : 'inherit'}">${attendeesCount} / ${e.maxCapacity} ${isFull ? '(Full)' : ''}</span>
+              </div>
+              <div style="width: 100%; background: #e2e8f0; border-radius: 4px; height: 6px; overflow: hidden;">
+                <div style="width: ${percent}%; background: ${barColor}; height: 100%; border-radius: 4px; transition: width 0.3s;"></div>
+              </div>
+            </div>
+          `;
+      }
+
       const displayTag = e.tag ? `<div class="event-tag-badge" style="margin-bottom: 0;">${e.tag}</div>` : '';
       const displayDesc = e.description ? `<button class="read-more-btn" onclick="toggleEventDesc('${id}')">Read details...</button><div class="event-desc-box">${e.description}</div>` : '';
       let statusBadge = (currentTime < e.startTime) ? `<span style="background: #fef08a; color: #854d0e; padding: 4px 8px; border-radius: 12px; font-size: 10px; font-weight: 800; text-transform: uppercase;">Upcoming</span>` : `<span style="background: #fee2e2; color: #dc2626; padding: 4px 8px; border-radius: 12px; font-size: 10px; font-weight: 800; text-transform: uppercase;"><i class='bx bx-radio-circle-marked bx-burst'></i> Live</span>`;
@@ -462,7 +498,7 @@ function loadEvents() {
                 <i class='bx bx-group'></i> Going (${attendeesCount}): ${attendeeNames}
               </div>
               
-              ${e.user === user 
+              ${capacityHTML} ${e.user === user 
                 ? `<div style="display:flex; gap:8px; margin-top:16px;">
                      <button class="join" style="margin-top:0; flex:2;" onclick="openEventChat('${id}', '${e.title.replace(/'/g, "\\'")}')"><i class='bx bx-message-square-dots'></i> Open Chat</button>
                      <button class="delete-btn" style="margin-top:0; flex:1;" onclick="openDeleteModal('${id}')"><i class='bx bx-slider'></i> Manage</button>
@@ -472,7 +508,11 @@ function loadEvents() {
                         <button class="join" style="margin-top:0; flex:3;" onclick="openEventChat('${id}', '${e.title.replace(/'/g, "\\'")}')"><i class='bx bx-message-square-dots'></i> Open Chat</button>
                         <button class="leave-btn" style="margin-top:0; flex:1;" onclick="leaveEvent('${id}')"><i class='bx bx-exit'></i></button>
                       </div>` 
-                   : `<button class="join" onclick="joinEvent('${id}')">Join Hangout</button>`
+                   : (isFull 
+                      // 🔥 SMART BUTTON: Grays out and disables if the event hits max capacity!
+                      ? `<button class="join" style="background: #cbd5e1; color: #64748b; cursor: not-allowed;" disabled>Event Full 🛑</button>`
+                      : `<button class="join" onclick="joinEvent('${id}')">Join Hangout</button>`
+                     )
                   )
               }
             </div>`;
