@@ -576,7 +576,7 @@ function confirmMoveToRecap() {
 function confirmDeletePermanently() { 
     if (!eventIdToManage) return; 
     
-    const eventId = eventIdToManage; // Save to local variable
+    const eventId = eventIdToManage;
     const eventCard = document.getElementById(`event-${eventId}`);
     
     // 1. Instant UI cleanup
@@ -587,17 +587,24 @@ function confirmDeletePermanently() {
         setTimeout(() => eventCard.remove(), 300);
     }
     
-    // 2. The "Hard" Delete
     closeDeleteModal();
     
+    // 2. Perform delete with specific error logging
     db.collection("events").doc(eventId).delete()
     .then(() => {
-        console.log("Event successfully deleted from Firestore!");
+        console.log("✅ Successfully deleted from Firestore");
     })
     .catch((error) => {
-        console.error("Error removing event: ", error);
-        alert("Wait! The event didn't delete from the server. Check your connection.");
-        // If it failed, we should probably reload the events to bring the card back
+        // 🔥 THIS IS THE KEY: If it fails, this will show you exactly WHY in the console
+        console.error("🚨 Firestore Delete Error:", error.code, error.message);
+        
+        if (error.code === 'permission-denied') {
+            alert("Security Error: You don't have permission to delete this event.");
+        } else {
+            alert("Connection Error: Could not delete. Please check your internet.");
+        }
+        
+        // If it failed, reload to restore the card so the UI stays in sync with the DB
         loadEvents(); 
     });
 }
