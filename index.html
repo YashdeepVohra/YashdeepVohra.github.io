@@ -146,23 +146,43 @@
   </div>
 
   <div id="settingsScreen" class="full-screen-view hidden">
-  <div class="screen-header">
-    <button class="back-btn" onclick="closeSettingsScreen()"><i class='bx bx-left-arrow-alt'></i></button>
-    <div class="header-title" style="font-size: 18px; font-weight: 800;">Settings</div>
-    <div style="width: 44px;"></div> </div>
-  
-  <div class="screen-body">
-    <div class="card" style="border-radius: 20px; padding: 20px;">
-      <label class="settings-label" style="margin-top: 0;">Display Name</label>
-      <input type="text" id="editDisplayNameInput" placeholder="New Display Name" maxlength="20" class="settings-input" autocomplete="off" spellcheck="false" data-form-type="other" data-lpignore="true">
-      <button id="saveProfileBtn" onclick="saveProfileData()" class="save-settings-btn" style="margin-bottom: 0;">Save Changes</button>
+    <div class="screen-header">
+      <button class="back-btn" onclick="closeSettingsScreen()"><i class='bx bx-left-arrow-alt'></i></button>
+      <div class="header-title" style="font-size: 18px; font-weight: 800;">Settings</div>
+      <div style="width: 44px;"></div> 
     </div>
     
-    <button class="logoutBtn" onclick="logout()" style="margin-top: 24px; padding: 16px; font-size: 15px; font-weight: 800;">
-      <i class='bx bx-log-out'></i> Log Out of livesociya
-    </button>
+    <div class="screen-body">
+      <div class="card" style="border-radius: 20px; padding: 20px;">
+        
+        <label class="settings-label" style="margin-top: 0;">Profile Picture</label>
+        <div class="avatar-grid" id="settingsAvatarGrid" style="margin-bottom: 12px;">
+          <div class="avatar-option" onclick="selectSettingsAvatar(this, '🦊')">🦊</div>
+          <div class="avatar-option" onclick="selectSettingsAvatar(this, '🐼')">🐼</div>
+          <div class="avatar-option" onclick="selectSettingsAvatar(this, '🐯')">🐯</div>
+          <div class="avatar-option" onclick="selectSettingsAvatar(this, '🐸')">🐸</div>
+          <div class="avatar-option" onclick="selectSettingsAvatar(this, '🐶')">🐶</div>
+          <div class="avatar-option" onclick="selectSettingsAvatar(this, '🐱')">🐱</div>
+          <div class="avatar-option" onclick="selectSettingsAvatar(this, '🦄')">🦄</div>
+          <div class="avatar-option" onclick="selectSettingsAvatar(this, '👽')">👽</div>
+          <div class="avatar-option" onclick="selectSettingsAvatar(this, '👻')">👻</div>
+        </div>
+        
+        <button onclick="selectSettingsAvatar(this, 'google')" style="background: #e0e7ff; color: var(--primary); margin-bottom: 24px; box-shadow: none;">
+          <i class='bx bxl-google'></i> Revert to Google Photo
+        </button>
+
+        <label class="settings-label">Display Name</label>
+        <input type="text" id="editDisplayNameInput" placeholder="New Display Name" maxlength="20" class="settings-input" autocomplete="off" spellcheck="false">
+        
+        <button id="saveProfileBtn" onclick="saveProfileData()" class="save-settings-btn" style="margin-bottom: 0;">Save Changes</button>
+      </div>
+      
+      <button class="logoutBtn" onclick="logout()" style="margin-top: 24px; padding: 16px; font-size: 15px; font-weight: 800;">
+        <i class='bx bx-log-out'></i> Log Out of livesociya
+      </button>
+    </div>
   </div>
-</div>
 
   <nav class="bottom-nav">
     <button class="nav-item active" onclick="showTab('events')">
