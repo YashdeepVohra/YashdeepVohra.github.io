@@ -357,28 +357,34 @@ function openCreateModal() { document.getElementById("createModal")?.classList.r
 function closeCreateModal() { document.getElementById("createModal")?.classList.add("hidden"); }
 
 function addEvent() {
+  const btn = event.target.closest('button'); // Grab the button that was clicked
   const title = document.getElementById("title")?.value.trim(); 
   const place = document.getElementById("place")?.value.trim(); 
   const description = document.getElementById("description")?.value.trim(); 
   const startTimeStr = document.getElementById("startTime")?.value; 
   const endTimeStr = document.getElementById("endTime")?.value;
-  
-  // 🔥 THE FIX: Grab the Max Capacity value!
   const capacityRaw = document.getElementById("maxCapacity")?.value;
   const maxCapacity = capacityRaw ? parseInt(capacityRaw) : null;
 
   if (!title || !place || !startTimeStr || !endTimeStr) return alert("Please fill out all event details.");
+  
+  // 🚨 THE LOCK: Disable the button so it can't be clicked twice!
+  if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = `<i class='bx bx-loader-alt bx-spin'></i> Publishing...`;
+  }
+
   const startTimestamp = new Date(startTimeStr).getTime(); 
   const endTimestamp = new Date(endTimeStr).getTime();
   
-  if (endTimestamp <= startTimestamp) return alert("Your event end time must be AFTER the start time.");
-  if (endTimestamp < Date.now()) return alert("You cannot schedule an event to end in the past.");
-  if (maxCapacity !== null && maxCapacity < 2) return alert("Capacity must be at least 2 people.");
+  if (endTimestamp <= startTimestamp) {
+      alert("Your event end time must be AFTER the start time.");
+      if (btn) { btn.disabled = false; btn.innerHTML = `Publish to Campus <i class='bx bx-send'></i>`; }
+      return;
+  }
   
   db.collection("events").add({ 
-      title, 
-      place, 
-      description, 
+      title, place, description, 
       tag: currentSelectedTag, 
       user, 
       hostAvatar: userAvatar, 
@@ -387,14 +393,22 @@ function addEvent() {
       participants: [user],
       uid: auth.currentUser.uid, 
       hypedBy: [],
-      maxCapacity: maxCapacity // 🔥 THE FIX: Save it to the database!
+      maxCapacity: maxCapacity 
+  }).then(() => {
+      // Success! Clear fields and close
+      if(document.getElementById("title")) document.getElementById("title").value = ""; 
+      if(document.getElementById("place")) document.getElementById("place").value = ""; 
+      if(document.getElementById("description")) document.getElementById("description").value = ""; 
+      if(document.getElementById("maxCapacity")) document.getElementById("maxCapacity").value = ""; 
+      closeCreateModal();
+      
+      // Reset button just in case the modal opens again
+      if (btn) { btn.disabled = false; btn.innerHTML = `Publish to Campus <i class='bx bx-send'></i>`; }
+  }).catch((error) => {
+      console.error("Error:", error);
+      alert("Failed to publish. Try again.");
+      if (btn) { btn.disabled = false; btn.innerHTML = `Publish to Campus <i class='bx bx-send'></i>`; }
   });
-  
-  if(document.getElementById("title")) document.getElementById("title").value = ""; 
-  if(document.getElementById("place")) document.getElementById("place").value = ""; 
-  if(document.getElementById("description")) document.getElementById("description").value = ""; 
-  if(document.getElementById("maxCapacity")) document.getElementById("maxCapacity").value = ""; // Clear it
-  closeCreateModal();
 }
 
 function loadEvents() {
