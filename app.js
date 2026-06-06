@@ -186,6 +186,16 @@ function switchScreen(screenId) {
   document.getElementById("profileScreen")?.classList.add("hidden");
   document.getElementById("chatScreen")?.classList.add("hidden");
   if (screenId) document.getElementById(screenId)?.classList.remove("hidden");
+
+  // 🔥 BUG 1 FIX: Hide the bottom navigation bar on login/username screens!
+  const bottomNav = document.querySelector(".bottom-nav");
+  if (bottomNav) {
+      if (screenId === "login" || screenId === "usernameModal" || !screenId) {
+          bottomNav.classList.add("hidden");
+      } else {
+          bottomNav.classList.remove("hidden");
+      }
+  }
 }
 
 const isRedirecting = localStorage.getItem("isRedirecting");
@@ -366,38 +376,67 @@ function addEvent() {
 }
 
 function loadEvents() {
-  db.collection("events").orderBy("startTime", "desc").onSnapshot(snapshot => {
+  // 🔥 BUG 3B FIX: We added 'async' and the Cache Dictionary to the event feed!
+  db.collection("events").orderBy("startTime", "desc").onSnapshot(async (snapshot) => {
     const liveList = document.getElementById("events"); const recapList = document.getElementById("recapEvents");
     if(!liveList || !recapList) return;
+    
+    // ==========================================
+    // 🧠 THE SMART CACHE DICTIONARY ENGINE
+    // ==========================================
+    let eventsArray = [];
+    let uniqueUsers = new Set();
+    
+    snapshot.forEach(doc => {
+        const e = doc.data();
+        eventsArray.push({ id: doc.id, ...e });
+        uniqueUsers.add(e.user); // Add the host
+        if (e.participants) e.participants.forEach(p => uniqueUsers.add(p)); // Add the attendees
+    });
+
+    // Fetch missing profiles into cache (only costs 1 read per new person!)
+    for (let u of uniqueUsers) {
+        if (!userCache[u]) {
+            const doc = await db.collection("users").doc(u).get();
+            userCache[u] = doc.exists ? doc.data() : { displayName: u, avatar: "👤" };
+        }
+    }
+
     liveList.innerHTML = ""; recapList.innerHTML = "";
     let activeCount = 0; let recapCount = 0; const currentTime = Date.now(); const oneDayAgo = currentTime - (24 * 60 * 60 * 1000);
-    snapshot.forEach(doc => {
-      const e = doc.data(); const id = doc.id; const attendeesCount = e.participants ? e.participants.length : 1;
+    
+    eventsArray.forEach(data => {
+      const e = data; const id = data.id; const attendeesCount = e.participants ? e.participants.length : 1;
       
-      // 🔥 THE FIX: Smart Truncation for Attendees (Max 3 names)
+      // Pull Display Names from Cache
+      const hostDisplayName = userCache[e.user]?.displayName || e.user;
+
       let attendeeNames = "";
       if (e.participants && e.participants.length > 0) {
-          const visibleParticipants = e.participants.slice(0, 3); // Grab only the first 3
-          attendeeNames = visibleParticipants.map(p => `<span onclick="event.stopPropagation(); startChat('${p}')" style="color: var(--primary); cursor: pointer;">@${p}</span>`).join(", ");
+          const visibleParticipants = e.participants.slice(0, 3);
+          attendeeNames = visibleParticipants.map(p => {
+              const pDisplayName = userCache[p]?.displayName || p;
+              return `<span onclick="event.stopPropagation(); startChat('${p}')" style="color: var(--primary); cursor: pointer;">@${pDisplayName}</span>`;
+          }).join(", ");
           
-          // If there are more than 3, add the +X more text!
           if (e.participants.length > 3) {
               const extraCount = e.participants.length - 3;
               attendeeNames += ` <span style="color: var(--text-muted); font-size: 12px; margin-left: 4px;">+${extraCount} more</span>`;
           }
       } else {
-          attendeeNames = `<span onclick="event.stopPropagation(); startChat('${e.user}')" style="color: var(--primary); cursor: pointer;">@${e.user}</span>`;
+          attendeeNames = `<span onclick="event.stopPropagation(); startChat('${e.user}')" style="color: var(--primary); cursor: pointer;">@${hostDisplayName}</span>`;
       }
+      
       const displayTag = e.tag ? `<div class="event-tag-badge">${e.tag}</div>` : '';
       const displayDesc = e.description ? `<button class="read-more-btn" onclick="toggleEventDesc('${id}')">Read details...</button><div class="event-desc-box">${e.description}</div>` : '';
       let statusBadge = (currentTime < e.startTime) ? `<span style="background: #fef08a; color: #854d0e; padding: 4px 8px; border-radius: 12px; font-size: 10px; font-weight: 800; text-transform: uppercase;">Upcoming</span>` : `<span style="background: #fee2e2; color: #dc2626; padding: 4px 8px; border-radius: 12px; font-size: 10px; font-weight: 800; text-transform: uppercase;"><i class='bx bx-radio-circle-marked bx-burst'></i> Live</span>`;
       const avatarHTML = `<div style="display:inline-block; width:24px; height:24px; border-radius:50%; vertical-align:middle; overflow:hidden; border:1px solid var(--border); margin-right:4px;">${renderAvatar(e.hostAvatar)}</div>`;
       const matchesLive = (typeof currentLiveFilter !== 'undefined' ? (currentLiveFilter === 'All' || e.tag === currentLiveFilter) : true);
       const matchesRecap = (typeof currentRecapFilter !== 'undefined' ? (currentRecapFilter === 'All' || e.tag === currentRecapFilter) : true);
+      
       if (e.expiresAt > currentTime) {
         if (matchesLive) {
           activeCount++; const hasJoined = e.participants && e.participants.includes(user);
-          // Replaced the single long line with this formatted block!
           liveList.innerHTML += `
             <div class="event card" id="event-${id}">
               <div style="display: flex; justify-content: space-between; align-items: flex-start;">
@@ -405,7 +444,7 @@ function loadEvents() {
               </div>
               <div class="event-title">${e.title}</div>
               <div class="event-meta" style="display:flex; align-items:center;">
-                ${avatarHTML} <span>${e.place} • hosted by @${e.user}</span>
+                ${avatarHTML} <span>${e.place} • hosted by @${hostDisplayName}</span>
               </div>
               ${displayDesc}
               <div class="attendees">
@@ -430,7 +469,7 @@ function loadEvents() {
       } else if (e.expiresAt > oneDayAgo) {
         if (matchesRecap) {
           recapCount++;
-          recapList.innerHTML += `<div class="event card" style="background: #f9fafb; border: none; box-shadow: none;">${displayTag}<div class="event-title" style="color: #4b5563;">${e.title}</div><div class="event-meta" style="display:flex; align-items:center;">${avatarHTML} <span>${e.place} • hosted by @${e.user}</span></div><div class="attendees" style="background:#f3f4f6; color: var(--text-muted);"><i class='bx bx-check-double'></i> Attended (${attendeesCount}): ${attendeeNames}</div></div>`;
+          recapList.innerHTML += `<div class="event card" style="background: #f9fafb; border: none; box-shadow: none;">${displayTag}<div class="event-title" style="color: #4b5563;">${e.title}</div><div class="event-meta" style="display:flex; align-items:center;">${avatarHTML} <span>${e.place} • hosted by @${hostDisplayName}</span></div><div class="attendees" style="background:#f3f4f6; color: var(--text-muted);"><i class='bx bx-check-double'></i> Attended (${attendeesCount}): ${attendeeNames}</div></div>`;
         }
       }
     });
@@ -673,12 +712,13 @@ function updateTypingIndicator() {
   if (!bubble || !box) return;
 
   if (currentChatType === "event" && currentEventData) {
-      // Group Chat Logic
       const typists = (currentEventData.typingUsers || []).filter(u => u !== user);
       
       if (typists.length > 0) {
           if (nameEl) {
-              nameEl.innerText = typists.length === 1 ? `@${typists[0]} is typing` : `${typists.length} people typing`;
+              // 🔥 BUG 3A FIX: Use the smart cache to show real display names!
+              const displayName = userCache[typists[0]]?.displayName || typists[0];
+              nameEl.innerText = typists.length === 1 ? `${displayName} is typing` : `${typists.length} people typing`;
           }
           bubble.classList.remove("hidden"); 
           box.scrollTop = box.scrollHeight;
@@ -687,9 +727,8 @@ function updateTypingIndicator() {
       }
       
   } else if (currentChatType === "direct" && currentChatData) {
-      // 1-on-1 Chat Logic
       if (currentChatData.typing === currentOtherUser) { 
-          if (nameEl) nameEl.innerText = ""; // Hide name in 1-on-1s
+          if (nameEl) nameEl.innerText = ""; 
           bubble.classList.remove("hidden"); 
           box.scrollTop = box.scrollHeight; 
       } else { 
@@ -1144,7 +1183,7 @@ async function loadProfileUI(targetUser) {
     const settingsGear = document.getElementById("profileSettingsBtn");
     const editInput = document.getElementById("editDisplayNameInput"); 
     
-    // 🔥 BUG 1 FIX: Instantly wipe the old stats and events so you don't see the previous person's data!
+    // Wipe the old stats instantly so you don't see the previous person's data!
     const statJoined = document.getElementById("statEventsJoined");
     const statHosted = document.getElementById("statEventsHosted");
     const eventsList = document.getElementById("myProfileEvents");
@@ -1153,7 +1192,6 @@ async function loadProfileUI(targetUser) {
     if (statHosted) statHosted.innerText = "-";
     if (eventsList) eventsList.innerHTML = `<div style="text-align:center; padding:20px; color:var(--text-muted); font-size: 13px;"><i class='bx bx-loader-alt bx-spin'></i> Loading...</div>`;
     
-    // 🧠 INSTANT LOAD: Check Dictionary First!
     let cachedUser = userCache[targetUser];
     
     if (avatarEl) {
@@ -1169,16 +1207,14 @@ async function loadProfileUI(targetUser) {
     
     if (usernameDisplay) usernameDisplay.innerText = `@${targetUser}`;
     
-    // Show/Hide Settings Gear
     if (targetUser === user) { settingsGear.classList.remove("hidden"); } 
     else { settingsGear.classList.add("hidden"); }
     
     try {
-        // Fetch fresh data in the background to ensure it's up to date
         const userDoc = await db.collection("users").doc(targetUser).get();
         if (userDoc.exists) {
             const data = userDoc.data();
-            userCache[targetUser] = data; // Update Dictionary
+            userCache[targetUser] = data; 
             
             if (avatarEl) avatarEl.innerHTML = renderAvatar(data.avatar || "👤");
             if (nameDisplay) nameDisplay.innerText = data.displayName || targetUser;
@@ -1187,6 +1223,10 @@ async function loadProfileUI(targetUser) {
                 userDisplayName = data.displayName || targetUser;
                 editInput.value = userDisplayName;
             }
+        } else {
+            // 🔥 BUG 2 FIX: If they haven't set up a profile yet, clear the loading state!
+            if (avatarEl) avatarEl.innerHTML = renderAvatar("👤");
+            if (nameDisplay) nameDisplay.innerText = targetUser; // Default to username
         }
         
         db.collection("events").where("user", "==", targetUser).get().then(snap => {
