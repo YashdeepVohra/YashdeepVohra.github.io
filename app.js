@@ -104,12 +104,14 @@ function showNotification(senderUsername, chatId) {
     document.body.appendChild(toastBox);
   }
 
-  // Clear previous notifications so they never stack
   toastBox.innerHTML = "";
+  
+  // 🔥 THE FIX: Removed @ and use the display name if available!
+  const displayName = userCache[senderUsername]?.displayName || senderUsername;
 
   const toast = document.createElement("div");
   toast.style.cssText = "background: var(--primary); color: white; padding: 14px 20px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); font-size: 14px; font-weight: 600; cursor: pointer; transform: translateY(-150%); transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); display: flex; align-items: center; gap: 10px; width: 100%; pointer-events: auto;";
-  toast.innerHTML = `<i class='bx bxs-message-rounded-dots' style="font-size: 20px;"></i> New message from @${senderUsername}`;
+  toast.innerHTML = `<i class='bx bxs-message-rounded-dots' style="font-size: 20px;"></i> New message from ${displayName}`;
 
   toast.onclick = () => {
     openChat(chatId, senderUsername);
@@ -376,25 +378,20 @@ function addEvent() {
 }
 
 function loadEvents() {
-  // 🔥 BUG 3B FIX: We added 'async' and the Cache Dictionary to the event feed!
   db.collection("events").orderBy("startTime", "desc").onSnapshot(async (snapshot) => {
     const liveList = document.getElementById("events"); const recapList = document.getElementById("recapEvents");
     if(!liveList || !recapList) return;
     
-    // ==========================================
-    // 🧠 THE SMART CACHE DICTIONARY ENGINE
-    // ==========================================
     let eventsArray = [];
     let uniqueUsers = new Set();
     
     snapshot.forEach(doc => {
         const e = doc.data();
         eventsArray.push({ id: doc.id, ...e });
-        uniqueUsers.add(e.user); // Add the host
-        if (e.participants) e.participants.forEach(p => uniqueUsers.add(p)); // Add the attendees
+        uniqueUsers.add(e.user); 
+        if (e.participants) e.participants.forEach(p => uniqueUsers.add(p)); 
     });
 
-    // Fetch missing profiles into cache (only costs 1 read per new person!)
     for (let u of uniqueUsers) {
         if (!userCache[u]) {
             const doc = await db.collection("users").doc(u).get();
@@ -408,7 +405,6 @@ function loadEvents() {
     eventsArray.forEach(data => {
       const e = data; const id = data.id; const attendeesCount = e.participants ? e.participants.length : 1;
       
-      // Pull Display Names from Cache
       const hostDisplayName = userCache[e.user]?.displayName || e.user;
 
       let attendeeNames = "";
@@ -416,7 +412,8 @@ function loadEvents() {
           const visibleParticipants = e.participants.slice(0, 3);
           attendeeNames = visibleParticipants.map(p => {
               const pDisplayName = userCache[p]?.displayName || p;
-              return `<span onclick="event.stopPropagation(); startChat('${p}')" style="color: var(--primary); cursor: pointer;">@${pDisplayName}</span>`;
+              // 🔥 REMOVED THE @ SYMBOL
+              return `<span onclick="event.stopPropagation(); startChat('${p}')" style="color: var(--primary); cursor: pointer; font-weight: 700;">${pDisplayName}</span>`;
           }).join(", ");
           
           if (e.participants.length > 3) {
@@ -424,7 +421,8 @@ function loadEvents() {
               attendeeNames += ` <span style="color: var(--text-muted); font-size: 12px; margin-left: 4px;">+${extraCount} more</span>`;
           }
       } else {
-          attendeeNames = `<span onclick="event.stopPropagation(); startChat('${e.user}')" style="color: var(--primary); cursor: pointer;">@${hostDisplayName}</span>`;
+          // 🔥 REMOVED THE @ SYMBOL
+          attendeeNames = `<span onclick="event.stopPropagation(); startChat('${e.user}')" style="color: var(--primary); cursor: pointer; font-weight: 700;">${hostDisplayName}</span>`;
       }
       
       const displayTag = e.tag ? `<div class="event-tag-badge">${e.tag}</div>` : '';
@@ -444,7 +442,8 @@ function loadEvents() {
               </div>
               <div class="event-title">${e.title}</div>
               <div class="event-meta" style="display:flex; align-items:center;">
-                ${avatarHTML} <span>${e.place} • hosted by @${hostDisplayName}</span>
+                <!-- 🔥 REMOVED THE @ SYMBOL HERE TOO -->
+                ${avatarHTML} <span>${e.place} • hosted by ${hostDisplayName}</span>
               </div>
               ${displayDesc}
               <div class="attendees">
@@ -469,7 +468,7 @@ function loadEvents() {
       } else if (e.expiresAt > oneDayAgo) {
         if (matchesRecap) {
           recapCount++;
-          recapList.innerHTML += `<div class="event card" style="background: #f9fafb; border: none; box-shadow: none;">${displayTag}<div class="event-title" style="color: #4b5563;">${e.title}</div><div class="event-meta" style="display:flex; align-items:center;">${avatarHTML} <span>${e.place} • hosted by @${hostDisplayName}</span></div><div class="attendees" style="background:#f3f4f6; color: var(--text-muted);"><i class='bx bx-check-double'></i> Attended (${attendeesCount}): ${attendeeNames}</div></div>`;
+          recapList.innerHTML += `<div class="event card" style="background: #f9fafb; border: none; box-shadow: none;">${displayTag}<div class="event-title" style="color: #4b5563;">${e.title}</div><div class="event-meta" style="display:flex; align-items:center;">${avatarHTML} <span>${e.place} • hosted by ${hostDisplayName}</span></div><div class="attendees" style="background:#f3f4f6; color: var(--text-muted);"><i class='bx bx-check-double'></i> Attended (${attendeesCount}): ${attendeeNames}</div></div>`;
         }
       }
     });
@@ -521,20 +520,17 @@ function openChat(chatId, otherUser) {
   const hAvatar = document.getElementById("chatHeaderAvatar"); 
   const hTitle = document.getElementById("chatWithTitle");
   
-  // Set defaults instantly to prevent lag
+  // 🔥 REMOVED THE @ SYMBOL
   if(hAvatar) hAvatar.innerHTML = renderAvatar("👤"); 
-  if(hTitle) hTitle.innerText = `@${otherUser}`;
+  if(hTitle) hTitle.innerText = otherUser;
   
-  // 🧠 THE CACHE UPGRADE: Fetch their real profile for the header
   db.collection("users").doc(otherUser).get().then(doc => {
       if (doc.exists) {
           const d = doc.data();
-          // Memorize them in the cache!
           userCache[otherUser] = d; 
           if(hAvatar) hAvatar.innerHTML = renderAvatar(d.avatar || "👤");
           if(hTitle) hTitle.innerText = d.displayName || otherUser;
           
-          // Make the header clickable to view their profile!
           hAvatar.style.cursor = "pointer";
           hAvatar.onclick = () => openProfileScreen(otherUser);
           hTitle.style.cursor = "pointer";
@@ -1183,7 +1179,11 @@ async function loadProfileUI(targetUser) {
     const settingsGear = document.getElementById("profileSettingsBtn");
     const editInput = document.getElementById("editDisplayNameInput"); 
     
-    // Wipe the old stats instantly so you don't see the previous person's data!
+    // 🔥 INSTANT WIPE: Destroy the previous user's profile data instantly!
+    if (avatarEl) avatarEl.innerHTML = renderAvatar("👤");
+    if (nameDisplay) nameDisplay.innerText = "Loading...";
+    if (usernameDisplay) usernameDisplay.innerText = targetUser; // 🔥 Removed the @ here!
+    
     const statJoined = document.getElementById("statEventsJoined");
     const statHosted = document.getElementById("statEventsHosted");
     const eventsList = document.getElementById("myProfileEvents");
@@ -1194,18 +1194,11 @@ async function loadProfileUI(targetUser) {
     
     let cachedUser = userCache[targetUser];
     
-    if (avatarEl) {
-        if (cachedUser && cachedUser.avatar) avatarEl.innerHTML = renderAvatar(cachedUser.avatar);
-        else if (targetUser === user) avatarEl.innerHTML = renderAvatar(userAvatar);
-        else avatarEl.innerHTML = renderAvatar("👤");
+    // Quick visual update from cache before DB loads
+    if (cachedUser) {
+        if (avatarEl && cachedUser.avatar) avatarEl.innerHTML = renderAvatar(cachedUser.avatar);
+        if (nameDisplay && cachedUser.displayName) nameDisplay.innerText = cachedUser.displayName;
     }
-    
-    if (nameDisplay) {
-        if (cachedUser && cachedUser.displayName) nameDisplay.innerText = cachedUser.displayName;
-        else nameDisplay.innerText = "Loading...";
-    }
-    
-    if (usernameDisplay) usernameDisplay.innerText = `@${targetUser}`;
     
     if (targetUser === user) { settingsGear.classList.remove("hidden"); } 
     else { settingsGear.classList.add("hidden"); }
@@ -1224,9 +1217,8 @@ async function loadProfileUI(targetUser) {
                 editInput.value = userDisplayName;
             }
         } else {
-            // 🔥 BUG 2 FIX: If they haven't set up a profile yet, clear the loading state!
-            if (avatarEl) avatarEl.innerHTML = renderAvatar("👤");
-            if (nameDisplay) nameDisplay.innerText = targetUser; // Default to username
+            // 🔥 THE FIX: If they have never logged in, officially assign them a default profile!
+            if (nameDisplay) nameDisplay.innerText = targetUser; 
         }
         
         db.collection("events").where("user", "==", targetUser).get().then(snap => {
