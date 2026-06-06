@@ -374,7 +374,7 @@ function addEvent() {
       startTime: startTimestamp, 
       expiresAt: endTimestamp, 
       participants: [user],
-      uid: auth.currentUser.uid 
+      uid: auth.currentUser.uid, 
       hypedBy: []
   });
   
@@ -1328,8 +1328,6 @@ window.addEventListener('popstate', (event) => {
 // 🔥 EVENT HYPE LOGIC
 // ==========================================
 function toggleHype(id, isHyped) {
-    if (event) event.stopPropagation(); // Prevents the screen from jumping
-    
     const eventRef = db.collection("events").doc(id);
     
     if (isHyped) {
