@@ -288,8 +288,9 @@ function initializeUserApp(userData) {
   const topAvatarEl = document.getElementById("topAvatar");
   if(topAvatarEl) { topAvatarEl.innerHTML = renderAvatar(userAvatar); topAvatarEl.classList.remove("hidden"); }
   
-  // 🔥 SECURITY FIX: Sync your private avatar AND your digital UID stamp!
+  // 🔥 THE FIX: Tell the database to save their Real Name as the default Display Name!
   db.collection("users").doc(user).set({
+      displayName: realName, 
       avatar: userAvatar,
       uid: auth.currentUser.uid
   }, { merge: true });
@@ -520,9 +521,12 @@ function openChat(chatId, otherUser) {
   const hAvatar = document.getElementById("chatHeaderAvatar"); 
   const hTitle = document.getElementById("chatWithTitle");
   
-  // 🔥 REMOVED THE @ SYMBOL
   if(hAvatar) hAvatar.innerHTML = renderAvatar("👤"); 
   if(hTitle) hTitle.innerText = otherUser;
+
+  // 🔥 THE FIX: Instantly wipe the chat window clean
+  const box = document.getElementById("messages");
+  if (box) box.innerHTML = "";
   
   db.collection("users").doc(otherUser).get().then(doc => {
       if (doc.exists) {
@@ -1010,11 +1014,17 @@ function closeProfileScreen() {
     currentProfileView = ""; 
 }
 
+// 🔥 THE FIX: Create a global variable to track the live listener
+let profileEventsUnsubscribe = null;
+
 function loadUserEvents(targetUser) {
     const list = document.getElementById("myProfileEvents");
     if (!list) return;
     
-    db.collection("events").where("user", "==", targetUser).onSnapshot(snapshot => {
+    // 🔥 THE FIX: Kill the previous person's listener before starting a new one!
+    if (profileEventsUnsubscribe) profileEventsUnsubscribe();
+    
+    profileEventsUnsubscribe = db.collection("events").where("user", "==", targetUser).onSnapshot(snapshot => {
           list.innerHTML = "";
           let eventsArray = [];
           snapshot.forEach(doc => eventsArray.push({ id: doc.id, ...doc.data() }));
@@ -1142,13 +1152,17 @@ document.addEventListener("touchend", handleDragEnd);
 function openEventChat(eventId, eventTitle) {
   currentChat = eventId; 
   currentChatType = "event"; 
-  currentChatStatus = "unlocked"; // 🔥 PREVENTS FOOTER GLITCHES
+  currentChatStatus = "unlocked"; 
   currentChatData = { status: "unlocked", typing: "" }; 
   
   const hAvatar = document.getElementById("chatHeaderAvatar"); 
   const hTitle = document.getElementById("chatWithTitle");
   if(hAvatar) hAvatar.innerText = "📅"; 
   if(hTitle) hTitle.innerText = eventTitle;
+
+  // 🔥 THE FIX: Instantly wipe the chat window clean
+  const box = document.getElementById("messages");
+  if (box) box.innerHTML = "";
   
   document.querySelector(".topbar")?.classList.add("hidden"); 
   switchScreen("chatScreen");
