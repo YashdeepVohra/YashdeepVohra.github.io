@@ -42,7 +42,7 @@
     <div id="eventsTab">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
         <h3 style="margin: 0; display: flex; align-items: center; gap: 8px;"><i class='bx bx-bolt-circle' style="color: var(--primary);"></i> The Campus Feed</h3>
-        <button onclick="openCreateModal()" style="width: auto; padding: 8px 16px; font-size: 13px; border-radius: 20px; box-shadow: var(--shadow-sm);">+ New Event</button>
+        <button onclick="openCreateScreen()" style="width: auto; padding: 8px 16px; font-size: 13px; border-radius: 20px; box-shadow: var(--shadow-sm);">+ New Event</button>
       </div>
 
       <div class="feed-filters" id="liveFilters">
@@ -111,7 +111,7 @@
         <button class="back-btn" onclick="history.back()"><i class='bx bx-left-arrow-alt'></i></button>
         <div class="header-title">Profile</div>
       </div>
-      <button id="profileSettingsBtn" class="hidden settings-gear-btn" onclick="openSettingsModal()">
+      <button id="profileSettingsBtn" class="hidden settings-gear-btn" onclick="openSettingsScreen()">
         <i class='bx bx-cog'></i>
       </button>
     </div>
@@ -145,32 +145,24 @@
     </div>
   </div>
 
-  <div id="settingsModal" class="modal-overlay hidden settings-modal-overlay">
-    <div class="modal-content settings-modal-content">
-      
-      <div class="modal-header">
-        <h3 class="modal-title">Edit Profile</h3>
-        <button onclick="closeSettingsModal()" class="close-modal-btn"><i class='bx bx-x'></i></button>
-      </div>
-
-      <label class="settings-label">Display Name</label>
-      <input type="text" 
-             id="editDisplayNameInput" 
-             placeholder="New Display Name" 
-             maxlength="20" 
-             class="settings-input" 
-             autocomplete="off" 
-             spellcheck="false" 
-             data-form-type="other" 
-             data-lpignore="true">
-
-      <button id="saveProfileBtn" onclick="saveProfileData()" class="save-settings-btn"><i class='bx bx-save'></i> Save Changes</button>
-      
-      <hr class="settings-divider">
-      
-      <button class="logoutBtn logout-settings-btn" onclick="logout()"><i class='bx bx-log-out'></i> Logout</button>
+  <div id="settingsScreen" class="full-screen-view hidden">
+  <div class="screen-header">
+    <button class="back-btn" onclick="closeSettingsScreen()"><i class='bx bx-left-arrow-alt'></i></button>
+    <div class="header-title" style="font-size: 18px; font-weight: 800;">Settings</div>
+    <div style="width: 44px;"></div> </div>
+  
+  <div class="screen-body">
+    <div class="card" style="border-radius: 20px; padding: 20px;">
+      <label class="settings-label" style="margin-top: 0;">Display Name</label>
+      <input type="text" id="editDisplayNameInput" placeholder="New Display Name" maxlength="20" class="settings-input" autocomplete="off" spellcheck="false" data-form-type="other" data-lpignore="true">
+      <button id="saveProfileBtn" onclick="saveProfileData()" class="save-settings-btn" style="margin-bottom: 0;">Save Changes</button>
     </div>
+    
+    <button class="logoutBtn" onclick="logout()" style="margin-top: 24px; padding: 16px; font-size: 15px; font-weight: 800;">
+      <i class='bx bx-log-out'></i> Log Out of livesociya
+    </button>
   </div>
+</div>
 
   <nav class="bottom-nav">
     <button class="nav-item active" onclick="showTab('events')">
@@ -185,33 +177,20 @@
     </button>
   </nav>
 
-</div> <div id="usernameModal" class="modal-overlay hidden" style="z-index: 3000;">
-  <div class="modal-content" style="max-width: 320px;">
-    <div style="font-size: 40px; margin-bottom: 10px;">👋</div>
-    <h3 style="margin-top:0;">Pick a Username</h3>
-    <p style="font-size:13px; color: var(--text-muted); margin-bottom: 20px;">This will be your unique campus handle.</p>
-    
-    <div style="position: relative;">
-      <span style="position: absolute; left: 16px; top: 14px; color: var(--text-muted); font-weight: 700;">@</span>
-      
-      <input type="text" style="display:none" autocomplete="username">
-      
-      <input id="newUsername" 
-             type="text" 
-             placeholder="username" 
-             autocomplete="off" 
-             autocorrect="off" 
-             autocapitalize="none" 
-             spellcheck="false" 
-             readonly 
-             onfocus="this.removeAttribute('readonly');" 
-             style="padding-left: 36px;" 
-             oninput="checkUsernameAvailability()">
-    </div>
-    
-    <div id="usernameStatus" style="font-size: 12px; font-weight: 600; margin-top: -4px; margin-bottom: 16px; min-height: 16px;"></div>
-    <button id="claimBtn" onclick="claimUsername()" style="background: #cbd5e1; cursor: not-allowed;" disabled>Claim Handle</button>
+</div> <div id="usernameScreen" class="full-screen-view onboarding-screen hidden">
+  <div style="font-size: 56px; margin-bottom: 16px;">👋</div>
+  <h2 style="font-size: 28px; margin-bottom: 8px;">Claim Your Handle</h2>
+  <p style="font-size:15px; color: var(--text-muted); margin-bottom: 32px;">This is your unique campus identity.</p>
+  
+  <div style="position: relative; width: 100%; max-width: 320px;">
+    <span style="position: absolute; left: 16px; top: 18px; color: var(--text-muted); font-weight: 800; font-size: 16px;">@</span>
+    <input type="text" style="display:none" autocomplete="username">
+    <input id="newUsername" type="text" placeholder="username" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" readonly onfocus="this.removeAttribute('readonly');" style="padding-left: 38px; font-weight: 700; font-size: 16px;" oninput="checkUsernameAvailability()">
   </div>
+  
+  <div id="usernameStatus" style="font-size: 13px; font-weight: 600; margin-top: -4px; margin-bottom: 24px; min-height: 18px;"></div>
+  
+  <button id="claimBtn" onclick="claimUsername()" style="background: #cbd5e1; cursor: not-allowed; max-width: 320px;" disabled>Join Campus</button>
 </div>
 
 <div id="deleteModal" class="modal-overlay hidden">
@@ -245,13 +224,15 @@
   </div>
 </div>
 
-<div id="createModal" class="modal-overlay hidden">
-  <div class="modal-content" style="text-align: left; max-width: 400px;">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-      <h3 style="margin: 0; font-size: 18px;">Broadcast Event</h3>
-      <button onclick="closeCreateModal()" style="background: #f1f5f9; color: var(--text-muted); width: 32px; height: 32px; padding: 0; border-radius: 50%; font-size: 20px;"><i class='bx bx-x'></i></button>
-    </div>
-    
+<div id="createScreen" class="full-screen-view hidden">
+  <div class="screen-header">
+    <button class="back-btn" onclick="closeCreateScreen()"><i class='bx bx-x'></i></button>
+    <div class="header-title" style="font-size: 18px; font-weight: 800;">New Broadcast</div>
+    <button class="text-action-btn" onclick="addEvent()">Publish</button>
+  </div>
+  
+  <div class="screen-body">
+    <label class="settings-label">What's the vibe?</label>
     <div class="tag-selector" id="tagSelector">
       <div class="tag active" onclick="selectTag(this, '☕ Chill')">☕ Chill</div>
       <div class="tag" onclick="selectTag(this, '🍕 Food')">🍕 Food</div>
@@ -260,27 +241,27 @@
       <div class="tag" onclick="selectTag(this, '🏀 Sports')">🏀 Sports</div>
     </div>
 
-    <input id="title" placeholder="What's happening?">
-    <input id="place" placeholder="Where is it?">
-    <textarea id="description" placeholder="Add a short note or vibe check (optional)..." rows="2"></textarea>
+    <label class="settings-label" style="margin-top: 24px;">The Details</label>
+    <input id="title" placeholder="Event Title" style="font-weight: 700; font-size: 18px;">
+    <input id="place" placeholder="Location">
+    <textarea id="description" placeholder="Add a short note or vibe check (optional)..." rows="3"></textarea>
 
+    <label class="settings-label" style="margin-top: 16px;">Schedule & Limits</label>
     <div class="time-stack">
-      <div>
-        <label style="font-size: 11px; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Start Time</label>
-        <input type="datetime-local" id="startTime">
-      </div>
-      <div>
-        <label style="font-size: 11px; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">End Time</label>
-        <input type="datetime-local" id="endTime">
+      <div style="display: flex; gap: 12px;">
+        <div style="flex: 1;">
+          <label style="font-size: 11px; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Start</label>
+          <input type="datetime-local" id="startTime">
+        </div>
+        <div style="flex: 1;">
+          <label style="font-size: 11px; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">End</label>
+          <input type="datetime-local" id="endTime">
+        </div>
       </div>
     </div>
 
-    <div style="margin-bottom: 15px;">
-      <label style="font-weight: 700; font-size: 14px; margin-bottom: 4px; display: block;">Max Capacity (Optional)</label>
-      <input type="number" id="maxCapacity" placeholder="e.g., 5 (Leave blank for unlimited)" min="2" style="width: 100%; padding: 12px; border-radius: 12px; border: 1px solid var(--border); font-family: inherit;">
-    </div>
-
-    <button onclick="addEvent()">Publish to Campus <i class='bx bx-send'></i></button>
+    <input type="number" id="maxCapacity" placeholder="Max Capacity (e.g., 5)" min="2">
+    <p style="font-size: 12px; color: var(--text-muted); margin-top: -8px;">Leave blank for unlimited attendees.</p>
   </div>
 </div>
 
