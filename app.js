@@ -375,6 +375,7 @@ function addEvent() {
       expiresAt: endTimestamp, 
       participants: [user],
       uid: auth.currentUser.uid 
+      hypedBy: []
   });
   
   if(document.getElementById("title")) document.getElementById("title").value = ""; if(document.getElementById("place")) document.getElementById("place").value = ""; if(document.getElementById("description")) document.getElementById("description").value = ""; closeCreateModal();
@@ -415,7 +416,6 @@ function loadEvents() {
           const visibleParticipants = e.participants.slice(0, 3);
           attendeeNames = visibleParticipants.map(p => {
               const pDisplayName = userCache[p]?.displayName || p;
-              // 🔥 REMOVED THE @ SYMBOL
               return `<span onclick="event.stopPropagation(); startChat('${p}')" style="color: var(--primary); cursor: pointer; font-weight: 700;">${pDisplayName}</span>`;
           }).join(", ");
           
@@ -424,9 +424,15 @@ function loadEvents() {
               attendeeNames += ` <span style="color: var(--text-muted); font-size: 12px; margin-left: 4px;">+${extraCount} more</span>`;
           }
       } else {
-          // 🔥 REMOVED THE @ SYMBOL
           attendeeNames = `<span onclick="event.stopPropagation(); startChat('${e.user}')" style="color: var(--primary); cursor: pointer; font-weight: 700;">${hostDisplayName}</span>`;
       }
+
+      // 🔥 THE HYPE CALCULATOR
+      const hypeCount = e.hypedBy ? e.hypedBy.length : 0;
+      const hasHyped = e.hypedBy && e.hypedBy.includes(user);
+      const hypeClass = hasHyped ? "hype-btn active" : "hype-btn";
+      const hypeIcon = hasHyped ? "bxs-hot" : "bx-hot";
+      const hypeHTML = `<button class="${hypeClass}" onclick="toggleHype('${id}', ${hasHyped})"><i class='bx ${hypeIcon}'></i> ${hypeCount > 0 ? hypeCount : 'Hype'}</button>`;
       
       const displayTag = e.tag ? `<div class="event-tag-badge">${e.tag}</div>` : '';
       const displayDesc = e.description ? `<button class="read-more-btn" onclick="toggleEventDesc('${id}')">Read details...</button><div class="event-desc-box">${e.description}</div>` : '';
@@ -440,12 +446,14 @@ function loadEvents() {
           activeCount++; const hasJoined = e.participants && e.participants.includes(user);
           liveList.innerHTML += `
             <div class="event card" id="event-${id}">
+              
               <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                ${displayTag} ${statusBadge}
+                <div style="display: flex; gap: 8px;">${displayTag} ${statusBadge}</div>
+                ${hypeHTML}
               </div>
+              
               <div class="event-title">${e.title}</div>
               <div class="event-meta" style="display:flex; align-items:center;">
-                <!-- 🔥 REMOVED THE @ SYMBOL HERE TOO -->
                 ${avatarHTML} <span>${e.place} • hosted by ${hostDisplayName}</span>
               </div>
               ${displayDesc}
@@ -471,7 +479,16 @@ function loadEvents() {
       } else if (e.expiresAt > oneDayAgo) {
         if (matchesRecap) {
           recapCount++;
-          recapList.innerHTML += `<div class="event card" style="background: #f9fafb; border: none; box-shadow: none;">${displayTag}<div class="event-title" style="color: #4b5563;">${e.title}</div><div class="event-meta" style="display:flex; align-items:center;">${avatarHTML} <span>${e.place} • hosted by ${hostDisplayName}</span></div><div class="attendees" style="background:#f3f4f6; color: var(--text-muted);"><i class='bx bx-check-double'></i> Attended (${attendeesCount}): ${attendeeNames}</div></div>`;
+          recapList.innerHTML += `
+            <div class="event card" style="background: #f9fafb; border: none; box-shadow: none;">
+              <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <div style="display: flex; gap: 8px;">${displayTag}</div>
+                ${hypeHTML}
+              </div>
+              <div class="event-title" style="color: #4b5563;">${e.title}</div>
+              <div class="event-meta" style="display:flex; align-items:center;">${avatarHTML} <span>${e.place} • hosted by ${hostDisplayName}</span></div>
+              <div class="attendees" style="background:#f3f4f6; color: var(--text-muted);"><i class='bx bx-check-double'></i> Attended (${attendeesCount}): ${attendeeNames}</div>
+            </div>`;
         }
       }
     });
@@ -1306,3 +1323,19 @@ window.addEventListener('popstate', (event) => {
         history.pushState(null, '', window.location.href);
     }
 });
+
+// ==========================================
+// 🔥 EVENT HYPE LOGIC
+// ==========================================
+function toggleHype(id, isHyped) {
+    if (event) event.stopPropagation(); // Prevents the screen from jumping
+    
+    const eventRef = db.collection("events").doc(id);
+    
+    if (isHyped) {
+        eventRef.update({ hypedBy: firebase.firestore.FieldValue.arrayRemove(user) });
+    } else {
+        eventRef.update({ hypedBy: firebase.firestore.FieldValue.arrayUnion(user) });
+        if (navigator.vibrate) navigator.vibrate(50); // Haptic feedback on mobile!
+    }
+}
