@@ -448,7 +448,7 @@ function loadEvents() {
             <div class="event card" id="event-${id}">
               
               <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                <div style="display: flex; gap: 8px;">${displayTag} ${statusBadge}</div>
+                <div style="display: flex; gap: 8px; align-items: flex-start;">${displayTag} ${statusBadge}</div>
                 ${hypeHTML}
               </div>
               
