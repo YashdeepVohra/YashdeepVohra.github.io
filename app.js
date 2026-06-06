@@ -576,8 +576,10 @@ function confirmMoveToRecap() {
 function confirmDeletePermanently() { 
     if (!eventIdToManage) return; 
     
-    // 1. Instantly remove the element
-    const eventCard = document.getElementById(`event-${eventIdToManage}`);
+    const eventId = eventIdToManage; // Save to local variable
+    const eventCard = document.getElementById(`event-${eventId}`);
+    
+    // 1. Instant UI cleanup
     if (eventCard) {
         eventCard.style.transition = "all 0.3s ease";
         eventCard.style.opacity = "0";
@@ -585,9 +587,19 @@ function confirmDeletePermanently() {
         setTimeout(() => eventCard.remove(), 300);
     }
     
-    // 2. Perform the DB deletion
+    // 2. The "Hard" Delete
     closeDeleteModal();
-    db.collection("events").doc(eventIdToManage).delete(); 
+    
+    db.collection("events").doc(eventId).delete()
+    .then(() => {
+        console.log("Event successfully deleted from Firestore!");
+    })
+    .catch((error) => {
+        console.error("Error removing event: ", error);
+        alert("Wait! The event didn't delete from the server. Check your connection.");
+        // If it failed, we should probably reload the events to bring the card back
+        loadEvents(); 
+    });
 }
 
 // ==========================================
