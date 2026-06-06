@@ -542,8 +542,24 @@ function joinEvent(id) { db.collection("events").doc(id).update({ participants: 
 function leaveEvent(id) { db.collection("events").doc(id).update({ participants: firebase.firestore.FieldValue.arrayRemove(user) }); }
 function openDeleteModal(id) { eventIdToManage = id; document.getElementById("deleteModal")?.classList.remove("hidden"); }
 function closeDeleteModal() { eventIdToManage = null; document.getElementById("deleteModal")?.classList.add("hidden"); }
-function confirmMoveToRecap() { if (!eventIdToManage) return; db.collection("events").doc(eventIdToManage).update({ expiresAt: Date.now() - 1 }).then(() => closeDeleteModal()); }
-function confirmDeletePermanently() { if (!eventIdToManage) return; db.collection("events").doc(eventIdToManage).delete().then(() => closeDeleteModal()); }
+function confirmMoveToRecap() { 
+    if (!eventIdToManage) return; 
+    
+    // 🔥 INSTANT UI UPDATE: Hide the card instantly before the database even finishes
+    const eventCard = document.getElementById(`event-${eventIdToManage}`);
+    if(eventCard) eventCard.classList.add("hidden");
+    
+    db.collection("events").doc(eventIdToManage).update({ expiresAt: Date.now() - 1 }).then(() => closeDeleteModal()); 
+}
+function confirmDeletePermanently() { 
+    if (!eventIdToManage) return; 
+    
+    // 🔥 INSTANT UI UPDATE: Destroy the card instantly before the database even finishes
+    const eventCard = document.getElementById(`event-${eventIdToManage}`);
+    if(eventCard) eventCard.remove();
+    
+    db.collection("events").doc(eventIdToManage).delete().then(() => closeDeleteModal()); 
+}
 
 // ==========================================
 // 💬 CHAT ENGINE (SMART UI & INDICATORS)
