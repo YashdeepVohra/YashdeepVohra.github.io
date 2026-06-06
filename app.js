@@ -1377,47 +1377,69 @@ async function loadProfileUI(targetUser) {
 }
 
 // Function triggered by the "Save Profile" button
-function saveProfileData() {
-    const newName = document.getElementById("editDisplayNameInput").value.trim();
-    const saveBtn = document.getElementById("saveProfileBtn");
+async function saveProfileData() {
+    const nameInput = document.getElementById("editDisplayNameInput");
+    const btn = document.getElementById("saveProfileBtn");
+    const newName = nameInput.value.trim();
     
-    if (!newName) return alert("Display name cannot be empty.");
-    
-    // Lock the button
-    saveBtn.innerHTML = "<i class='bx bx-loader-alt bx-spin'></i> Saving...";
-    saveBtn.disabled = true;
+    if (!newName) return alert("Display Name cannot be empty!");
 
-    // 🔥 THE FIX: Use .set() with {merge: true} instead of .update()
-    // This stops it from crashing if the document is new or slightly broken!
-    db.collection("users").doc(user).set({
-        displayName: newName,
-        avatar: pendingSettingsAvatar,
-        uid: auth.currentUser.uid // 🔥 Re-stamp the UID just in case!
-    }, { merge: true }).then(() => {
+    const originalText = btn.innerHTML;
+    btn.innerHTML = `<i class='bx bx-loader-alt bx-spin'></i> Saving...`;
+    btn.disabled = true;
+
+    try {
+        // 🔥 The Data Payload: Name, Avatar, and Security UID
+        const updateData = { 
+            displayName: newName, 
+            avatar: pendingSettingsAvatar, // Added the new avatar variable
+            updatedAt: Date.now(),
+            uid: auth.currentUser.uid
+        };
+
+        // 🔥 Force the merge save
+        await db.collection("users").doc(user).set(updateData, { merge: true });
         
-        // Optimistic UI Update: Change it on the screen instantly
-        userAvatar = pendingSettingsAvatar;
-        document.getElementById("profileDisplayNameDisplay").innerText = newName;
+        // --- OPTIMISTIC UI UPDATES ---
+        userDisplayName = newName; 
+        userAvatar = pendingSettingsAvatar; // Update local memory
         
+        // Update Name on screen
+        const displayEl = document.getElementById("profileDisplayNameDisplay");
+        if (displayEl) displayEl.innerText = newName;
+
+        // Update Avatar on screen
         const avatarDisplay = document.getElementById("profileAvatarDisplay");
-        if(avatarDisplay) {
+        if (avatarDisplay) {
             avatarDisplay.innerHTML = pendingSettingsAvatar.startsWith('http') 
                 ? `<img src="${pendingSettingsAvatar}" alt="avatar" style="width:100%; height:100%; object-fit:cover;">` 
                 : pendingSettingsAvatar;
         }
-
-        // Close and unlock
-        closeSettingsScreen();
-        saveBtn.innerHTML = "Save Changes";
-        saveBtn.disabled = false;
         
-    }).catch(err => {
-        // Log the exact error to the console just in case
-        console.error("Profile Save Error:", err);
-        alert("Failed to save changes. Try again!");
-        saveBtn.innerHTML = "Save Changes";
-        saveBtn.disabled = false;
-    });
+        // --- PREMIUM BUTTON ANIMATION ---
+        btn.style.background = "var(--success)";
+        btn.innerHTML = `<i class='bx bx-check'></i> Saved!`;
+        
+        setTimeout(() => {
+            btn.style.background = "var(--primary-gradient)"; // Restored your gradient!
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+            closeSettingsScreen(); 
+        }, 800);
+
+    } catch (e) {
+        // 🔥 THE DEBUGGER: This will tell us WHY it failed in the console
+        console.error("🚨 CRITICAL SAVE ERROR:", e.code, e.message);
+        
+        if (e.code === 'permission-denied') {
+            alert("Firebase blocked the save: Permission Denied. Check your Firestore rules!");
+        } else {
+            alert("Failed to save profile. Please check your connection.");
+        }
+        
+        btn.innerHTML = originalText; 
+        btn.disabled = false;
+    }
 }
 
 let pendingSettingsAvatar = null;
