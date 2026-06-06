@@ -294,8 +294,7 @@ function initializeUserApp(userData) {
       uid: auth.currentUser.uid
   }, { merge: true });
   
-  // 🔥 BUG 2 FIX: Inject a "History Buffer" so they can't swipe back to Google Auth
-  history.pushState({ screen: 'buffer' }, '', window.location.pathname);
+  // Just establish the home screen state here
   history.pushState({ screen: 'home' }, '', window.location.pathname);
   
   switchScreen("home"); 
@@ -1301,9 +1300,9 @@ window.addEventListener('popstate', (event) => {
         closeChat();
     } else if (currentProfileView && currentProfileView !== "") {
         closeProfileScreen();
-    } else if (event.state && event.state.screen === 'buffer') {
-        // 🔥 BUG 2 FIX: If they hit back on the home screen, they hit our invisible buffer.
-        // We instantly force them forward so they never see the Google Login page!
-        history.forward();
+    } else if (auth.currentUser) {
+        // 🔥 THE ULTIMATE TRAP: If they are logged in and swipe back on the home screen,
+        // we instantly throw a new "page" into the history stack so they can NEVER reach Google!
+        history.pushState(null, '', window.location.href);
     }
 });
