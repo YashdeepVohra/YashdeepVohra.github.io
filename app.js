@@ -263,7 +263,17 @@ auth.onAuthStateChanged(async (userAuth) => {
         return; 
       }
 
-      initializeUserApp(doc.data());
+      // 🔥 THE REFRESH FIX: Fetch the actual profile data from the Username Document!
+      const username = doc.data().username;
+      const profileRef = db.collection("users").doc(username);
+      let profileDoc = await profileRef.get();
+
+      // Merge the data so we have the newest Avatar, but keep the Google backup
+      let finalData = profileDoc.exists ? profileDoc.data() : doc.data();
+      finalData.username = username; 
+      finalData.googlePfp = doc.data().googlePfp || userAuth.photoURL; 
+
+      initializeUserApp(finalData);
 
     } catch (error) {
       console.error("Database Error:", error); 
@@ -271,18 +281,20 @@ auth.onAuthStateChanged(async (userAuth) => {
       document.getElementById("loading-screen")?.classList.add("hidden");
     }
   } else {
-    // 🔥 BUG 2 FIX: Only show the login screen AFTER Firebase confirms they are logged out!
     if (!localStorage.getItem("isRedirecting")) {
       switchScreen("login");
       document.getElementById("topAvatar")?.classList.add("hidden");
-      document.getElementById("loading-screen")?.classList.add("hidden"); // Drop the shield
+      document.getElementById("loading-screen")?.classList.add("hidden"); 
     }
   }
 });
 
 function initializeUserApp(userData) {
-  user = userData?.username || "Student"; realName = userData?.name || "Student";
-  userAvatar = userData?.avatar || "👤"; googlePfp = userData?.googlePfp || "";
+  user = userData?.username || "Student"; 
+  // 🔥 FIX: Check for the custom 'displayName' first!
+  realName = userData?.displayName || userData?.name || "Student";
+  userAvatar = userData?.avatar || "👤"; 
+  googlePfp = userData?.googlePfp || "";
   
   const topAvatarEl = document.getElementById("topAvatar");
   if(topAvatarEl) { topAvatarEl.innerHTML = renderAvatar(userAvatar); topAvatarEl.classList.remove("hidden"); }
@@ -293,7 +305,6 @@ function initializeUserApp(userData) {
       uid: auth.currentUser.uid
   }, { merge: true });
   
-  // Just establish the home screen state here
   history.pushState({ screen: 'home' }, '', window.location.pathname);
   
   switchScreen("home"); 
@@ -446,6 +457,9 @@ function loadEvents() {
       const e = data; const id = data.id; const attendeesCount = e.participants ? e.participants.length : 1;
       
       const hostDisplayName = userCache[e.user]?.displayName || e.user;
+      
+      // 🔥 THE HOMESCREEN FIX: Grab the live avatar from the smart cache, not the old snapshot!
+      const hostLiveAvatar = userCache[e.user]?.avatar || e.hostAvatar || "👤";
 
       let attendeeNames = "";
       if (e.participants && e.participants.length > 0) {
@@ -494,7 +508,10 @@ function loadEvents() {
       const displayTag = e.tag ? `<div class="event-tag-badge" style="margin-bottom: 0;">${e.tag}</div>` : '';
       const displayDesc = e.description ? `<button class="read-more-btn" onclick="toggleEventDesc('${id}')">Read details...</button><div class="event-desc-box">${e.description}</div>` : '';
       let statusBadge = (currentTime < e.startTime) ? `<span style="background: #fef08a; color: #854d0e; padding: 4px 8px; border-radius: 12px; font-size: 10px; font-weight: 800; text-transform: uppercase;">Upcoming</span>` : `<span style="background: #fee2e2; color: #dc2626; padding: 4px 8px; border-radius: 12px; font-size: 10px; font-weight: 800; text-transform: uppercase;"><i class='bx bx-radio-circle-marked bx-burst'></i> Live</span>`;
-      const avatarHTML = `<div style="display:inline-block; width:24px; height:24px; border-radius:50%; vertical-align:middle; overflow:hidden; border:1px solid var(--border); margin-right:4px;">${renderAvatar(e.hostAvatar)}</div>`;
+      
+      // 🔥 THE HOMESCREEN FIX: Passing the live avatar into the HTML!
+      const avatarHTML = `<div style="display:inline-block; width:24px; height:24px; border-radius:50%; vertical-align:middle; overflow:hidden; border:1px solid var(--border); margin-right:4px;">${renderAvatar(hostLiveAvatar)}</div>`;
+      
       const matchesLive = (typeof currentLiveFilter !== 'undefined' ? (currentLiveFilter === 'All' || e.tag === currentLiveFilter) : true);
       const matchesRecap = (typeof currentRecapFilter !== 'undefined' ? (currentRecapFilter === 'All' || e.tag === currentRecapFilter) : true);
       
@@ -529,7 +546,6 @@ function loadEvents() {
                         <button class="leave-btn" style="margin-top:0; flex:1;" onclick="leaveEvent('${id}')"><i class='bx bx-exit'></i></button>
                       </div>` 
                    : (isFull 
-                      // 🔥 SMART BUTTON: Grays out and disables if the event hits max capacity!
                       ? `<button class="join" style="background: #cbd5e1; color: #64748b; cursor: not-allowed;" disabled>Event Full 🛑</button>`
                       : `<button class="join" onclick="joinEvent('${id}')">Join Hangout</button>`
                      )
