@@ -294,8 +294,9 @@ function initializeUserApp(userData) {
       uid: auth.currentUser.uid
   }, { merge: true });
   
-  // 🔥 BUG 1 FIX: Erase the messy Google Auth loop from the browser's back button history!
-  history.replaceState({ screen: 'home' }, '', window.location.pathname);
+  // 🔥 BUG 2 FIX: Inject a "History Buffer" so they can't swipe back to Google Auth
+  history.pushState({ screen: 'buffer' }, '', window.location.pathname);
+  history.pushState({ screen: 'home' }, '', window.location.pathname);
   
   switchScreen("home"); 
   loadChatList(); loadEvents();
@@ -1296,10 +1297,13 @@ function closeSettingsModal() { document.getElementById("settingsModal")?.classL
 // 🛡️ STEALTH MODE NATIVE BACK BUTTON
 // ==========================================
 window.addEventListener('popstate', (event) => {
-    // If they swipe back, we check what is currently open and close it!
     if (currentChat) {
         closeChat();
     } else if (currentProfileView && currentProfileView !== "") {
         closeProfileScreen();
+    } else if (event.state && event.state.screen === 'buffer') {
+        // 🔥 BUG 2 FIX: If they hit back on the home screen, they hit our invisible buffer.
+        // We instantly force them forward so they never see the Google Login page!
+        history.forward();
     }
 });
