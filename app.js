@@ -338,31 +338,43 @@ async function checkUsernameAvailability() {
 }
 
 async function claimUsername() {
-  const chosenName = document.getElementById("newUsername")?.value; if (!chosenName) return;
+  const chosenName = document.getElementById("newUsername")?.value.trim(); 
+  if (!chosenName) return;
+
   const btn = document.getElementById("claimBtn");
-  
-  // 🔥 THE FIX: Lock the button instantly to prevent double-taps!
   if (btn) {
       btn.disabled = true;
       btn.innerHTML = `<i class='bx bx-loader-alt bx-spin'></i> Claiming...`;
   }
 
   try {
+    // 1. Create the username entry
     await db.collection("usernames").doc(chosenName).set({ email: userEmail });
     
+    // 2. Stamp the UID on the user profile
     await db.collection("users").doc(userEmail).set({ 
         username: chosenName,
         uid: auth.currentUser.uid 
     }, { merge: true });
     
+    // 3. Fetch the final data
     const updatedDoc = await db.collection("users").doc(userEmail).get();
-    initializeUserApp(updatedDoc.data());
+    
+    // 4. 🔥 GATEKEEPER: Only proceed if we aren't already on the home screen
+    if (document.getElementById("home").classList.contains("hidden")) {
+        initializeUserApp(updatedDoc.data());
+    }
     
   } catch (error) { 
-      console.error("Username Claim Error:", error);
-      alert("Error claiming username. Check connection."); 
-      // Unlock the button if it actually failed
-      if (btn) { btn.disabled = false; btn.innerHTML = "Claim"; }
+      // 🔥 SILENT CATCH: If the error is just a collision, ignore it
+      // because the first click already succeeded!
+      if (error.code === 'permission-denied' || error.message.includes('already exists')) {
+          console.log("Ignore: Double-tap trigger.");
+      } else {
+          console.error("Critical Error:", error);
+          alert("Error claiming username. Check your connection.");
+          if (btn) { btn.disabled = false; btn.innerHTML = "Claim"; }
+      }
   }
 }
 
