@@ -339,10 +339,17 @@ async function checkUsernameAvailability() {
 
 async function claimUsername() {
   const chosenName = document.getElementById("newUsername")?.value; if (!chosenName) return;
+  const btn = document.getElementById("claimBtn");
+  
+  // 🔥 THE FIX: Lock the button instantly to prevent double-taps!
+  if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = `<i class='bx bx-loader-alt bx-spin'></i> Claiming...`;
+  }
+
   try {
     await db.collection("usernames").doc(chosenName).set({ email: userEmail });
     
-    // 🔥 THE FIX: Stamp the UID again when they claim their username
     await db.collection("users").doc(userEmail).set({ 
         username: chosenName,
         uid: auth.currentUser.uid 
@@ -350,9 +357,12 @@ async function claimUsername() {
     
     const updatedDoc = await db.collection("users").doc(userEmail).get();
     initializeUserApp(updatedDoc.data());
+    
   } catch (error) { 
       console.error("Username Claim Error:", error);
       alert("Error claiming username. Check connection."); 
+      // Unlock the button if it actually failed
+      if (btn) { btn.disabled = false; btn.innerHTML = "Claim"; }
   }
 }
 
