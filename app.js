@@ -252,7 +252,17 @@ auth.onAuthStateChanged(async (userAuth) => {
       
       if (!doc.exists) {
         let defaultName = userAuth.displayName || (userAuth.email ? userAuth.email.split('@')[0] : "Student");
-        await userRef.set({ name: defaultName, googlePfp: userAuth.photoURL || "", avatar: userAuth.photoURL || "👤", banned: false, joinedAt: Date.now() });
+        
+        // 🔥 THE FIX: Stamp the UID the exact second the account is born
+        await userRef.set({ 
+            name: defaultName, 
+            googlePfp: userAuth.photoURL || "", 
+            avatar: userAuth.photoURL || "👤", 
+            banned: false, 
+            joinedAt: Date.now(),
+            uid: userAuth.uid 
+        });
+        
         doc = await userRef.get();
       }
 
@@ -331,10 +341,19 @@ async function claimUsername() {
   const chosenName = document.getElementById("newUsername")?.value; if (!chosenName) return;
   try {
     await db.collection("usernames").doc(chosenName).set({ email: userEmail });
-    await db.collection("users").doc(userEmail).set({ username: chosenName }, { merge: true });
+    
+    // 🔥 THE FIX: Stamp the UID again when they claim their username
+    await db.collection("users").doc(userEmail).set({ 
+        username: chosenName,
+        uid: auth.currentUser.uid 
+    }, { merge: true });
+    
     const updatedDoc = await db.collection("users").doc(userEmail).get();
     initializeUserApp(updatedDoc.data());
-  } catch (error) { alert("Error claiming username."); }
+  } catch (error) { 
+      console.error("Username Claim Error:", error);
+      alert("Error claiming username. Check connection."); 
+  }
 }
 
 function logout() { 
