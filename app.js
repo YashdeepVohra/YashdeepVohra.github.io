@@ -247,37 +247,48 @@ if (isRedirecting) {
 
 function loginWithGoogle() {
   const loader = document.getElementById("loading-screen");
-  if (loader) loader.classList.remove("hidden");
-  
-  // Clean up old cross-origin tracking cookies
-  localStorage.removeItem("isRedirecting");
-  
+
+  if (loader) {
+    loader.classList.remove("hidden");
+  }
+
+  localStorage.setItem("isRedirecting", "true");
+
   const provider = new firebase.auth.GoogleAuthProvider();
-  
-  // 🔥 THE POPUP FIX: Opens a clean modal window that cleanly captures auth tokens
-  auth.signInWithPopup(provider)
-    .then((result) => {
-      // Logic handled automatically by onAuthStateChanged stream
-    })
-    .catch((error) => {
-      console.error("Auth Error:", error);
-      if (loader) loader.classList.add("hidden");
-      alert("Sign-in failed: " + error.message);
-    });
+
+  auth.signInWithRedirect(provider)
+      .catch((error) => {
+
+          localStorage.removeItem("isRedirecting");
+
+          if (loader) {
+              loader.classList.add("hidden");
+          }
+
+          console.error(error);
+          alert(error.message);
+      });
 }
 
-auth.getRedirectResult().then((result) => {
-  localStorage.removeItem("isRedirecting"); 
-  if (!result?.user && !auth.currentUser) {
-    switchScreen("login");
-    document.getElementById("topAvatar")?.classList.add("hidden");
+auth.getRedirectResult()
+.then(async (result) => {
+
+    localStorage.removeItem("isRedirecting");
+
+    if (result.user) {
+        console.log("Redirect login successful");
+    }
+
+})
+.catch((error) => {
+
+    localStorage.removeItem("isRedirecting");
+
+    console.error("Redirect Error:", error);
+
     document.getElementById("loading-screen")?.classList.add("hidden");
-  }
-}).catch((error) => {
-  localStorage.removeItem("isRedirecting");
-  console.error("Auth Error:", error);
-  switchScreen("login");
-  document.getElementById("loading-screen")?.classList.add("hidden");
+
+    switchScreen("login");
 });
 
 auth.onAuthStateChanged(async (userAuth) => {
