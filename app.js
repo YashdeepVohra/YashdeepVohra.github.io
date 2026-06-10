@@ -248,9 +248,22 @@ if (isRedirecting) {
 function loginWithGoogle() {
   const loader = document.getElementById("loading-screen");
   if (loader) loader.classList.remove("hidden");
-  localStorage.setItem("isRedirecting", "true");
+  
+  // Clean up old cross-origin tracking cookies
+  localStorage.removeItem("isRedirecting");
+  
   const provider = new firebase.auth.GoogleAuthProvider();
-  auth.signInWithRedirect(provider);
+  
+  // 🔥 THE POPUP FIX: Opens a clean modal window that cleanly captures auth tokens
+  auth.signInWithPopup(provider)
+    .then((result) => {
+      // Logic handled automatically by onAuthStateChanged stream
+    })
+    .catch((error) => {
+      console.error("Auth Error:", error);
+      if (loader) loader.classList.add("hidden");
+      alert("Sign-in failed: " + error.message);
+    });
 }
 
 auth.getRedirectResult().then((result) => {
