@@ -288,19 +288,26 @@ auth.onAuthStateChanged(async (userAuth) => {
     currentUserUid = userAuth.uid;
     
     try {
-      const userRef = db.collection("users").doc(currentUserUid);
-      let doc = await userRef.get();
+      // 1. Query the users collection to find the document that has this UID
+      const userQuery = await db.collection("users").where("uid", "==", currentUserUid).get();
       
-      if (doc.exists && doc.data().banned === true) { alert("SECURITY ALERT: Suspended."); auth.signOut(); return; }
-      
-      if (!doc.exists) {
+      if (userQuery.empty) {
+        // 2. User exists in Auth but not in DB -> Send to username creation
         document.getElementById("topAvatar")?.classList.add("hidden");
         switchScreen("usernameScreen"); 
         document.getElementById("loading-screen")?.classList.add("hidden");
         return; 
       }
 
-      initializeUserApp(doc.data());
+      // 3. Document found! Get the data and set the username correctly
+      const doc = userQuery.docs[0];
+      const userData = doc.data();
+      
+      if (userData.banned === true) { alert("SECURITY ALERT: Suspended."); auth.signOut(); return; }
+
+      // IMPORTANT: Set 'user' variable to the document ID (the username)
+      user = doc.id; 
+      initializeUserApp(userData);
 
     } catch (error) {
       console.error("Database Error:", error); 
@@ -308,6 +315,7 @@ auth.onAuthStateChanged(async (userAuth) => {
       document.getElementById("loading-screen")?.classList.add("hidden");
     }
   } else {
+    // User is logged out
     if (!localStorage.getItem("isRedirecting")) {
       switchScreen("login");
       document.getElementById("topAvatar")?.classList.add("hidden");
@@ -356,7 +364,8 @@ async function claimUsername() {
   if (btn) { btn.disabled = true; btn.innerHTML = `<i class='bx bx-loader-alt bx-spin'></i> Claiming...`; }
 
   const usernameRef = db.collection("usernames").doc(chosenName);
-  const userRef = db.collection("users").doc(currentUserUid);
+  // 🔥 THE FIX: Use chosenName (the username) so your ID structure stays consistent
+  const userRef = db.collection("users").doc(chosenName);
 
   try {
     const defaultName = auth.currentUser.displayName || "Student";
@@ -373,6 +382,7 @@ async function claimUsername() {
         banned: false
     };
 
+    // This transaction makes it 100% safe from race conditions
     await db.runTransaction(async (transaction) => {
         const usernameDoc = await transaction.get(usernameRef);
         if (usernameDoc.exists) {
@@ -382,7 +392,8 @@ async function claimUsername() {
         transaction.set(userRef, userData);
     });
 
-    initializeUserApp(userData);
+    // Refresh app state
+    location.reload(); 
     
   } catch (error) { 
       if (error.message === "TAKEN") {
