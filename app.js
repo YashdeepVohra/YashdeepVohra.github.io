@@ -3,7 +3,7 @@
 // ==========================================
 const firebaseConfig = {
   apiKey: "AIzaSyBvcJJ2wz2yteRUYdasRUe8oaTt_Vp9kGQ",
-  authDomain: window.location.hostname, // Enterprise Fix
+  authDomain: window.location.hostname, 
   projectId: "livesociyaweb",
   storageBucket: "livesociyaweb.firebasestorage.app",
   messagingSenderId: "676740518716",
@@ -22,25 +22,35 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-// 🔥 PRODUCTION IDENTITY MATRIX (Unambiguous, Unified Variables)
-let currentUserUid = null;     // Master Unique Database Key
-let currentUsername = "";      // User's @handle display string
-let userAvatar = "👤";         // Active emoji or picture URL
-let googlePfp = "";           // Backup image from Google sign-in
-let realName = "";            // Display Name string
+// 🛡️ SECURITY: XSS SANITIZATION UTILITY
+function escapeHTML(str) {
+    if (!str) return '';
+    return str
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
 
-let currentChat = null;        // Active Room ID (UID-sorted combo or Event Document ID)
-let currentOtherUser = "";     // Active Chat Partner's UID
-let currentChatType = "direct"; // "direct" or "event"
+// 🔥 PRODUCTION IDENTITY MATRIX
+let currentUserUid = null;     
+let currentUsername = "";      
+let userAvatar = "👤";         
+let googlePfp = "";           
+let realName = "";            
+
+let currentChat = null;        
+let currentOtherUser = "";     
+let currentChatType = "direct"; 
 
 let messagesUnsubscribe = null;
 let chatDocUnsubscribe = null;
 let eventsUnsubscribe = null;
 let profileEventsUnsubscribe = null;
-// 🔥 ISSUE 5 FIX: Tracker for the global Chat List listener to prevent memory leaks
 let chatListUnsubscribe = null; 
+let scrollTimeout = null;
 
-// 🔥 ISSUE 4 FIX: Client-side anti-spam throttle timestamps
 let lastMessageTime = 0;
 let lastEventTime = 0;
 let lastHypeTime = 0;
@@ -51,7 +61,7 @@ let currentSelectedTag = '☕ Chill';
 let currentLiveFilter = 'All', currentRecapFilter = 'All';
 let currentEventData = null;
 let currentProfileView = "";
-let userCache = {};            // 🧠 The Smart Cache Dictionary (Strictly keyed by UID)
+let userCache = {};            
 let replyingToMessage = null;
 let typingTimer = null;
 let myMessageCount = 0;
@@ -62,7 +72,6 @@ let currentChatData = null;
 function renderAvatar(avatarCode) {
   if (!avatarCode) return "👤";
   if (typeof avatarCode === 'string' && avatarCode.startsWith("http")) {
-    // Escape quotes to prevent image attribute breakout exploits
     const cleanUrl = avatarCode.replace(/"/g, "&quot;");
     return `<img src="${cleanUrl}" referrerpolicy="no-referrer" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block;">`;
   }
@@ -70,39 +79,41 @@ function renderAvatar(avatarCode) {
 }
 
 // ==========================================
-// 🎵 SMART LINK PREVIEWS (Spotify, YouTube, Links)
+// 🎵 SMART LINK PREVIEWS (Host Validated)
 // ==========================================
 function formatMessage(text, isMediaOnly = false) {
-    // 🔥 ISSUE 2 FIX: Complete string escape mapping for innerHTML protection
-    let safeText = text
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-        
+    let safeText = escapeHTML(text);
     const urlRegex = /(https?:\/\/[^\s]+)/g;
 
-    return safeText.replace(urlRegex, function(url) {
-        // Remove trailing or broken tags inside the captured block
-        const cleanUrl = url.replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    return safeText.replace(urlRegex, function(urlStr) {
+        let cleanUrl = urlStr.replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        let parsedUrl;
         
+        try {
+            parsedUrl = new URL(cleanUrl);
+        } catch (e) {
+            return `<a href="${cleanUrl}" target="_blank" rel="noopener noreferrer" style="color: inherit; font-weight: 700; text-decoration: underline; word-break: break-all;">${cleanUrl}</a>`;
+        }
+
+        if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+            return cleanUrl;
+        }
+
+        const hostname = parsedUrl.hostname.toLowerCase();
+        const allowedYTHosts = ["youtube.com", "www.youtube.com", "youtu.be"];
+        const allowedSpotifyHosts = ["googleusercontent.com", "www.googleusercontent.com"];
+
         // --- 🔴 YOUTUBE PREVIEW ---
-        if (cleanUrl.includes("youtube.com/watch") || cleanUrl.includes("youtu.be/")) {
+        if (allowedYTHosts.includes(hostname)) {
             let videoId = "";
-            try {
-                if (cleanUrl.includes("youtube.com/watch")) {
-                    // Reconstruct a standard url format parser to avoid string slicing bugs
-                    const parsedUrl = new URL(cleanUrl.replace(/&amp;/g, "&"));
-                    videoId = parsedUrl.searchParams.get("v") || "";
-                } else {
-                    videoId = cleanUrl.split("youtu.be/")[1]?.split("?")[0]?.split("&")[0] || "";
-                }
-            } catch(err) { videoId = ""; }
+            if (hostname === "youtu.be") {
+                videoId = parsedUrl.pathname.split("/")[1]?.split("?")[0] || "";
+            } else {
+                videoId = parsedUrl.searchParams.get("v") || "";
+            }
             
-            // 🔥 ISSUE 6 FIX: Explicit Regex verification validation of base64 YouTube Video IDs
-            const ytRegex = /^[a-zA-Z0-9_-]{11}$/;
-            if (videoId && ytRegex.test(videoId)) {
+            const musicRegex = /^[a-zA-Z0-9_-]{11}$/;
+            if (videoId && musicRegex.test(videoId)) {
                 const margin = isMediaOnly ? "0" : "8px";
                 return `${isMediaOnly ? "" : "<br>"}
                         <div style="margin-top: ${margin}; width: 100%; max-width: 280px; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.15); background: #18181b; position: relative; min-height: 160px;">
@@ -115,19 +126,17 @@ function formatMessage(text, isMediaOnly = false) {
         }
         
         // --- 🟢 SPOTIFY PREVIEW ---
-        if (cleanUrl.includes("spotify.com/track/") || cleanUrl.includes("spotify.com/playlist/") || cleanUrl.includes("spotify.com/album/")) {
-            const embedUrl = cleanUrl.replace("spotify.com/", "spotify.com/embed/");
+        if (allowedSpotifyHosts.includes(hostname)) {
             const margin = isMediaOnly ? "0" : "8px";
             return `${isMediaOnly ? "" : "<br>"}
                     <div style="margin-top: ${margin}; width: 100%; max-width: 280px; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.15); background: #121212; position: relative; min-height: 152px;">
                         <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #1ed760; font-size: 32px; z-index: 1;">
                             <i class='bx bxl-spotify bx-flashing'></i>
                         </div>
-                        <iframe src="${embedUrl}" width="100%" height="152" frameborder="0" style="display: block; position: relative; z-index: 2;" allowfullscreen="" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>
+                        <iframe src="${cleanUrl}" width="100%" height="152" frameborder="0" style="display: block; position: relative; z-index: 2;" allowfullscreen="" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>
                     </div>`;
         }
 
-        // --- 🔵 ESCAPED ANCHOR ROUTE ---
         return `<a href="${cleanUrl}" target="_blank" rel="noopener noreferrer" style="color: inherit; font-weight: 700; text-decoration: underline; word-break: break-all;">${cleanUrl}</a>`;
     });
 }
@@ -147,14 +156,14 @@ function showNotification(senderUid, chatId) {
   }
 
   toastBox.innerHTML = "";
-  const displayName = userCache[senderUid]?.displayName || "Student";
+  const displayName = escapeHTML(userCache[senderUid]?.displayName || "Student");
 
   const toast = document.createElement("div");
   toast.style.cssText = "background: var(--primary); color: white; padding: 14px 20px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); font-size: 14px; font-weight: 600; cursor: pointer; transform: translateY(-150%); transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); display: flex; align-items: center; gap: 10px; width: 100%; pointer-events: auto;";
   toast.innerHTML = `<i class='bx bxs-message-rounded-dots' style="font-size: 20px;"></i> New message from ${displayName}`;
 
   toast.onclick = () => {
-    const fallbackName = userCache[senderUid]?.username || "user";
+    const fallbackName = escapeHTML(userCache[senderUid]?.username || "user");
     openChat(chatId, senderUid, fallbackName);
     toast.style.transform = "translateY(-150%)"; 
     setTimeout(() => toast.remove(), 400);
@@ -206,9 +215,6 @@ function handleMessageTap(event, element, senderUid, encodedText, time) {
     }
 }
 
-// ==========================================
-// 🔐 AUTHENTICATION INTERFACES
-// ==========================================
 function switchScreen(screenId) {
   document.getElementById("login")?.classList.add("hidden");
   document.getElementById("home")?.classList.add("hidden");
@@ -313,9 +319,6 @@ function initializeUserApp(userData) {
   document.getElementById("loading-screen")?.classList.add("hidden");
 }
 
-// ==========================================
-// USERNAME, PROFILE & EVENT LOGIC
-// ==========================================
 async function checkUsernameAvailability() {
   const input = document.getElementById("newUsername"); const status = document.getElementById("usernameStatus"); const btn = document.getElementById("claimBtn");
   if(!input || !status || !btn) return;
@@ -323,7 +326,6 @@ async function checkUsernameAvailability() {
   let val = input.value.toLowerCase().replace(/[^a-z0-9_]/g, ''); input.value = val; 
   if (val.length === 0) { status.innerText = ""; btn.style.background = "#cbd5e1"; btn.disabled = true; return; }
   
-  // 🔥 ISSUE 7 FIX: Upper length constraint checker to stop layout distortion attacks
   if (val.length > 20) { status.innerText = "Too long (Max 20)"; status.style.color = "var(--danger)"; btn.style.background = "#cbd5e1"; btn.disabled = true; return; }
   if (val.length < 3) { status.innerText = "Must be at least 3 characters"; status.style.color = "var(--text-muted)"; btn.style.background = "#cbd5e1"; btn.disabled = true; return; }
   
@@ -332,6 +334,7 @@ async function checkUsernameAvailability() {
   else { status.innerText = "Available! 🎉"; status.style.color = "var(--success)"; btn.style.background = "var(--primary)"; btn.disabled = false; btn.style.cursor = "pointer"; }
 }
 
+// 🔥 TRANSACTIONS RUN LOCK: Defeats the unique handle overwrite window
 async function claimUsername() {
   const chosenName = document.getElementById("newUsername")?.value.trim().toLowerCase().replace(/[^a-z0-9_]/g, ''); 
   if (!chosenName || chosenName.length < 3 || chosenName.length > 20) return alert("Invalid Username bounds (3-20 chars).");
@@ -339,36 +342,40 @@ async function claimUsername() {
   const btn = document.getElementById("claimBtn");
   if (btn) { btn.disabled = true; btn.innerHTML = `<i class='bx bx-loader-alt bx-spin'></i> Claiming...`; }
 
+  const usernameRef = db.collection("usernames").doc(chosenName);
+  const userRef = db.collection("users").doc(currentUserUid);
+
   try {
-    // 1. Reserve the handle in the username lockbox index
-    await db.collection("usernames").doc(chosenName).set({ uid: currentUserUid });
-    
     const defaultName = auth.currentUser.displayName || "Student";
     const defaultPfp = auth.currentUser.photoURL || "👤";
 
-    // 2. 🔥 HARDENED PAYLOAD: Fully populated to satisfy the firestore.rules keys schema
     const userData = { 
         username: chosenName,
         displayName: defaultName,
         avatar: defaultPfp,
         googlePfp: defaultPfp,
         joinedAt: Date.now(),
-        updatedAt: Date.now(), // Added to satisfy validation rules on initial write
-        uid: currentUserUid,   // Matches your strict request.auth.uid rule verification
+        updatedAt: Date.now(), 
+        uid: currentUserUid,   
         banned: false
     };
 
-    // 3. Document ID is now strictly the UID, keeping identities perfectly unified
-    await db.collection("users").doc(currentUserUid).set(userData);
+    await db.runTransaction(async (transaction) => {
+        const usernameDoc = await transaction.get(usernameRef);
+        if (usernameDoc.exists) {
+            throw new Error("TAKEN");
+        }
+        transaction.set(usernameRef, { uid: currentUserUid });
+        transaction.set(userRef, userData);
+    });
+
     initializeUserApp(userData);
     
   } catch (error) { 
-      console.error("Registration Error Context:", error);
-      if (error.code === 'permission-denied' || error.message.includes('already exists')) {
-          console.log("Ignore: Double-tap trigger or security engine rejection collision.");
-          alert("Username is already taken or registration was blocked!");
+      if (error.message === "TAKEN") {
+          alert("Username is already taken! Try another one.");
       } else {
-          alert("Error claiming username. Check your internet connection.");
+          alert("Registration failed. Please check your internet connection.");
       }
       if (btn) { btn.disabled = false; btn.innerHTML = "Claim"; }
   }
@@ -388,7 +395,12 @@ function closeProfileModal() { document.getElementById("profileModal")?.classLis
 
 function selectAvatar(element, type) {
   let newAvatar = (type === 'google') ? googlePfp : type;
-  db.collection("users").doc(currentUserUid).set({ avatar: newAvatar }, { merge: true });
+  db.collection("users").doc(currentUserUid).set({ 
+      avatar: newAvatar,
+      googlePfp: googlePfp,
+      updatedAt: Date.now(),
+      uid: currentUserUid
+  }, { merge: true });
   userAvatar = newAvatar;
   const topAvatar = document.getElementById("topAvatar"); const profAvatar = document.getElementById("profileLargeAvatar");
   if(topAvatar) topAvatar.innerHTML = renderAvatar(userAvatar);
@@ -410,7 +422,6 @@ function openCreateScreen() {
 function closeCreateScreen() { document.getElementById("createScreen")?.classList.add("hidden"); }
 
 function addEvent() {
-  // 🔥 ISSUE 4 FIX: Anti-automation throttle loop gate for Event publications (1 event per 3 seconds max)
   const now = Date.now();
   if (now - lastEventTime < 3000) return alert("Please wait a moment before publishing another event.");
   lastEventTime = now;
@@ -425,8 +436,8 @@ function addEvent() {
   const maxCapacity = capacityRaw ? parseInt(capacityRaw) : null;
 
   if (!title || !place || !startTimeStr || !endTimeStr) return alert("Please fill out all event details.");
-  // Enforce structural safety boundary length checks
   if (title.length > 100 || place.length > 100 || (description && description.length > 1000)) return alert("Input length thresholds exceeded.");
+  if (maxCapacity !== null && (maxCapacity < 2 || maxCapacity > 500)) return alert("Capacity bounds must run between 2 and 500.");
 
   if (btn) { btn.disabled = true; btn.innerHTML = `<i class='bx bx-loader-alt bx-spin'></i> Publishing...`; }
 
@@ -459,12 +470,14 @@ function addEvent() {
       closeCreateScreen();
       if (btn) { btn.disabled = false; btn.innerHTML = `Publish to Campus <i class='bx bx-send'></i>`; }
   }).catch((error) => {
-      console.error("Error:", error);
       alert("Failed to publish. Try again.");
       if (btn) { btn.disabled = false; btn.innerHTML = `Publish to Campus <i class='bx bx-send'></i>`; }
   });
 }
 
+// ==========================================
+// 📅 CAMPUS EVENTS DISCOVERY CORE (XSS Safe)
+// ==========================================
 function loadEvents() {
   if (eventsUnsubscribe) eventsUnsubscribe(); 
   
@@ -495,14 +508,19 @@ function loadEvents() {
     eventsArray.forEach(data => {
       const e = data; const id = data.id; const attendeesCount = e.participants ? e.participants.length : 1;
       
-      const hostDisplayName = userCache[e.hostUid]?.displayName || e.hostUsername;
+      const hostDisplayName = escapeHTML(userCache[e.hostUid]?.displayName || e.hostUsername || "Student");
       const hostLiveAvatar = userCache[e.hostUid]?.avatar || e.hostAvatar || "👤";
+      
+      const cleanTitle = escapeHTML(e.title);
+      const cleanPlace = escapeHTML(e.place);
+      const cleanDesc = escapeHTML(e.description);
+      const chatClickTitle = cleanTitle.replace(/'/g, "\\'");
 
       let attendeeNames = "";
       if (e.participants && e.participants.length > 0) {
           const visibleParticipants = e.participants.slice(0, 3);
           attendeeNames = visibleParticipants.map(uid => {
-              const pDisplayName = userCache[uid]?.displayName || "Student";
+              const pDisplayName = escapeHTML(userCache[uid]?.displayName || "Student");
               return `<span onclick="event.stopPropagation(); openProfileScreen('${uid}')" style="color: var(--primary); cursor: pointer; font-weight: 700;">${pDisplayName}</span>`;
           }).join(", ");
           
@@ -538,8 +556,8 @@ function loadEvents() {
             </div>`;
       }
 
-      const displayTag = e.tag ? `<div class="event-tag-badge" style="margin-bottom: 0;">${e.tag}</div>` : '';
-      const displayDesc = e.description ? `<button class="read-more-btn" onclick="toggleEventDesc('${id}')">Read details...</button><div class="event-desc-box">${e.description}</div>` : '';
+      const displayTag = e.tag ? `<div class="event-tag-badge" style="margin-bottom: 0;">${escapeHTML(e.tag)}</div>` : '';
+      const displayDesc = e.description ? `<button class="read-more-btn" onclick="toggleEventDesc('${id}')">Read details...</button><div class="event-desc-box">${cleanDesc}</div>` : '';
       let statusBadge = (currentTime < e.startTime) ? `<span style="background: #fef08a; color: #854d0e; padding: 4px 8px; border-radius: 12px; font-size: 10px; font-weight: 800; text-transform: uppercase;">Upcoming</span>` : `<span style="background: #fee2e2; color: #dc2626; padding: 4px 8px; border-radius: 12px; font-size: 10px; font-weight: 800; text-transform: uppercase;"><i class='bx bx-radio-circle-marked bx-burst'></i> Live</span>`;
       const avatarHTML = `<div style="display:inline-block; width:24px; height:24px; border-radius:50%; vertical-align:middle; overflow:hidden; border:1px solid var(--border); margin-right:4px;">${renderAvatar(hostLiveAvatar)}</div>`;
       
@@ -555,9 +573,9 @@ function loadEvents() {
                 <div style="display: flex; gap: 8px; align-items: center;">${displayTag} ${statusBadge}</div>
                 ${hypeHTML}
               </div>
-              <div class="event-title">${e.title}</div>
+              <div class="event-title">${cleanTitle}</div>
               <div class="event-meta" style="display:flex; align-items:center;">
-                ${avatarHTML} <span>${e.place} • hosted by ${hostDisplayName}</span>
+                ${avatarHTML} <span>${cleanPlace} • hosted by ${hostDisplayName}</span>
               </div>
               ${displayDesc}
               <div class="attendees">
@@ -565,12 +583,12 @@ function loadEvents() {
               </div>
               ${capacityHTML} ${e.hostUid === currentUserUid 
                 ? `<div style="display:flex; gap:8px; margin-top:16px;">
-                     <button class="join" style="margin-top:0; flex:2;" onclick="openEventChat('${id}', '${e.title.replace(/'/g, "\\'")}')"><i class='bx bx-message-square-dots'></i> Open Chat</button>
+                     <button class="join" style="margin-top:0; flex:2;" onclick="openEventChat('${id}', '${chatClickTitle}')"><i class='bx bx-message-square-dots'></i> Open Chat</button>
                      <button class="delete-btn" style="margin-top:0; flex:1;" onclick="openDeleteModal('${id}')"><i class='bx bx-slider'></i> Manage</button>
                    </div>` 
                 : (hasJoined 
                    ? `<div style="display:flex; gap:8px; margin-top:16px;">
-                        <button class="join" style="margin-top:0; flex:3;" onclick="openEventChat('${id}', '${e.title.replace(/'/g, "\\'")}')"><i class='bx bx-message-square-dots'></i> Open Chat</button>
+                        <button class="join" style="margin-top:0; flex:3;" onclick="openEventChat('${id}', '${chatClickTitle}')"><i class='bx bx-message-square-dots'></i> Open Chat</button>
                         <button class="leave-btn" style="margin-top:0; flex:1;" onclick="leaveEvent('${id}')"><i class='bx bx-exit'></i></button>
                       </div>` 
                    : (isFull 
@@ -590,8 +608,8 @@ function loadEvents() {
                 <div style="display: flex; gap: 8px; align-items: center;">${displayTag}</div>
                 ${hypeHTML}
               </div>
-              <div class="event-title" style="color: #4b5563;">${e.title}</div>
-              <div class="event-meta" style="display:flex; align-items:center;">${avatarHTML} <span>${e.place} • hosted by ${hostDisplayName}</span></div>
+              <div class="event-title" style="color: #4b5563;">${cleanTitle}</div>
+              <div class="event-meta" style="display:flex; align-items:center;">${avatarHTML} <span>${cleanPlace} • hosted by ${hostDisplayName}</span></div>
               <div class="attendees" style="background:#f3f4f6; color: var(--text-muted);"><i class='bx bx-check-double'></i> Attended (${attendeesCount}): ${attendeeNames}</div>
             </div>`;
         }
@@ -603,7 +621,6 @@ function loadEvents() {
 }
 
 function joinEvent(id) { 
-    // 🔥 ISSUE 4 FIX: Throttle clicks on event interaction array mutations
     const now = Date.now(); if (now - lastJoinTime < 500) return; lastJoinTime = now;
     db.collection("events").doc(id).update({ participants: firebase.firestore.FieldValue.arrayUnion(currentUserUid) }); 
 }
@@ -638,16 +655,11 @@ function confirmDeletePermanently() {
         setTimeout(() => eventCard.remove(), 300);
     }
     closeDeleteModal();
-    // 🔥 ISSUE 8 NOTE: Frontend commands a delete request; verification happens within rules
     db.collection("events").doc(eventId).delete().catch((error) => {
-        console.error("🚨 Firestore Delete Error:", error.code, error.message);
         loadEvents(); 
     });
 }
 
-// ==========================================
-// 💬 CHAT ENGINE (SMART UID ROUTING)
-// ==========================================
 async function checkCrossedPaths(user1, user2) {
   const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000); 
   const snap = await db.collection("events").where("participants", "array-contains", user1).get();
@@ -740,15 +752,14 @@ async function sendMessage() {
   const text = input.value.trim(); 
   if (!text || !currentChat) return;
   
-  // 🔥 ISSUE 3 FIX: Explicit max character text payload size limit
   if (text.length > 1000) return alert("Message threshold exceeded (Max 1000 characters).");
 
-  // 🔥 ISSUE 4 FIX: Client throttle cool-down (Max 1 text per 400ms)
   const now = Date.now();
   if (now - lastMessageTime < 400) return;
   lastMessageTime = now;
 
-  const replyData = replyingToMessage ? { sender: replyingToMessage.sender, text: replyingToMessage.text, time: replyingToMessage.time } : null;
+  // 🔥 SCHEMATIC CHANGE: Structural map key points cleanly to UID reference variables now
+  const replyData = replyingToMessage ? { uid: replyingToMessage.sender, text: replyingToMessage.text, time: replyingToMessage.time } : null;
   replyingToMessage = null; 
 
   const chatRefPath = currentChatType === "event" 
@@ -856,7 +867,7 @@ function updateTypingIndicator() {
       const typists = (currentEventData.typingUsers || []).filter(u => u !== currentUserUid);
       if (typists.length > 0) {
           if (nameEl) {
-              const displayName = userCache[typists[0]]?.displayName || "Student";
+              const displayName = escapeHTML(userCache[typists[0]]?.displayName || "Student");
               nameEl.innerText = typists.length === 1 ? `${displayName} is typing` : `${typists.length} people typing`;
           }
           bubble.classList.remove("hidden"); box.scrollTop = box.scrollHeight;
@@ -927,16 +938,17 @@ function loadMessages() {
         let shape = "single"; if (isSamePrev && isSameNext) shape = "middle"; else if (!isSamePrev && isSameNext) shape = "first"; else if (isSamePrev && !isSameNext) shape = "last";
 
         const encodedText = encodeURIComponent(m.text); 
-        
         const rawText = m.text.trim();
-        const isMediaOnly = /^https?:\/\/[^\s]+$/.test(rawText) && (rawText.includes("youtube.com") || rawText.includes("youtu.be") || rawText.includes("spotify.com"));
+        const isMediaOnly = /^https?:\/\/[^\s]+$/.test(rawText) && (rawText.includes("youtube.com") || rawText.includes("youtu.be") || rawText.includes("googleusercontent.com"));
         const bubbleClass = isMediaOnly ? 'msg-bubble media-only' : 'msg-bubble';
 
         let replyBlock = "";
         if (m.replyTo) {
-            const replyName = m.replyTo.sender === currentUserUid ? "You" : (userCache[m.replyTo.sender]?.displayName || "Student");
+            // 🔥 SCHEMATIC CHANGE MATCHED: Evaluates reply target elements securely using lookups by UIDs instead of handles
+            const replyTargetUid = m.replyTo.uid || m.replyTo.sender;
+            const replyName = replyTargetUid === currentUserUid ? "You" : (escapeHTML(userCache[replyTargetUid]?.displayName) || "Student");
             const timeData = m.replyTo.time ? `data-target-time="${m.replyTo.time}"` : "";
-            replyBlock = `<div class="msg-replied-to" ${timeData}><b>${replyName}:</b> ${m.replyTo.text}</div>`;
+            replyBlock = `<div class="msg-replied-to" ${timeData}><b>${replyName}:</b> ${escapeHTML(m.replyTo.text)}</div>`;
         }
 
         const swipeIconHTML = isMe 
@@ -945,7 +957,7 @@ function loadMessages() {
 
         let nameTagHTML = "";
         if (currentChatType === "event" && !isMe && !isSamePrev) {
-            const senderDisplayName = userCache[m.sender]?.displayName || "Student";
+            const senderDisplayName = escapeHTML(userCache[m.sender]?.displayName || "Student");
             nameTagHTML = `<div style="font-size: 11px; font-weight: 700; color: var(--text-muted); margin-left: 14px; margin-bottom: 2px; cursor: pointer; display: inline-block;" onclick="event.stopPropagation(); openProfileScreen('${m.sender}')">${senderDisplayName}</div>`;
         }
             
@@ -980,7 +992,6 @@ function loadMessages() {
 }
 
 function loadChatList() {
-  // 🔥 ISSUE 5 FIX: Safely kill the previous snap handler to prevent active listener leaks
   if (chatListUnsubscribe) chatListUnsubscribe();
 
   chatListUnsubscribe = db.collection("chats").where("members", "array-contains", currentUserUid).onSnapshot(async (snapshot) => {
@@ -1025,7 +1036,7 @@ function loadChatList() {
         if (isUnread) hasGlobalUnread = true;
         
         const cachedUser = userCache[otherUid] || {};
-        const displayName = cachedUser.displayName || cachedUser.username || "Student";
+        const displayName = escapeHTML(cachedUser.displayName || cachedUser.username || "Student");
         const avatarCode = cachedUser.avatar || "👤";
         
         const unreadStyles = isUnread ? 'background: #e0e7ff; border-left: 4px solid var(--primary);' : '';
@@ -1033,7 +1044,7 @@ function loadChatList() {
         const dotHTML = isUnread ? `<div class="unread-pulse-dot"></div>` : '';
         
         list.innerHTML += `
-          <div class="chat-item" onclick="openChat('${chat.id}', '${otherUid}', '${cachedUser.username || 'user'}')" style="${unreadStyles}">
+          <div class="chat-item" onclick="openChat('${chat.id}', '${otherUid}', '${escapeHTML(cachedUser.username) || 'user'}')" style="${unreadStyles}">
             <div class="chat-avatar" style="background: transparent; border: 1px solid var(--border); padding: 0; overflow: hidden;">
                 ${renderAvatar(avatarCode)}
             </div>
@@ -1070,10 +1081,14 @@ function openProfileScreen(targetUid = null) {
     loadProfileUI(currentProfileView); 
 }
 
-// Ensure popstate events don't trigger layout crashes during modal shifts
+// 🔥 GC ACTIVE LISTENER UNLINK: Sweeps background streams upon close execution loops
 function closeProfileScreen() {
     document.getElementById("profileScreen").classList.add("hidden");
     document.getElementById("home").classList.remove("hidden");
+    if (profileEventsUnsubscribe) {
+        profileEventsUnsubscribe();
+        profileEventsUnsubscribe = null;
+    }
     currentProfileView = ""; 
 }
 
@@ -1101,8 +1116,8 @@ async function loadProfileUI(targetUid) {
   let cachedUser = userCache[targetUid];
   if (cachedUser) {
       if (avatarEl && cachedUser.avatar) avatarEl.innerHTML = renderAvatar(cachedUser.avatar);
-      if (nameDisplay && cachedUser.displayName) nameDisplay.innerText = cachedUser.displayName;
-      if (usernameDisplay && cachedUser.username) usernameDisplay.innerText = "@" + cachedUser.username;
+      if (nameDisplay && cachedUser.displayName) nameDisplay.innerText = escapeHTML(cachedUser.displayName);
+      if (usernameDisplay && cachedUser.username) usernameDisplay.innerText = "@" + escapeHTML(cachedUser.username);
   }
   
   if (targetUid === currentUserUid) { settingsGear.classList.remove("hidden"); } 
@@ -1115,8 +1130,8 @@ async function loadProfileUI(targetUid) {
           userCache[targetUid] = { uid: targetUid, ...data }; 
           
           if (avatarEl) avatarEl.innerHTML = renderAvatar(data.avatar || "👤");
-          if (nameDisplay) nameDisplay.innerText = data.displayName || data.username;
-          if (usernameDisplay) usernameDisplay.innerText = "@" + data.username;
+          if (nameDisplay) nameDisplay.innerText = escapeHTML(data.displayName || data.username);
+          if (usernameDisplay) usernameDisplay.innerText = "@" + escapeHTML(data.username);
 
           if (targetUid === currentUserUid && editInput) {
               realName = data.displayName || data.username;
@@ -1138,6 +1153,9 @@ async function loadProfileUI(targetUid) {
   } catch(e) { console.error("Profile load error:", e); }
 }
 
+// ==========================================
+// 📅 PROFILE HISTORICAL LOAD (XSS Safe)
+// ==========================================
 function loadUserEvents(targetUid) {
     const list = document.getElementById("myProfileEvents");
     if (!list) return;
@@ -1155,10 +1173,13 @@ function loadUserEvents(targetUid) {
           }
 
           eventsArray.forEach(e => {
+              const cleanTitle = escapeHTML(e.title);
+              const cleanPlace = escapeHTML(e.place);
+
               list.innerHTML += `
                 <div class="card" style="padding: 16px; margin-bottom: 12px; box-shadow: none; border: 1px solid var(--border);">
-                  <div style="font-size: 16px; font-weight: 700; margin-bottom: 4px;">${e.title}</div>
-                  <div style="font-size: 12px; color: var(--text-muted);"><i class='bx bx-map'></i> ${e.place}</div>
+                  <div style="font-size: 16px; font-weight: 700; margin-bottom: 4px;">${cleanTitle}</div>
+                  <div style="font-size: 12px; color: var(--text-muted);"><i class='bx bx-map'></i> ${cleanPlace}</div>
                 </div>`;
           });
       }, error => { console.error("Error loading events:", error); });
@@ -1179,15 +1200,16 @@ async function saveProfileData() {
         const updateData = { 
             displayName: newName, 
             avatar: pendingSettingsAvatar, 
+            googlePfp: googlePfp,
             updatedAt: Date.now(),
             uid: currentUserUid
         };
 
         await db.collection("users").doc(currentUserUid).set(updateData, { merge: true });
-        userDisplayName = newName; userAvatar = pendingSettingsAvatar; 
+        realName = newName; userAvatar = pendingSettingsAvatar; 
         
         const displayEl = document.getElementById("profileDisplayNameDisplay");
-        if (displayEl) displayEl.innerText = newName;
+        if (displayEl) displayEl.innerText = escapeHTML(newName);
 
         const avatarDisplay = document.getElementById("profileAvatarDisplay");
         if (avatarDisplay) {
@@ -1202,7 +1224,6 @@ async function saveProfileData() {
             closeSettingsScreen(); 
         }, 800);
     } catch (e) {
-        console.error("🚨 CRITICAL SAVE ERROR:", e.code, e.message);
         alert("Failed to save profile. Please check your connection.");
         btn.innerHTML = originalText; btn.disabled = false;
     }
@@ -1231,22 +1252,14 @@ function selectSettingsAvatar(element, avatarChoice) {
 }
 function closeSettingsScreen() { document.getElementById("settingsScreen")?.classList.add("hidden"); }
 
-// ==========================================
-// 🛡️ STEALTH MODE NATIVE BACK BUTTON
-// ==========================================
 window.addEventListener('popstate', (event) => {
     if (currentChat) { closeChat(); } 
     else if (currentProfileView && currentProfileView !== "") { closeProfileScreen(); } 
     else if (auth.currentUser) { history.pushState(null, '', window.location.href); }
 });
 
-// ==========================================
-// 🔥 EVENT HYPE LOGIC
-// ==========================================
 function toggleHype(id, isHyped) {
-    // 🔥 ISSUE 4 FIX: Throttle click rates for Hype metrics mutations
     const now = Date.now(); if (now - lastHypeTime < 300) return; lastHypeTime = now;
-
     const eventRef = db.collection("events").doc(id);
     if (isHyped) {
         eventRef.update({ hypedBy: firebase.firestore.FieldValue.arrayRemove(currentUserUid) });
