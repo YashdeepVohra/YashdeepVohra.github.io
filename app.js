@@ -22,24 +22,50 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-let currentChat = null, user = "", userEmail = "", userAvatar = "👤";
-let currentChatType = "direct";
-let messagesUnsubscribe = null, eventIdToManage = null;
-let currentSelectedTag = '☕ Chill', googlePfp = "", realName = "";
+// 🔥 PRODUCTION IDENTITY MATRIX (Unambiguous, Unified Variables)
+let currentUserUid = null;     // Master Unique Database Key
+let currentUsername = "";      // User's @handle display string
+let userAvatar = "👤";         // Active emoji or picture URL
+let googlePfp = "";           // Backup image from Google sign-in
+let realName = "";            // Display Name string
+
+let currentChat = null;        // Active Room ID (UID-sorted combo or Event Document ID)
+let currentOtherUser = "";     // Active Chat Partner's UID
+let currentChatType = "direct"; // "direct" or "event"
+
+let messagesUnsubscribe = null;
+let chatDocUnsubscribe = null;
+let eventsUnsubscribe = null;
+let profileEventsUnsubscribe = null;
+// 🔥 ISSUE 5 FIX: Tracker for the global Chat List listener to prevent memory leaks
+let chatListUnsubscribe = null; 
+
+// 🔥 ISSUE 4 FIX: Client-side anti-spam throttle timestamps
+let lastMessageTime = 0;
+let lastEventTime = 0;
+let lastHypeTime = 0;
+let lastJoinTime = 0;
+
+let eventIdToManage = null;
+let currentSelectedTag = '☕ Chill';
 let currentLiveFilter = 'All', currentRecapFilter = 'All';
 let currentEventData = null;
-let userDisplayName = ""; // Holds the user's custom name in memory
 let currentProfileView = "";
-let userCache = {}; // 🧠 The Smart Cache Dictionary
+let userCache = {};            // 🧠 The Smart Cache Dictionary (Strictly keyed by UID)
+let replyingToMessage = null;
+let typingTimer = null;
+let myMessageCount = 0;
+let currentChatStatus = "unlocked";
+let currentChatInitiator = "";
+let currentChatData = null;
 
 function renderAvatar(avatarCode) {
   if (!avatarCode) return "👤";
-  
-  // 🔥 THE FIX: Added referrerpolicy="no-referrer" so Google doesn't block the image!
   if (typeof avatarCode === 'string' && avatarCode.startsWith("http")) {
-    return `<img src="${avatarCode}" referrerpolicy="no-referrer" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block;">`;
+    // Escape quotes to prevent image attribute breakout exploits
+    const cleanUrl = avatarCode.replace(/"/g, "&quot;");
+    return `<img src="${cleanUrl}" referrerpolicy="no-referrer" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover; display: block;">`;
   }
-  
   return avatarCode;
 }
 
@@ -47,19 +73,36 @@ function renderAvatar(avatarCode) {
 // 🎵 SMART LINK PREVIEWS (Spotify, YouTube, Links)
 // ==========================================
 function formatMessage(text, isMediaOnly = false) {
-    // 1. Sanitize text to block hackers
-    let safeText = text.replace(/</g, "<").replace(/>/g, ">");
+    // 🔥 ISSUE 2 FIX: Complete string escape mapping for innerHTML protection
+    let safeText = text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+        
     const urlRegex = /(https?:\/\/[^\s]+)/g;
 
     return safeText.replace(urlRegex, function(url) {
+        // Remove trailing or broken tags inside the captured block
+        const cleanUrl = url.replace(/"/g, "&quot;").replace(/'/g, "&#039;");
         
-        // --- 🔴 YOUTUBE PREVIEW (With Skeleton Loader) ---
-        if (url.includes("youtube.com/watch") || url.includes("youtu.be/")) {
+        // --- 🔴 YOUTUBE PREVIEW ---
+        if (cleanUrl.includes("youtube.com/watch") || cleanUrl.includes("youtu.be/")) {
             let videoId = "";
-            if (url.includes("youtube.com/watch")) videoId = new URL(url).searchParams.get("v");
-            else videoId = url.split("youtu.be/")[1]?.split("?")[0];
+            try {
+                if (cleanUrl.includes("youtube.com/watch")) {
+                    // Reconstruct a standard url format parser to avoid string slicing bugs
+                    const parsedUrl = new URL(cleanUrl.replace(/&amp;/g, "&"));
+                    videoId = parsedUrl.searchParams.get("v") || "";
+                } else {
+                    videoId = cleanUrl.split("youtu.be/")[1]?.split("?")[0]?.split("&")[0] || "";
+                }
+            } catch(err) { videoId = ""; }
             
-            if (videoId) {
+            // 🔥 ISSUE 6 FIX: Explicit Regex verification validation of base64 YouTube Video IDs
+            const ytRegex = /^[a-zA-Z0-9_-]{11}$/;
+            if (videoId && ytRegex.test(videoId)) {
                 const margin = isMediaOnly ? "0" : "8px";
                 return `${isMediaOnly ? "" : "<br>"}
                         <div style="margin-top: ${margin}; width: 100%; max-width: 280px; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.15); background: #18181b; position: relative; min-height: 160px;">
@@ -71,10 +114,9 @@ function formatMessage(text, isMediaOnly = false) {
             }
         }
         
-        // --- 🟢 SPOTIFY PREVIEW (With Skeleton Loader) ---
-        if (url.includes("open.spotify.com/track") || url.includes("open.spotify.com/playlist") || url.includes("open.spotify.com/album")) {
-            // Converts standard Spotify link directly to an embed link!
-            const embedUrl = url.split("?")[0].replace("open.spotify.com", "open.spotify.com/embed");
+        // --- 🟢 SPOTIFY PREVIEW ---
+        if (cleanUrl.includes("spotify.com/track/") || cleanUrl.includes("spotify.com/playlist/") || cleanUrl.includes("spotify.com/album/")) {
+            const embedUrl = cleanUrl.replace("spotify.com/", "spotify.com/embed/");
             const margin = isMediaOnly ? "0" : "8px";
             return `${isMediaOnly ? "" : "<br>"}
                     <div style="margin-top: ${margin}; width: 100%; max-width: 280px; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.15); background: #121212; position: relative; min-height: 152px;">
@@ -85,15 +127,15 @@ function formatMessage(text, isMediaOnly = false) {
                     </div>`;
         }
 
-        // --- 🔵 NORMAL LINK PREVIEW ---
-        return `<a href="${url}" target="_blank" style="color: inherit; font-weight: 700; text-decoration: underline; word-break: break-all;">${url}</a>`;
+        // --- 🔵 ESCAPED ANCHOR ROUTE ---
+        return `<a href="${cleanUrl}" target="_blank" rel="noopener noreferrer" style="color: inherit; font-weight: 700; text-decoration: underline; word-break: break-all;">${cleanUrl}</a>`;
     });
 }
 
 // ==========================================
-// 🔔 IN-APP NOTIFICATION SYSTEM (CLEAN MOBILE)
+// 🔔 IN-APP NOTIFICATION SYSTEM
 // ==========================================
-function showNotification(senderUsername, chatId) {
+function showNotification(senderUid, chatId) {
   if (currentChat === chatId) return;
 
   let toastBox = document.getElementById("toastBox");
@@ -105,22 +147,20 @@ function showNotification(senderUsername, chatId) {
   }
 
   toastBox.innerHTML = "";
-  
-  // 🔥 THE FIX: Removed @ and use the display name if available!
-  const displayName = userCache[senderUsername]?.displayName || senderUsername;
+  const displayName = userCache[senderUid]?.displayName || "Student";
 
   const toast = document.createElement("div");
   toast.style.cssText = "background: var(--primary); color: white; padding: 14px 20px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); font-size: 14px; font-weight: 600; cursor: pointer; transform: translateY(-150%); transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); display: flex; align-items: center; gap: 10px; width: 100%; pointer-events: auto;";
   toast.innerHTML = `<i class='bx bxs-message-rounded-dots' style="font-size: 20px;"></i> New message from ${displayName}`;
 
   toast.onclick = () => {
-    openChat(chatId, senderUsername);
+    const fallbackName = userCache[senderUid]?.username || "user";
+    openChat(chatId, senderUid, fallbackName);
     toast.style.transform = "translateY(-150%)"; 
     setTimeout(() => toast.remove(), 400);
   };
 
   toastBox.appendChild(toast);
-  
   void toast.offsetWidth;
   toast.style.transform = "translateY(0)";
   
@@ -145,46 +185,34 @@ function toggleTime(element) {
 }
 
 let lastTapTime = 0;
-
-function handleMessageTap(event, element, sender, encodedText, time) {
-    // 1. THE FIX: Check if their finger specifically landed on the grey context box
+function handleMessageTap(event, element, senderUid, encodedText, time) {
     const replyBox = event.target.closest('.msg-replied-to');
-    
     if (replyBox) {
-        // They tapped the grey box! 
         const targetTime = replyBox.getAttribute('data-target-time');
-        
-        // If the message has a GPS coordinate, scroll to it!
         if (targetTime) scrollToMessage(targetTime);
-        
-        // 🛑 EXIT IMMEDIATELY! Do not open the timestamp. Do not double-tap.
         return; 
     }
 
-    // 2. If they touched the normal blue/grey bubble, run the standard rules
     const currentTime = new Date().getTime();
     const tapLength = currentTime - lastTapTime;
     lastTapTime = currentTime;
     
     if (tapLength < 300 && tapLength > 0) {
-        // 🔥 DOUBLE TAP: Trigger Reply
         event.preventDefault(); 
-        initiateReply(sender, decodeURIComponent(encodedText), time);
+        initiateReply(senderUid, decodeURIComponent(encodedText), time);
         if (navigator.vibrate) navigator.vibrate(50); 
     } else {
-        // 👆 SINGLE TAP: Reveal Timestamp
         toggleTime(element);
     }
 }
 
 // ==========================================
-// 🔐 ENTERPRISE FIRST-PARTY AUTHENTICATION
+// 🔐 AUTHENTICATION INTERFACES
 // ==========================================
-
 function switchScreen(screenId) {
   document.getElementById("login")?.classList.add("hidden");
   document.getElementById("home")?.classList.add("hidden");
-  document.getElementById("usernameScreen")?.classList.add("hidden"); // Updated ID
+  document.getElementById("usernameScreen")?.classList.add("hidden");
   document.getElementById("profileScreen")?.classList.add("hidden");
   document.getElementById("chatScreen")?.classList.add("hidden");
   if (screenId) document.getElementById(screenId)?.classList.remove("hidden");
@@ -202,8 +230,6 @@ function switchScreen(screenId) {
 const isRedirecting = localStorage.getItem("isRedirecting");
 if (isRedirecting) {
   document.getElementById("loading-screen")?.classList.remove("hidden");
-  
-  // ESCAPE HATCH: Break lock if Firebase hangs for 8 seconds
   setTimeout(() => {
     if (!auth.currentUser) {
       localStorage.removeItem("isRedirecting");
@@ -216,9 +242,7 @@ if (isRedirecting) {
 function loginWithGoogle() {
   const loader = document.getElementById("loading-screen");
   if (loader) loader.classList.remove("hidden");
-  
   localStorage.setItem("isRedirecting", "true");
-  
   const provider = new firebase.auth.GoogleAuthProvider();
   auth.signInWithRedirect(provider);
 }
@@ -242,48 +266,22 @@ auth.onAuthStateChanged(async (userAuth) => {
 
   if (userAuth) {
     localStorage.removeItem("isRedirecting"); 
+    currentUserUid = userAuth.uid;
     
     try {
-      userEmail = userAuth.email || userAuth.uid; 
-      const userRef = db.collection("users").doc(userEmail);
+      const userRef = db.collection("users").doc(currentUserUid);
       let doc = await userRef.get();
       
       if (doc.exists && doc.data().banned === true) { alert("SECURITY ALERT: Suspended."); auth.signOut(); return; }
       
       if (!doc.exists) {
-        let defaultName = userAuth.displayName || (userAuth.email ? userAuth.email.split('@')[0] : "Student");
-        
-        // 🔥 THE FIX: Stamp the UID the exact second the account is born
-        await userRef.set({ 
-            name: defaultName, 
-            googlePfp: userAuth.photoURL || "", 
-            avatar: userAuth.photoURL || "👤", 
-            banned: false, 
-            joinedAt: Date.now(),
-            uid: userAuth.uid 
-        });
-        
-        doc = await userRef.get();
-      }
-
-      if (!doc.data().username) {
         document.getElementById("topAvatar")?.classList.add("hidden");
         switchScreen("usernameScreen"); 
         document.getElementById("loading-screen")?.classList.add("hidden");
         return; 
       }
 
-      // 🔥 THE REFRESH FIX: Fetch the actual profile data from the Username Document!
-      const username = doc.data().username;
-      const profileRef = db.collection("users").doc(username);
-      let profileDoc = await profileRef.get();
-
-      // Merge the data so we have the newest Avatar, but keep the Google backup
-      let finalData = profileDoc.exists ? profileDoc.data() : doc.data();
-      finalData.username = username; 
-      finalData.googlePfp = doc.data().googlePfp || userAuth.photoURL; 
-
-      initializeUserApp(finalData);
+      initializeUserApp(doc.data());
 
     } catch (error) {
       console.error("Database Error:", error); 
@@ -300,81 +298,79 @@ auth.onAuthStateChanged(async (userAuth) => {
 });
 
 function initializeUserApp(userData) {
-  user = userData?.username || "Student"; 
-  // 🔥 FIX: Check for the custom 'displayName' first!
-  realName = userData?.displayName || userData?.name || "Student";
-  userAvatar = userData?.avatar || "👤"; 
-  googlePfp = userData?.googlePfp || "";
+  currentUsername = userData.username; 
+  realName = userData.displayName || userData.username;
+  userAvatar = userData.avatar || "👤"; 
+  googlePfp = userData.googlePfp || "";
   
   const topAvatarEl = document.getElementById("topAvatar");
   if(topAvatarEl) { topAvatarEl.innerHTML = renderAvatar(userAvatar); topAvatarEl.classList.remove("hidden"); }
   
-  db.collection("users").doc(user).set({
-      displayName: realName, 
-      avatar: userAvatar,
-      uid: auth.currentUser.uid
-  }, { merge: true });
-  
   history.pushState({ screen: 'home' }, '', window.location.pathname);
-  
   switchScreen("home"); 
-  loadChatList(); loadEvents();
+  loadChatList(); 
+  loadEvents();
   document.getElementById("loading-screen")?.classList.add("hidden");
 }
 
 // ==========================================
 // USERNAME, PROFILE & EVENT LOGIC
 // ==========================================
-
 async function checkUsernameAvailability() {
   const input = document.getElementById("newUsername"); const status = document.getElementById("usernameStatus"); const btn = document.getElementById("claimBtn");
   if(!input || !status || !btn) return;
+  
   let val = input.value.toLowerCase().replace(/[^a-z0-9_]/g, ''); input.value = val; 
-  if (val.length === 0) { status.innerText = ""; btn.style.background = "#cbd5e1"; btn.disabled = true; btn.style.cursor = "not-allowed"; return; }
-  if (val.length < 3) { status.innerText = "Must be at least 3 characters"; status.style.color = "var(--text-muted)"; btn.style.background = "#cbd5e1"; btn.disabled = true; btn.style.cursor = "not-allowed"; return; }
+  if (val.length === 0) { status.innerText = ""; btn.style.background = "#cbd5e1"; btn.disabled = true; return; }
+  
+  // 🔥 ISSUE 7 FIX: Upper length constraint checker to stop layout distortion attacks
+  if (val.length > 20) { status.innerText = "Too long (Max 20)"; status.style.color = "var(--danger)"; btn.style.background = "#cbd5e1"; btn.disabled = true; return; }
+  if (val.length < 3) { status.innerText = "Must be at least 3 characters"; status.style.color = "var(--text-muted)"; btn.style.background = "#cbd5e1"; btn.disabled = true; return; }
+  
   const usernameDoc = await db.collection("usernames").doc(val).get();
-  if (usernameDoc.exists) { status.innerText = "Taken 😔"; status.style.color = "var(--danger)"; btn.style.background = "#cbd5e1"; btn.disabled = true; btn.style.cursor = "not-allowed"; } 
+  if (usernameDoc.exists) { status.innerText = "Taken 😔"; status.style.color = "var(--danger)"; btn.style.background = "#cbd5e1"; btn.disabled = true; } 
   else { status.innerText = "Available! 🎉"; status.style.color = "var(--success)"; btn.style.background = "var(--primary)"; btn.disabled = false; btn.style.cursor = "pointer"; }
 }
 
 async function claimUsername() {
-  const chosenName = document.getElementById("newUsername")?.value.trim(); 
-  if (!chosenName) return;
-
+  const chosenName = document.getElementById("newUsername")?.value.trim().toLowerCase().replace(/[^a-z0-9_]/g, ''); 
+  if (!chosenName || chosenName.length < 3 || chosenName.length > 20) return alert("Invalid Username bounds (3-20 chars).");
+  
   const btn = document.getElementById("claimBtn");
-  if (btn) {
-      btn.disabled = true;
-      btn.innerHTML = `<i class='bx bx-loader-alt bx-spin'></i> Claiming...`;
-  }
+  if (btn) { btn.disabled = true; btn.innerHTML = `<i class='bx bx-loader-alt bx-spin'></i> Claiming...`; }
 
   try {
-    // 1. Create the username entry
-    await db.collection("usernames").doc(chosenName).set({ email: userEmail });
+    // 1. Reserve the handle in the username lockbox index
+    await db.collection("usernames").doc(chosenName).set({ uid: currentUserUid });
     
-    // 2. Stamp the UID on the user profile
-    await db.collection("users").doc(userEmail).set({ 
+    const defaultName = auth.currentUser.displayName || "Student";
+    const defaultPfp = auth.currentUser.photoURL || "👤";
+
+    // 2. 🔥 HARDENED PAYLOAD: Fully populated to satisfy the firestore.rules keys schema
+    const userData = { 
         username: chosenName,
-        uid: auth.currentUser.uid 
-    }, { merge: true });
-    
-    // 3. Fetch the final data
-    const updatedDoc = await db.collection("users").doc(userEmail).get();
-    
-    // 4. 🔥 GATEKEEPER: Only proceed if we aren't already on the home screen
-    if (document.getElementById("home").classList.contains("hidden")) {
-        initializeUserApp(updatedDoc.data());
-    }
+        displayName: defaultName,
+        avatar: defaultPfp,
+        googlePfp: defaultPfp,
+        joinedAt: Date.now(),
+        updatedAt: Date.now(), // Added to satisfy validation rules on initial write
+        uid: currentUserUid,   // Matches your strict request.auth.uid rule verification
+        banned: false
+    };
+
+    // 3. Document ID is now strictly the UID, keeping identities perfectly unified
+    await db.collection("users").doc(currentUserUid).set(userData);
+    initializeUserApp(userData);
     
   } catch (error) { 
-      // 🔥 SILENT CATCH: If the error is just a collision, ignore it
-      // because the first click already succeeded!
+      console.error("Registration Error Context:", error);
       if (error.code === 'permission-denied' || error.message.includes('already exists')) {
-          console.log("Ignore: Double-tap trigger.");
+          console.log("Ignore: Double-tap trigger or security engine rejection collision.");
+          alert("Username is already taken or registration was blocked!");
       } else {
-          console.error("Critical Error:", error);
-          alert("Error claiming username. Check your connection.");
-          if (btn) { btn.disabled = false; btn.innerHTML = "Claim"; }
+          alert("Error claiming username. Check your internet connection.");
       }
+      if (btn) { btn.disabled = false; btn.innerHTML = "Claim"; }
   }
 }
 
@@ -392,7 +388,7 @@ function closeProfileModal() { document.getElementById("profileModal")?.classLis
 
 function selectAvatar(element, type) {
   let newAvatar = (type === 'google') ? googlePfp : type;
-  db.collection("users").doc(userEmail).set({ avatar: newAvatar }, { merge: true });
+  db.collection("users").doc(currentUserUid).set({ avatar: newAvatar }, { merge: true });
   userAvatar = newAvatar;
   const topAvatar = document.getElementById("topAvatar"); const profAvatar = document.getElementById("profileLargeAvatar");
   if(topAvatar) topAvatar.innerHTML = renderAvatar(userAvatar);
@@ -406,7 +402,6 @@ function setRecapFilter(element, tag) { currentRecapFilter = tag; document.query
 function toggleEventDesc(eventId) { const eventCard = document.getElementById(`event-${eventId}`); if(!eventCard) return; eventCard.classList.toggle('expanded'); const btn = eventCard.querySelector('.read-more-btn'); if(btn) btn.innerText = eventCard.classList.contains('expanded') ? "Hide details" : "Read details..."; }
 function openCreateScreen() { 
     document.getElementById("createScreen")?.classList.remove("hidden"); 
-    // Standardize time inputs
     const now = new Date(); const inTwoHours = new Date(now.getTime() + (2 * 60 * 60 * 1000)); 
     const formatForInput = (date) => (new Date(date - (date.getTimezoneOffset() * 60000))).toISOString().slice(0, 16); 
     const startEl = document.getElementById("startTime"); const endEl = document.getElementById("endTime"); 
@@ -415,7 +410,12 @@ function openCreateScreen() {
 function closeCreateScreen() { document.getElementById("createScreen")?.classList.add("hidden"); }
 
 function addEvent() {
-  const btn = event.target.closest('button'); // Grab the button that was clicked
+  // 🔥 ISSUE 4 FIX: Anti-automation throttle loop gate for Event publications (1 event per 3 seconds max)
+  const now = Date.now();
+  if (now - lastEventTime < 3000) return alert("Please wait a moment before publishing another event.");
+  lastEventTime = now;
+
+  const btn = event.target.closest('button');
   const title = document.getElementById("title")?.value.trim(); 
   const place = document.getElementById("place")?.value.trim(); 
   const description = document.getElementById("description")?.value.trim(); 
@@ -425,12 +425,10 @@ function addEvent() {
   const maxCapacity = capacityRaw ? parseInt(capacityRaw) : null;
 
   if (!title || !place || !startTimeStr || !endTimeStr) return alert("Please fill out all event details.");
-  
-  // 🚨 THE LOCK: Disable the button so it can't be clicked twice!
-  if (btn) {
-      btn.disabled = true;
-      btn.innerHTML = `<i class='bx bx-loader-alt bx-spin'></i> Publishing...`;
-  }
+  // Enforce structural safety boundary length checks
+  if (title.length > 100 || place.length > 100 || (description && description.length > 1000)) return alert("Input length thresholds exceeded.");
+
+  if (btn) { btn.disabled = true; btn.innerHTML = `<i class='bx bx-loader-alt bx-spin'></i> Publishing...`; }
 
   const startTimestamp = new Date(startTimeStr).getTime(); 
   const endTimestamp = new Date(endTimeStr).getTime();
@@ -444,23 +442,21 @@ function addEvent() {
   db.collection("events").add({ 
       title, place, description, 
       tag: currentSelectedTag, 
-      user, 
+      hostUsername: currentUsername,
       hostAvatar: userAvatar, 
       startTime: startTimestamp, 
       expiresAt: endTimestamp, 
-      participants: [user],
-      uid: auth.currentUser.uid, 
-      hypedBy: [],
+      participants: [currentUserUid],
+      hostUid: currentUserUid,        
+      hypedBy: [],                    
+      typingUsers: [],                
       maxCapacity: maxCapacity 
   }).then(() => {
-      // Success! Clear fields and close
       if(document.getElementById("title")) document.getElementById("title").value = ""; 
       if(document.getElementById("place")) document.getElementById("place").value = ""; 
       if(document.getElementById("description")) document.getElementById("description").value = ""; 
       if(document.getElementById("maxCapacity")) document.getElementById("maxCapacity").value = ""; 
       closeCreateScreen();
-      
-      // Reset button just in case the modal opens again
       if (btn) { btn.disabled = false; btn.innerHTML = `Publish to Campus <i class='bx bx-send'></i>`; }
   }).catch((error) => {
       console.error("Error:", error);
@@ -470,24 +466,26 @@ function addEvent() {
 }
 
 function loadEvents() {
-  db.collection("events").orderBy("startTime", "desc").onSnapshot(async (snapshot) => {
+  if (eventsUnsubscribe) eventsUnsubscribe(); 
+  
+  eventsUnsubscribe = db.collection("events").orderBy("startTime", "desc").onSnapshot(async (snapshot) => {
     const liveList = document.getElementById("events"); const recapList = document.getElementById("recapEvents");
     if(!liveList || !recapList) return;
     
     let eventsArray = [];
-    let uniqueUsers = new Set();
+    let uniqueUids = new Set();
     
     snapshot.forEach(doc => {
         const e = doc.data();
         eventsArray.push({ id: doc.id, ...e });
-        uniqueUsers.add(e.user); 
-        if (e.participants) e.participants.forEach(p => uniqueUsers.add(p)); 
+        uniqueUids.add(e.hostUid); 
+        if (e.participants) e.participants.forEach(p => uniqueUids.add(p)); 
     });
 
-    for (let u of uniqueUsers) {
-        if (!userCache[u]) {
-            const doc = await db.collection("users").doc(u).get();
-            userCache[u] = doc.exists ? doc.data() : { displayName: u, avatar: "👤" };
+    for (let uid of uniqueUids) {
+        if (!userCache[uid]) {
+            const doc = await db.collection("users").doc(uid).get();
+            userCache[uid] = doc.exists ? { uid: uid, ...doc.data() } : { displayName: "Student", avatar: "👤" };
         }
     }
 
@@ -497,17 +495,15 @@ function loadEvents() {
     eventsArray.forEach(data => {
       const e = data; const id = data.id; const attendeesCount = e.participants ? e.participants.length : 1;
       
-      const hostDisplayName = userCache[e.user]?.displayName || e.user;
-      
-      // 🔥 THE HOMESCREEN FIX: Grab the live avatar from the smart cache, not the old snapshot!
-      const hostLiveAvatar = userCache[e.user]?.avatar || e.hostAvatar || "👤";
+      const hostDisplayName = userCache[e.hostUid]?.displayName || e.hostUsername;
+      const hostLiveAvatar = userCache[e.hostUid]?.avatar || e.hostAvatar || "👤";
 
       let attendeeNames = "";
       if (e.participants && e.participants.length > 0) {
           const visibleParticipants = e.participants.slice(0, 3);
-          attendeeNames = visibleParticipants.map(p => {
-              const pDisplayName = userCache[p]?.displayName || p;
-              return `<span onclick="event.stopPropagation(); startChat('${p}')" style="color: var(--primary); cursor: pointer; font-weight: 700;">${pDisplayName}</span>`;
+          attendeeNames = visibleParticipants.map(uid => {
+              const pDisplayName = userCache[uid]?.displayName || "Student";
+              return `<span onclick="event.stopPropagation(); openProfileScreen('${uid}')" style="color: var(--primary); cursor: pointer; font-weight: 700;">${pDisplayName}</span>`;
           }).join(", ");
           
           if (e.participants.length > 3) {
@@ -515,24 +511,21 @@ function loadEvents() {
               attendeeNames += ` <span style="color: var(--text-muted); font-size: 12px; margin-left: 4px;">+${extraCount} more</span>`;
           }
       } else {
-          attendeeNames = `<span onclick="event.stopPropagation(); startChat('${e.user}')" style="color: var(--primary); cursor: pointer; font-weight: 700;">${hostDisplayName}</span>`;
+          attendeeNames = `<span onclick="event.stopPropagation(); openProfileScreen('${e.hostUid}')" style="color: var(--primary); cursor: pointer; font-weight: 700;">${hostDisplayName}</span>`;
       }
 
-      // 🔥 THE HYPE CALCULATOR
       const hypeCount = e.hypedBy ? e.hypedBy.length : 0;
-      const hasHyped = e.hypedBy && e.hypedBy.includes(user);
+      const hasHyped = e.hypedBy && e.hypedBy.includes(currentUserUid); 
       const hypeClass = hasHyped ? "hype-btn active" : "hype-btn";
       const hypeIcon = hasHyped ? "bxs-hot" : "bx-hot";
       const hypeHTML = `<button class="${hypeClass}" onclick="toggleHype('${id}', ${hasHyped})"><i class='bx ${hypeIcon}'></i> ${hypeCount > 0 ? hypeCount : 'Hype'}</button>`;
       
-      // 🔥 THE FOMO CAPACITY CALCULATOR
       const isFull = e.maxCapacity && attendeesCount >= e.maxCapacity;
       let capacityHTML = "";
       
       if (e.maxCapacity) {
           const percent = Math.min((attendeesCount / e.maxCapacity) * 100, 100);
           const barColor = isFull ? "var(--danger)" : "var(--primary)";
-          
           capacityHTML = `
             <div style="margin-top: 12px; margin-bottom: 4px;">
               <div style="display: flex; justify-content: space-between; font-size: 11px; font-weight: 700; color: var(--text-muted); margin-bottom: 4px;">
@@ -542,15 +535,12 @@ function loadEvents() {
               <div style="width: 100%; background: #e2e8f0; border-radius: 4px; height: 6px; overflow: hidden;">
                 <div style="width: ${percent}%; background: ${barColor}; height: 100%; border-radius: 4px; transition: width 0.3s;"></div>
               </div>
-            </div>
-          `;
+            </div>`;
       }
 
       const displayTag = e.tag ? `<div class="event-tag-badge" style="margin-bottom: 0;">${e.tag}</div>` : '';
       const displayDesc = e.description ? `<button class="read-more-btn" onclick="toggleEventDesc('${id}')">Read details...</button><div class="event-desc-box">${e.description}</div>` : '';
       let statusBadge = (currentTime < e.startTime) ? `<span style="background: #fef08a; color: #854d0e; padding: 4px 8px; border-radius: 12px; font-size: 10px; font-weight: 800; text-transform: uppercase;">Upcoming</span>` : `<span style="background: #fee2e2; color: #dc2626; padding: 4px 8px; border-radius: 12px; font-size: 10px; font-weight: 800; text-transform: uppercase;"><i class='bx bx-radio-circle-marked bx-burst'></i> Live</span>`;
-      
-      // 🔥 THE HOMESCREEN FIX: Passing the live avatar into the HTML!
       const avatarHTML = `<div style="display:inline-block; width:24px; height:24px; border-radius:50%; vertical-align:middle; overflow:hidden; border:1px solid var(--border); margin-right:4px;">${renderAvatar(hostLiveAvatar)}</div>`;
       
       const matchesLive = (typeof currentLiveFilter !== 'undefined' ? (currentLiveFilter === 'All' || e.tag === currentLiveFilter) : true);
@@ -558,15 +548,13 @@ function loadEvents() {
       
       if (e.expiresAt > currentTime) {
         if (matchesLive) {
-          activeCount++; const hasJoined = e.participants && e.participants.includes(user);
+          activeCount++; const hasJoined = e.participants && e.participants.includes(currentUserUid);
           liveList.innerHTML += `
             <div class="event card" id="event-${id}">
-              
               <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                 <div style="display: flex; gap: 8px; align-items: center;">${displayTag} ${statusBadge}</div>
                 ${hypeHTML}
               </div>
-              
               <div class="event-title">${e.title}</div>
               <div class="event-meta" style="display:flex; align-items:center;">
                 ${avatarHTML} <span>${e.place} • hosted by ${hostDisplayName}</span>
@@ -575,8 +563,7 @@ function loadEvents() {
               <div class="attendees">
                 <i class='bx bx-group'></i> Going (${attendeesCount}): ${attendeeNames}
               </div>
-              
-              ${capacityHTML} ${e.user === user 
+              ${capacityHTML} ${e.hostUid === currentUserUid 
                 ? `<div style="display:flex; gap:8px; margin-top:16px;">
                      <button class="join" style="margin-top:0; flex:2;" onclick="openEventChat('${id}', '${e.title.replace(/'/g, "\\'")}')"><i class='bx bx-message-square-dots'></i> Open Chat</button>
                      <button class="delete-btn" style="margin-top:0; flex:1;" onclick="openDeleteModal('${id}')"><i class='bx bx-slider'></i> Manage</button>
@@ -615,14 +602,20 @@ function loadEvents() {
   });
 }
 
-function joinEvent(id) { db.collection("events").doc(id).update({ participants: firebase.firestore.FieldValue.arrayUnion(user) }); }
-function leaveEvent(id) { db.collection("events").doc(id).update({ participants: firebase.firestore.FieldValue.arrayRemove(user) }); }
+function joinEvent(id) { 
+    // 🔥 ISSUE 4 FIX: Throttle clicks on event interaction array mutations
+    const now = Date.now(); if (now - lastJoinTime < 500) return; lastJoinTime = now;
+    db.collection("events").doc(id).update({ participants: firebase.firestore.FieldValue.arrayUnion(currentUserUid) }); 
+}
+function leaveEvent(id) { 
+    const now = Date.now(); if (now - lastJoinTime < 500) return; lastJoinTime = now;
+    db.collection("events").doc(id).update({ participants: firebase.firestore.FieldValue.arrayRemove(currentUserUid) }); 
+}
 function openDeleteModal(id) { eventIdToManage = id; document.getElementById("deleteModal")?.classList.remove("hidden"); }
 function closeDeleteModal() { eventIdToManage = null; document.getElementById("deleteModal")?.classList.add("hidden"); }
+
 function confirmMoveToRecap() { 
     if (!eventIdToManage) return; 
-    
-    // 1. Instantly hide the element
     const eventCard = document.getElementById(`event-${eventIdToManage}`);
     if (eventCard) {
         eventCard.style.transition = "all 0.3s ease";
@@ -630,108 +623,84 @@ function confirmMoveToRecap() {
         eventCard.style.transform = "scale(0.9)";
         setTimeout(() => eventCard.classList.add("hidden"), 300);
     }
-    
-    // 2. Perform the DB update
     closeDeleteModal();
     db.collection("events").doc(eventIdToManage).update({ expiresAt: Date.now() - 1 }); 
 }
 
 function confirmDeletePermanently() { 
     if (!eventIdToManage) return; 
-    
     const eventId = eventIdToManage;
     const eventCard = document.getElementById(`event-${eventId}`);
-    
-    // 1. Instant UI cleanup
     if (eventCard) {
         eventCard.style.transition = "all 0.3s ease";
         eventCard.style.opacity = "0";
         eventCard.style.transform = "scale(0.9)";
         setTimeout(() => eventCard.remove(), 300);
     }
-    
     closeDeleteModal();
-    
-    // 2. Perform delete with specific error logging
-    db.collection("events").doc(eventId).delete()
-    .then(() => {
-        console.log("✅ Successfully deleted from Firestore");
-    })
-    .catch((error) => {
-        // 🔥 THIS IS THE KEY: If it fails, this will show you exactly WHY in the console
+    // 🔥 ISSUE 8 NOTE: Frontend commands a delete request; verification happens within rules
+    db.collection("events").doc(eventId).delete().catch((error) => {
         console.error("🚨 Firestore Delete Error:", error.code, error.message);
-        
-        if (error.code === 'permission-denied') {
-            alert("Security Error: You don't have permission to delete this event.");
-        } else {
-            alert("Connection Error: Could not delete. Please check your internet.");
-        }
-        
-        // If it failed, reload to restore the card so the UI stays in sync with the DB
         loadEvents(); 
     });
 }
 
 // ==========================================
-// 💬 CHAT ENGINE (SMART UI & INDICATORS)
+// 💬 CHAT ENGINE (SMART UID ROUTING)
 // ==========================================
-let chatDocUnsubscribe = null, currentChatStatus = "unlocked", currentChatInitiator = "", myMessageCount = 0;
-let currentChatData = null; 
-let typingTimer = null; 
-let currentOtherUser = "";
-let replyingToMessage = null;
-
 async function checkCrossedPaths(user1, user2) {
-  const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000); const snap = await db.collection("events").where("participants", "array-contains", user1).get();
+  const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000); 
+  const snap = await db.collection("events").where("participants", "array-contains", user1).get();
   for (let doc of snap.docs) { const e = doc.data(); if (e.participants.includes(user2) && e.expiresAt > oneDayAgo) return true; } return false;
 }
 
 async function startChat(clickedUsername = null) {
   let rawOther = clickedUsername || document.getElementById("chatUser")?.value.trim();
   if (!rawOther) return alert("Please enter a username.");
-  const other = rawOther.toLowerCase(); 
-  if (other === user) return alert("You can't start a chat with yourself!");
+  const otherUsername = rawOther.toLowerCase().replace(/[^a-z0-9_]/g, ''); 
+  if (otherUsername === currentUsername) return alert("You can't start a chat with yourself!");
+  
   try {
-    const usernameDoc = await db.collection("usernames").doc(other).get();
-    if (!usernameDoc.exists) return alert(`User "@${other}" does not exist on campus.`);
-    const chatId = [user, other].sort().join("_");
+    const lockboxDoc = await db.collection("usernames").doc(otherUsername).get();
+    if (!lockboxDoc.exists) return alert(`User "@${otherUsername}" does not exist on campus.`);
+    
+    const otherUid = lockboxDoc.data().uid;
+    const chatId = [currentUserUid, otherUid].sort().join("_");
     if(!clickedUsername && document.getElementById("chatUser")) document.getElementById("chatUser").value = ""; 
-    openChat(chatId, other);
+    
+    openChat(chatId, otherUid, otherUsername);
   } catch (error) { alert("Error finding user."); }
 }
 
-function openChat(chatId, otherUser) {
+function openChat(chatId, otherUid, otherUsername) {
   currentChat = chatId; 
-  currentOtherUser = otherUser;
+  currentOtherUser = otherUid;
   currentChatType = "direct"; 
   
   const hAvatar = document.getElementById("chatHeaderAvatar"); 
   const hTitle = document.getElementById("chatWithTitle");
-  
   if(hAvatar) hAvatar.innerHTML = renderAvatar("👤"); 
-  if(hTitle) hTitle.innerText = otherUser;
+  if(hTitle) hTitle.innerText = otherUsername;
 
-  // 🔥 THE FIX: Instantly wipe the chat window clean
   const box = document.getElementById("messages");
   if (box) box.innerHTML = "";
   
-  db.collection("users").doc(otherUser).get().then(doc => {
+  db.collection("users").doc(otherUid).get().then(doc => {
       if (doc.exists) {
           const d = doc.data();
-          userCache[otherUser] = d; 
+          userCache[otherUid] = { uid: otherUid, ...d };
           if(hAvatar) hAvatar.innerHTML = renderAvatar(d.avatar || "👤");
-          if(hTitle) hTitle.innerText = d.displayName || otherUser;
+          if(hTitle) hTitle.innerText = d.displayName || d.username;
           
           hAvatar.style.cursor = "pointer";
-          hAvatar.onclick = () => openProfileScreen(otherUser);
+          hAvatar.onclick = () => openProfileScreen(otherUid);
           hTitle.style.cursor = "pointer";
-          hTitle.onclick = () => openProfileScreen(otherUser);
+          hTitle.onclick = () => openProfileScreen(otherUid);
       }
   });
   
   document.querySelector(".topbar")?.classList.add("hidden"); 
   switchScreen("chatScreen");
-
   history.pushState({ modalOpen: true }, '', window.location.href);
   
   if(chatDocUnsubscribe) chatDocUnsubscribe();
@@ -741,11 +710,10 @@ function openChat(chatId, otherUser) {
          currentChatStatus = currentChatData.status || "unlocked"; 
          currentChatInitiator = currentChatData.initiatedBy || ""; 
          
-         if (currentChatData.unreadBy === user) {
+         if (currentChatData.unreadBy === currentUserUid) {
              db.collection("chats").doc(chatId).set({ unreadBy: "" }, { merge: true });
              currentChatData.unreadBy = ""; 
          }
-         
          updateReadReceipts();
          updateTypingIndicator();
          updateChatFooterUI(); 
@@ -755,59 +723,72 @@ function openChat(chatId, otherUser) {
 }
 
 function closeChat() {
-  if (currentChat) db.collection("chats").doc(currentChat).set({ typing: "" }, { merge: true }); 
-  currentChat = null; currentChatData = null; currentOtherUser = ""; // 🔥 CLEAR IT
+  if (currentChat) {
+      if (currentChatType === "event") {
+          db.collection("events").doc(currentChat).update({ typingUsers: firebase.firestore.FieldValue.arrayRemove(currentUserUid) }).catch(()=>{});
+      } else {
+          db.collection("chats").doc(currentChat).set({ typing: "" }, { merge: true });
+      }
+  }
+  currentChat = null; currentChatData = null; currentOtherUser = ""; 
   if (messagesUnsubscribe) messagesUnsubscribe(); if (chatDocUnsubscribe) chatDocUnsubscribe();
   document.querySelector(".topbar")?.classList.remove("hidden"); switchScreen("home");
 }
 
 async function sendMessage() {
   const input = document.getElementById("msgInput"); if(!input) return; 
-  const text = input.value.trim(); if (!text || !currentChat) return;
+  const text = input.value.trim(); 
+  if (!text || !currentChat) return;
   
-  // 1. Grab reply data if it exists
+  // 🔥 ISSUE 3 FIX: Explicit max character text payload size limit
+  if (text.length > 1000) return alert("Message threshold exceeded (Max 1000 characters).");
+
+  // 🔥 ISSUE 4 FIX: Client throttle cool-down (Max 1 text per 400ms)
+  const now = Date.now();
+  if (now - lastMessageTime < 400) return;
+  lastMessageTime = now;
+
   const replyData = replyingToMessage ? { sender: replyingToMessage.sender, text: replyingToMessage.text, time: replyingToMessage.time } : null;
   replyingToMessage = null; 
 
-  // 2. ALWAYS send the message to the screen immediately
-  await db.collection("messages").add({ 
+  const chatRefPath = currentChatType === "event" 
+      ? db.collection("events").doc(currentChat) 
+      : db.collection("chats").doc(currentChat);
+
+  await chatRefPath.collection("messages").add({ 
       chatId: currentChat, 
-      sender: user, 
+      sender: currentUserUid, 
       text: text, 
       time: Date.now(), 
       replyTo: replyData,
-      uid: auth.currentUser.uid // 🔥 SECURITY FIX: Un-fakeable ID stamp
+      uid: currentUserUid 
   });
 
-  // 3. Route the background updates (Typing indicators & Read Receipts)
   if (currentChatType === "event") {
-      // EVENT ROUTE: Just clear the typing status
       await db.collection("events").doc(currentChat).update({ 
-          typingUsers: firebase.firestore.FieldValue.arrayRemove(user) 
-      }).catch(()=>{}); // Catch prevents crashes if array doesn't exist yet
+          typingUsers: firebase.firestore.FieldValue.arrayRemove(currentUserUid) 
+      }).catch(()=>{}); 
   } else {
-      // DIRECT ROUTE: Update read receipts and Icebreakers
-      const otherUser = currentOtherUser; 
+      const otherUid = currentOtherUser; 
       const chatRef = db.collection("chats").doc(currentChat); 
       const chatDoc = await chatRef.get(); 
       let newStatus = currentChatStatus;
       
       if (!chatDoc.exists || !chatDoc.data().status) {
-          const crossedPaths = await checkCrossedPaths(user, otherUser); 
+          const crossedPaths = await checkCrossedPaths(currentUserUid, otherUid); 
           newStatus = crossedPaths ? "unlocked" : "icebreaker";
       } else {
-          if (currentChatStatus === "icebreaker" && currentChatInitiator === otherUser) newStatus = "unlocked"; 
+          if (currentChatStatus === "icebreaker" && currentChatInitiator === otherUid) newStatus = "unlocked"; 
       }
       
       await chatRef.set({ 
-          users: [user, otherUser], 
-          unreadBy: otherUser, 
+          members: [currentUserUid, otherUid], 
+          unreadBy: otherUid, 
           lastUpdated: Date.now(), 
           status: newStatus, 
           typing: "" 
       }, { merge: true });
   }
-  
   input.value = "";
   updateChatFooterUI(); 
 }
@@ -816,19 +797,15 @@ function handleTyping() {
   if (!currentChat) return;
 
   if (currentChatType === "event") {
-      // Event Chat: Add user to an array
       db.collection("events").doc(currentChat).update({
-          typingUsers: firebase.firestore.FieldValue.arrayUnion(user)
+          typingUsers: firebase.firestore.FieldValue.arrayUnion(currentUserUid)
       });
-      
       clearTimeout(typingTimer);
       typingTimer = setTimeout(() => {
-          if (currentChat) db.collection("events").doc(currentChat).update({ typingUsers: firebase.firestore.FieldValue.arrayRemove(user) }).catch(()=>{});
+          if (currentChat) db.collection("events").doc(currentChat).update({ typingUsers: firebase.firestore.FieldValue.arrayRemove(currentUserUid) }).catch(()=>{});
       }, 1500);
   } else {
-      // Direct Chat: Simple string override
-      db.collection("chats").doc(currentChat).set({ typing: user }, { merge: true });
-      
+      db.collection("chats").doc(currentChat).set({ typing: currentUserUid }, { merge: true });
       clearTimeout(typingTimer);
       typingTimer = setTimeout(() => {
           if (currentChat) db.collection("chats").doc(currentChat).set({ typing: "" }, { merge: true });
@@ -836,51 +813,29 @@ function handleTyping() {
   }
 }
 
-// 🔥 UPGRADE: Now accepts the 'time' parameter
-function initiateReply(sender, text, time) {
-  replyingToMessage = { sender, text, time };
+function initiateReply(senderUid, text, time) {
+  replyingToMessage = { sender: senderUid, text, time };
   updateChatFooterUI();
-  
   setTimeout(() => {
       const input = document.getElementById("msgInput");
-      if(input) { 
-          input.focus(); 
-          input.scrollIntoView({ behavior: "smooth", block: "nearest" }); 
-      }
+      if(input) { input.focus(); input.scrollIntoView({ behavior: "smooth", block: "nearest" }); }
   }, 50);
 }
 
-function cancelReply() {
-  replyingToMessage = null;
-  updateChatFooterUI();
-  // Ensure the input keeps focus
-  const input = document.getElementById("msgInput");
-  if(input) input.focus();
-}
+function cancelReply() { replyingToMessage = null; updateChatFooterUI(); const input = document.getElementById("msgInput"); if(input) input.focus(); }
 
 function scrollToMessage(time) {
     const targetMsg = document.getElementById(`msg-${time}`);
     if (!targetMsg) return;
-
     const bubble = targetMsg.querySelector(".msg-bubble");
     if (!bubble) return;
-
-    // 1. Scroll
     targetMsg.scrollIntoView({ behavior: "smooth", block: "center" });
-
-    // 2. Determine color
     const isSent = bubble.classList.contains("msg-sent");
     const flashClass = isSent ? "flash-sent" : "flash-received";
-
-    // 3. Force browser to recognize the class change
     bubble.classList.remove("flash-sent", "flash-received");
-    void bubble.offsetWidth; // The magic line that forces the browser to re-paint
+    void bubble.offsetWidth; 
     bubble.classList.add(flashClass);
-
-    // 4. Cleanup
-    setTimeout(() => {
-        bubble.classList.remove(flashClass);
-    }, 1600);
+    setTimeout(() => { bubble.classList.remove(flashClass); }, 1600);
 }
 
 function updateReadReceipts() {
@@ -895,100 +850,70 @@ function updateTypingIndicator() {
   const bubble = document.getElementById("typingBubble"); 
   const nameEl = document.getElementById("typingName");
   const box = document.getElementById("messages");
-  
   if (!bubble || !box) return;
 
   if (currentChatType === "event" && currentEventData) {
-      const typists = (currentEventData.typingUsers || []).filter(u => u !== user);
-      
+      const typists = (currentEventData.typingUsers || []).filter(u => u !== currentUserUid);
       if (typists.length > 0) {
           if (nameEl) {
-              // 🔥 BUG 3A FIX: Use the smart cache to show real display names!
-              const displayName = userCache[typists[0]]?.displayName || typists[0];
+              const displayName = userCache[typists[0]]?.displayName || "Student";
               nameEl.innerText = typists.length === 1 ? `${displayName} is typing` : `${typists.length} people typing`;
           }
-          bubble.classList.remove("hidden"); 
-          box.scrollTop = box.scrollHeight;
-      } else {
-          bubble.classList.add("hidden");
-      }
-      
+          bubble.classList.remove("hidden"); box.scrollTop = box.scrollHeight;
+      } else { bubble.classList.add("hidden"); }
   } else if (currentChatType === "direct" && currentChatData) {
       if (currentChatData.typing === currentOtherUser) { 
           if (nameEl) nameEl.innerText = ""; 
-          bubble.classList.remove("hidden"); 
-          box.scrollTop = box.scrollHeight; 
-      } else { 
-          bubble.classList.add("hidden"); 
-      }
+          bubble.classList.remove("hidden"); box.scrollTop = box.scrollHeight; 
+      } else { bubble.classList.add("hidden"); }
   }
 }
-
-let scrollTimeout = null; // Global timer for the fade effect
 
 function handleChatScroll() {
   const box = document.getElementById("messages");
   let floatingDate = document.getElementById("floatingDate");
-  
-  // 1. Create the glass badge if it doesn't exist yet
   if (!floatingDate) {
-      floatingDate = document.createElement("div");
-      floatingDate.id = "floatingDate";
-      floatingDate.className = "floating-date";
+      floatingDate = document.createElement("div"); floatingDate.id = "floatingDate"; floatingDate.className = "floating-date";
       document.getElementById("chatScreen").appendChild(floatingDate);
   }
-  
   const dateWrappers = box.getElementsByClassName("date-separator");
   let activeDateText = "";
-  
-  // 2. Calculate exactly which date your thumb is scrolling past
   const boxRect = box.getBoundingClientRect();
   for (let el of dateWrappers) {
       const rect = el.getBoundingClientRect();
-      if (rect.top <= boxRect.top + 60) {
-          activeDateText = el.innerText;
-      }
+      if (rect.top <= boxRect.top + 60) activeDateText = el.innerText;
   }
-  
-  // 3. Show the glass badge and reset the 1-second fade-out timer
   if (activeDateText) {
-      floatingDate.innerText = activeDateText;
-      floatingDate.classList.add("visible");
-      
+      floatingDate.innerText = activeDateText; floatingDate.classList.add("visible");
       clearTimeout(scrollTimeout);
-      scrollTimeout = setTimeout(() => {
-          floatingDate.classList.remove("visible");
-      }, 1200); // Fades out exactly 1.2 seconds after you stop scrolling
+      scrollTimeout = setTimeout(() => { floatingDate.classList.remove("visible"); }, 1200);
   }
 }
 
 function loadMessages() {
   if (messagesUnsubscribe) messagesUnsubscribe(); 
   const box = document.getElementById("messages"); if(!box) return;
-  
   if (!box.dataset.hasScrollListener) { box.addEventListener("scroll", handleChatScroll); box.dataset.hasScrollListener = "true"; }
   
-  // Notice the 'async' added here!
-  messagesUnsubscribe = db.collection("messages").where("chatId", "==", currentChat).onSnapshot(async (snapshot) => {
+  const collectionPath = currentChatType === "event" 
+      ? db.collection("events").doc(currentChat).collection("messages")
+      : db.collection("chats").doc(currentChat).collection("messages");
+
+  messagesUnsubscribe = collectionPath.orderBy("time").onSnapshot(async (snapshot) => {
       let lastDateString = ""; myMessageCount = 0; let theirMessageCount = 0;
       let msgs = []; snapshot.forEach(doc => msgs.push(doc.data())); msgs.sort((a, b) => a.time - b.time); 
       
-      // ==========================================
-      // 🧠 THE SMART CACHE DICTIONARY ENGINE
-      // ==========================================
       const uniqueSenders = [...new Set(msgs.map(m => m.sender))];
-      
       for (let s of uniqueSenders) {
           if (!userCache[s]) {
               const doc = await db.collection("users").doc(s).get();
-              userCache[s] = doc.exists ? doc.data() : { displayName: s, avatar: "👤" };
+              userCache[s] = doc.exists ? { uid: s, ...doc.data() } : { displayName: "Student", avatar: "👤" };
           }
       }
 
       let newHTML = "";
-
       msgs.forEach((m, i) => {
-        const isMe = m.sender === user; if(isMe) myMessageCount++; else theirMessageCount++;
+        const isMe = m.sender === currentUserUid; if(isMe) myMessageCount++; else theirMessageCount++;
         const msgDate = new Date(m.time).toLocaleDateString();
         
         if (msgDate !== lastDateString) { 
@@ -1001,19 +926,15 @@ function loadMessages() {
         const isSamePrev = prev && prev.sender === m.sender; const isSameNext = next && next.sender === m.sender;
         let shape = "single"; if (isSamePrev && isSameNext) shape = "middle"; else if (!isSamePrev && isSameNext) shape = "first"; else if (isSamePrev && !isSameNext) shape = "last";
 
-        const safeText = m.text.replace(/[`$'\\]/g, ""); 
         const encodedText = encodeURIComponent(m.text); 
         
-        // 🔥 THE NEW CHECK: Is this message ONLY a Youtube or Spotify link?
         const rawText = m.text.trim();
         const isMediaOnly = /^https?:\/\/[^\s]+$/.test(rawText) && (rawText.includes("youtube.com") || rawText.includes("youtu.be") || rawText.includes("spotify.com"));
-        
-        // 🔥 THE NEW CLASS: Applies the invisible background if true
         const bubbleClass = isMediaOnly ? 'msg-bubble media-only' : 'msg-bubble';
 
         let replyBlock = "";
         if (m.replyTo) {
-            const replyName = m.replyTo.sender === user ? "You" : (userCache[m.replyTo.sender]?.displayName || m.replyTo.sender);
+            const replyName = m.replyTo.sender === currentUserUid ? "You" : (userCache[m.replyTo.sender]?.displayName || "Student");
             const timeData = m.replyTo.time ? `data-target-time="${m.replyTo.time}"` : "";
             replyBlock = `<div class="msg-replied-to" ${timeData}><b>${replyName}:</b> ${m.replyTo.text}</div>`;
         }
@@ -1023,9 +944,8 @@ function loadMessages() {
             : `<div class="swipe-reply-icon left"><i class='bx bx-reply'></i></div>`;
 
         let nameTagHTML = "";
-        
         if (currentChatType === "event" && !isMe && !isSamePrev) {
-            const senderDisplayName = userCache[m.sender]?.displayName || m.sender;
+            const senderDisplayName = userCache[m.sender]?.displayName || "Student";
             nameTagHTML = `<div style="font-size: 11px; font-weight: 700; color: var(--text-muted); margin-left: 14px; margin-bottom: 2px; cursor: pointer; display: inline-block;" onclick="event.stopPropagation(); openProfileScreen('${m.sender}')">${senderDisplayName}</div>`;
         }
             
@@ -1053,61 +973,26 @@ function loadMessages() {
                   </div>`;
       
       box.innerHTML = newHTML;
-      
-      if (currentChatStatus === "icebreaker" && theirMessageCount > 0 && currentChatInitiator === user) { db.collection("chats").doc(currentChat).update({ status: "unlocked" }); }
+      if (currentChatStatus === "icebreaker" && theirMessageCount > 0 && currentChatInitiator === currentUserUid) { db.collection("chats").doc(currentChat).update({ status: "unlocked" }); }
       box.scrollTop = box.scrollHeight; 
       updateChatFooterUI(); updateReadReceipts(); updateTypingIndicator();
     });
 }
 
-function updateChatFooterUI() {
-  const icebreakerMsg = document.getElementById("icebreakerMsg");
-  const inputWrapper = document.getElementById("inputWrapper");
-  const previewContainer = document.getElementById("replyPreviewContainer");
-  
-  if (!icebreakerMsg || !inputWrapper || !previewContainer) return;
-
-  // 1. Manage Icebreaker Lock
-  if (currentChatStatus === "icebreaker" && currentChatInitiator === user && myMessageCount >= 1) {
-      icebreakerMsg.classList.remove("hidden");
-      inputWrapper.classList.add("hidden");
-      previewContainer.classList.add("hidden");
-      return;
-  } else {
-      icebreakerMsg.classList.add("hidden");
-      inputWrapper.classList.remove("hidden");
-      previewContainer.classList.remove("hidden");
-  }
-
-  // 2. Safely Update the Reply Bar
-  if (replyingToMessage) {
-      const name = replyingToMessage.sender === user ? "Yourself" : replyingToMessage.sender;
-      previewContainer.innerHTML = `
-        <div style="background: rgba(79, 70, 229, 0.1); padding: 8px 12px; border-radius: 12px; border-left: 4px solid var(--primary); margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
-             <div style="color: var(--primary); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;">
-                <b>Replying to ${name}:</b><br>${replyingToMessage.text}
-             </div>
-             <div onclick="cancelReply()" style="cursor: pointer; color: var(--danger); margin-left: 10px; font-size: 20px;"><i class='bx bx-x'></i></div>
-        </div>`;
-  } else {
-      previewContainer.innerHTML = "";
-  }
-}
-
 function loadChatList() {
-  // Notice the async added here!
-  db.collection("chats").where("users", "array-contains", user).onSnapshot(async (snapshot) => {
+  // 🔥 ISSUE 5 FIX: Safely kill the previous snap handler to prevent active listener leaks
+  if (chatListUnsubscribe) chatListUnsubscribe();
+
+  chatListUnsubscribe = db.collection("chats").where("members", "array-contains", currentUserUid).onSnapshot(async (snapshot) => {
       const list = document.getElementById("chatList"); if(!list) return;
       let hasGlobalUnread = false; let chatsArray = [];
       
       snapshot.docChanges().forEach(change => { 
         if (change.type === "modified") { 
           const chatData = change.doc.data(); 
-          if (chatData.unreadBy === user && currentChat !== change.doc.id) { 
-            const otherUser = (chatData.users && Array.isArray(chatData.users)) 
-                ? chatData.users.find(u => u !== user) 
-                : change.doc.id.replace(user, "").replace("_", "");
-            showNotification(otherUser, change.doc.id); 
+          if (chatData.unreadBy === currentUserUid && currentChat !== change.doc.id) { 
+            const otherUid = chatData.members.find(u => u !== currentUserUid);
+            showNotification(otherUid, change.doc.id); 
           } 
         } 
       });
@@ -1115,21 +1000,16 @@ function loadChatList() {
       snapshot.forEach(doc => { chatsArray.push({ id: doc.id, ...doc.data() }); }); 
       chatsArray.sort((a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0));
       
-      // ==========================================
-      // 🧠 CHAT LIST DICTIONARY SYNC
-      // ==========================================
-      const uniqueOthers = [...new Set(chatsArray.map(chat => 
-          (chat.users && Array.isArray(chat.users)) ? chat.users.find(u => u !== user) : chat.id.replace(user, "").replace("_", "")
-      ))];
+      const uniqueOtherUids = [...new Set(chatsArray.map(chat => 
+          chat.members ? chat.members.find(u => u !== currentUserUid) : null
+      ))].filter(Boolean);
       
-      // Fetch missing profiles into the cache
-      for (let other of uniqueOthers) {
-          if (!userCache[other]) {
-              const doc = await db.collection("users").doc(other).get();
-              userCache[other] = doc.exists ? doc.data() : { displayName: other, avatar: "👤" };
+      for (let otherUid of uniqueOtherUids) {
+          if (!userCache[otherUid]) {
+              const doc = await db.collection("users").doc(otherUid).get();
+              userCache[otherUid] = doc.exists ? { uid: otherUid, ...doc.data() } : { displayName: "Student", avatar: "👤" };
           }
       }
-      // ==========================================
 
       list.innerHTML = "";
       if (chatsArray.length === 0) {
@@ -1138,16 +1018,14 @@ function loadChatList() {
       }
       
       chatsArray.forEach(chat => {
-        let other = (chat.users && Array.isArray(chat.users)) ? chat.users.find(u => u !== user) : chat.id.replace(user, "").replace("_", "");
-
-        if (chat.unreadBy === user && currentChat === chat.id) { db.collection("chats").doc(chat.id).set({ unreadBy: "" }, { merge: true }); chat.unreadBy = ""; }
+        let otherUid = chat.members.find(u => u !== currentUserUid);
+        if (chat.unreadBy === currentUserUid && currentChat === chat.id) { db.collection("chats").doc(chat.id).set({ unreadBy: "" }, { merge: true }); chat.unreadBy = ""; }
         
-        const isUnread = chat.unreadBy === user; 
+        const isUnread = chat.unreadBy === currentUserUid; 
         if (isUnread) hasGlobalUnread = true;
         
-        // 🔥 Pull their data out of the Cache!
-        const cachedUser = userCache[other] || {};
-        const displayName = cachedUser.displayName || other;
+        const cachedUser = userCache[otherUid] || {};
+        const displayName = cachedUser.displayName || cachedUser.username || "Student";
         const avatarCode = cachedUser.avatar || "👤";
         
         const unreadStyles = isUnread ? 'background: #e0e7ff; border-left: 4px solid var(--primary);' : '';
@@ -1155,14 +1033,13 @@ function loadChatList() {
         const dotHTML = isUnread ? `<div class="unread-pulse-dot"></div>` : '';
         
         list.innerHTML += `
-          <div class="chat-item" onclick="openChat('${chat.id}', '${other}')" style="${unreadStyles}">
+          <div class="chat-item" onclick="openChat('${chat.id}', '${otherUid}', '${cachedUser.username || 'user'}')" style="${unreadStyles}">
             <div class="chat-avatar" style="background: transparent; border: 1px solid var(--border); padding: 0; overflow: hidden;">
                 ${renderAvatar(avatarCode)}
             </div>
             <div class="chat-name" style="${nameStyles}; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${displayName}</div>
             ${dotHTML}
-          </div>
-        `;
+          </div>`;
       });
       
       const badge = document.getElementById("chatBadge"); 
@@ -1184,34 +1061,89 @@ function showTab(tab) {
   else { document.getElementById("chatsTab")?.classList.remove("hidden"); if(navItems[2]) navItems[2].classList.add("active"); }
 }
 
-function openProfileScreen(targetUsername = null) {
+function openProfileScreen(targetUid = null) {
     document.getElementById("home").classList.add("hidden");
     document.getElementById("profileScreen").classList.remove("hidden");
-
     history.pushState({ screen: 'profile' }, '', window.location.href);
     
-    // If no target provided, default to yourself
-    currentProfileView = targetUsername || user; 
+    currentProfileView = targetUid || currentUserUid; 
     loadProfileUI(currentProfileView); 
 }
 
+// Ensure popstate events don't trigger layout crashes during modal shifts
 function closeProfileScreen() {
     document.getElementById("profileScreen").classList.add("hidden");
     document.getElementById("home").classList.remove("hidden");
     currentProfileView = ""; 
 }
 
-// 🔥 THE FIX: Create a global variable to track the live listener
-let profileEventsUnsubscribe = null;
+async function loadProfileUI(targetUid) {
+  if (!targetUid) return; 
 
-function loadUserEvents(targetUser) {
+  const avatarEl = document.getElementById("profileAvatarDisplay");
+  const nameDisplay = document.getElementById("profileDisplayNameDisplay");
+  const usernameDisplay = document.getElementById("profileUsernameDisplay");
+  const settingsGear = document.getElementById("profileSettingsBtn");
+  const editInput = document.getElementById("editDisplayNameInput"); 
+  
+  if (avatarEl) avatarEl.innerHTML = renderAvatar("👤");
+  if (nameDisplay) nameDisplay.innerText = "Loading...";
+  if (usernameDisplay) usernameDisplay.innerText = "Loading..."; 
+  
+  const statJoined = document.getElementById("statEventsJoined");
+  const statHosted = document.getElementById("statEventsHosted");
+  const eventsList = document.getElementById("myProfileEvents");
+  
+  if (statJoined) statJoined.innerText = "-";
+  if (statHosted) statHosted.innerText = "-";
+  if (eventsList) eventsList.innerHTML = `<div style="text-align:center; padding:20px; color:var(--text-muted); font-size: 13px;"><i class='bx bx-loader-alt bx-spin'></i> Loading...</div>`;
+  
+  let cachedUser = userCache[targetUid];
+  if (cachedUser) {
+      if (avatarEl && cachedUser.avatar) avatarEl.innerHTML = renderAvatar(cachedUser.avatar);
+      if (nameDisplay && cachedUser.displayName) nameDisplay.innerText = cachedUser.displayName;
+      if (usernameDisplay && cachedUser.username) usernameDisplay.innerText = "@" + cachedUser.username;
+  }
+  
+  if (targetUid === currentUserUid) { settingsGear.classList.remove("hidden"); } 
+  else { settingsGear.classList.add("hidden"); }
+  
+  try {
+      const userDoc = await db.collection("users").doc(targetUid).get();
+      if (userDoc.exists) {
+          const data = userDoc.data();
+          userCache[targetUid] = { uid: targetUid, ...data }; 
+          
+          if (avatarEl) avatarEl.innerHTML = renderAvatar(data.avatar || "👤");
+          if (nameDisplay) nameDisplay.innerText = data.displayName || data.username;
+          if (usernameDisplay) usernameDisplay.innerText = "@" + data.username;
+
+          if (targetUid === currentUserUid && editInput) {
+              realName = data.displayName || data.username;
+              editInput.value = realName;
+          }
+      } else {
+          if (nameDisplay) nameDisplay.innerText = "Unknown User"; 
+          if (usernameDisplay) usernameDisplay.innerText = "Not Found";
+      }
+      
+      db.collection("events").where("hostUid", "==", targetUid).get().then(snap => {
+          if(statHosted) statHosted.innerText = snap.size || 0;
+      });
+      db.collection("events").where("participants", "array-contains", targetUid).get().then(snap => {
+          if(statJoined) statJoined.innerText = snap.size || 0;
+      });
+
+      loadUserEvents(targetUid);
+  } catch(e) { console.error("Profile load error:", e); }
+}
+
+function loadUserEvents(targetUid) {
     const list = document.getElementById("myProfileEvents");
     if (!list) return;
-    
-    // 🔥 THE FIX: Kill the previous person's listener before starting a new one!
     if (profileEventsUnsubscribe) profileEventsUnsubscribe();
     
-    profileEventsUnsubscribe = db.collection("events").where("user", "==", targetUser).onSnapshot(snapshot => {
+    profileEventsUnsubscribe = db.collection("events").where("hostUid", "==", targetUid).onSnapshot(snapshot => {
           list.innerHTML = "";
           let eventsArray = [];
           snapshot.forEach(doc => eventsArray.push({ id: doc.id, ...doc.data() }));
@@ -1227,245 +1159,36 @@ function loadUserEvents(targetUser) {
                 <div class="card" style="padding: 16px; margin-bottom: 12px; box-shadow: none; border: 1px solid var(--border);">
                   <div style="font-size: 16px; font-weight: 700; margin-bottom: 4px;">${e.title}</div>
                   <div style="font-size: 12px; color: var(--text-muted);"><i class='bx bx-map'></i> ${e.place}</div>
-                </div>
-              `;
+                </div>`;
           });
       }, error => { console.error("Error loading events:", error); });
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-  const loginBtn = document.getElementById("login-btn"); if (loginBtn) { loginBtn.addEventListener("click", () => loginWithGoogle()); }
-  const claimBtn = document.getElementById("claimBtn"); if (claimBtn) { claimBtn.addEventListener("click", async () => { const loadingScreen = document.getElementById("loading-screen"); if (loadingScreen) loadingScreen.classList.remove("hidden"); await claimUsername(); }); }
-});
-
-// ==========================================
-// 🔔 DESKTOP OS NOTIFICATION UNLOCKER
-// ==========================================
-// Browsers require a physical click to unlock native notifications. 
-// This listens for their very first click anywhere on the page and unlocks them.
-document.addEventListener("click", () => {
-  if ("Notification" in window && Notification.permission === "default") {
-    Notification.requestPermission().then(permission => {
-      if (permission === "granted") console.log("Desktop notifications enabled!");
-    });
-  }
-}, { once: true });
-
-// ==========================================
-// 🖱️ + 📲 HYBRID SWIPE TO REPLY ENGINE
-// ==========================================
-let startX = 0, startY = 0, currentSwipeItem = null, isSwiping = false, swipeDirection = 0;
-
-function handleDragStart(e) {
-    const wrapper = e.target.closest(".msg-wrapper");
-    if (!wrapper) return;
-    
-    // Supports both Mouse and Touch
-    const touch = e.type.includes("mouse") ? e : e.touches[0];
-    startX = touch.clientX; 
-    startY = touch.clientY;
-    
-    currentSwipeItem = wrapper; 
-    isSwiping = false;
-    wrapper.style.transition = "none"; 
-    
-    const isSent = wrapper.querySelector(".msg-sent") !== null;
-    swipeDirection = isSent ? -1 : 1; 
-}
-
-function handleDragMove(e) {
-    if (!currentSwipeItem) return;
-    
-    const touch = e.type.includes("mouse") ? e : e.touches[0];
-    const deltaX = touch.clientX - startX;
-    const deltaY = touch.clientY - startY;
-
-    // If moving up/down, let the user scroll normally
-    if (!isSwiping && Math.abs(deltaY) > Math.abs(deltaX)) { 
-        currentSwipeItem = null; 
-        return; 
-    }
-
-    // Lock into horizontal swipe mode
-    if ((swipeDirection === 1 && deltaX > 10) || (swipeDirection === -1 && deltaX < -10)) {
-        isSwiping = true;
-        // 🔥 THE FIX: Tells the mobile browser "Stop scrolling, I am dragging!"
-        if(e.cancelable) e.preventDefault(); 
-    }
-
-    if (isSwiping) {
-        let movePx = 0;
-        if (swipeDirection === 1 && deltaX > 0) movePx = Math.min(deltaX * 0.4, 65);
-        else if (swipeDirection === -1 && deltaX < 0) movePx = Math.max(deltaX * 0.4, -65);
-
-        currentSwipeItem.style.transform = `translateX(${movePx}px)`;
-        
-        if (Math.abs(movePx) >= 50) currentSwipeItem.classList.add("ready-to-reply");
-        else currentSwipeItem.classList.remove("ready-to-reply");
-    }
-}
-
-function handleDragEnd(e) {
-    if (!currentSwipeItem) return;
-    
-    if (currentSwipeItem.classList.contains("ready-to-reply")) {
-        const sender = currentSwipeItem.getAttribute("data-sender");
-        const text = decodeURIComponent(currentSwipeItem.getAttribute("data-text"));
-        // 🔥 THE FIX: Safely grabs the timestamp so the swipe doesn't glitch!
-        const time = parseInt(currentSwipeItem.getAttribute("data-time"));
-        
-        initiateReply(sender, text, time);
-        if (navigator.vibrate) navigator.vibrate(50); 
-    }
-    
-    currentSwipeItem.style.transition = "transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)";
-    currentSwipeItem.style.transform = "translateX(0px)";
-    currentSwipeItem.classList.remove("ready-to-reply");
-    currentSwipeItem = null; 
-    isSwiping = false;
-}
-
-// Attach Desktop Mouse Listeners
-document.addEventListener("mousedown", handleDragStart);
-document.addEventListener("mousemove", handleDragMove);
-document.addEventListener("mouseup", handleDragEnd);
-
-// Attach Mobile Touch Listeners (passive: false is REQUIRED to stop screen sliding)
-document.addEventListener("touchstart", handleDragStart, { passive: false });
-document.addEventListener("touchmove", handleDragMove, { passive: false });
-document.addEventListener("touchend", handleDragEnd);
-
-// Event Chat System
-function openEventChat(eventId, eventTitle) {
-  currentChat = eventId; 
-  currentChatType = "event"; 
-  currentChatStatus = "unlocked"; 
-  currentChatData = { status: "unlocked", typing: "" }; 
-  
-  const hAvatar = document.getElementById("chatHeaderAvatar"); 
-  const hTitle = document.getElementById("chatWithTitle");
-  if(hAvatar) hAvatar.innerText = "📅"; 
-  if(hTitle) hTitle.innerText = eventTitle;
-
-  // 🔥 THE FIX: Instantly wipe the chat window clean
-  const box = document.getElementById("messages");
-  if (box) box.innerHTML = "";
-  
-  document.querySelector(".topbar")?.classList.add("hidden"); 
-  switchScreen("chatScreen");
-  
-  if(chatDocUnsubscribe) { chatDocUnsubscribe(); chatDocUnsubscribe = null; }
-  
-  chatDocUnsubscribe = db.collection("events").doc(eventId).onSnapshot(doc => {
-      if(doc.exists) {
-          currentEventData = doc.data();
-          updateTypingIndicator();
-      }
-  });
-  
-  updateChatFooterUI();
-  loadMessages();
-}
-
-// ==========================================
-// BUG 1 & 5 FIX: DYNAMIC STATS & AVATAR
-// ==========================================
-// 3. Dynamic Data Loading
-async function loadProfileUI(targetUser) {
-    if (!targetUser) return; 
-
-    const avatarEl = document.getElementById("profileAvatarDisplay");
-    const nameDisplay = document.getElementById("profileDisplayNameDisplay");
-    const usernameDisplay = document.getElementById("profileUsernameDisplay");
-    const settingsGear = document.getElementById("profileSettingsBtn");
-    const editInput = document.getElementById("editDisplayNameInput"); 
-    
-    // 🔥 INSTANT WIPE: Destroy the previous user's profile data instantly!
-    if (avatarEl) avatarEl.innerHTML = renderAvatar("👤");
-    if (nameDisplay) nameDisplay.innerText = "Loading...";
-    if (usernameDisplay) usernameDisplay.innerText = targetUser; // 🔥 Removed the @ here!
-    
-    const statJoined = document.getElementById("statEventsJoined");
-    const statHosted = document.getElementById("statEventsHosted");
-    const eventsList = document.getElementById("myProfileEvents");
-    
-    if (statJoined) statJoined.innerText = "-";
-    if (statHosted) statHosted.innerText = "-";
-    if (eventsList) eventsList.innerHTML = `<div style="text-align:center; padding:20px; color:var(--text-muted); font-size: 13px;"><i class='bx bx-loader-alt bx-spin'></i> Loading...</div>`;
-    
-    let cachedUser = userCache[targetUser];
-    
-    // Quick visual update from cache before DB loads
-    if (cachedUser) {
-        if (avatarEl && cachedUser.avatar) avatarEl.innerHTML = renderAvatar(cachedUser.avatar);
-        if (nameDisplay && cachedUser.displayName) nameDisplay.innerText = cachedUser.displayName;
-    }
-    
-    if (targetUser === user) { settingsGear.classList.remove("hidden"); } 
-    else { settingsGear.classList.add("hidden"); }
-    
-    try {
-        const userDoc = await db.collection("users").doc(targetUser).get();
-        if (userDoc.exists) {
-            const data = userDoc.data();
-            userCache[targetUser] = data; 
-            
-            if (avatarEl) avatarEl.innerHTML = renderAvatar(data.avatar || "👤");
-            if (nameDisplay) nameDisplay.innerText = data.displayName || targetUser;
-
-            if (targetUser === user && editInput) {
-                userDisplayName = data.displayName || targetUser;
-                editInput.value = userDisplayName;
-            }
-        } else {
-            // 🔥 THE FIX: If they have never logged in, officially assign them a default profile!
-            if (nameDisplay) nameDisplay.innerText = targetUser; 
-        }
-        
-        db.collection("events").where("user", "==", targetUser).get().then(snap => {
-            if(statHosted) statHosted.innerText = snap.size || 0;
-        });
-        db.collection("events").where("participants", "array-contains", targetUser).get().then(snap => {
-            if(statJoined) statJoined.innerText = snap.size || 0;
-        });
-
-        loadUserEvents(targetUser);
-    } catch(e) { console.error("Profile load error:", e); }
-}
-
-// Function triggered by the "Save Profile" button
 async function saveProfileData() {
     const nameInput = document.getElementById("editDisplayNameInput");
     const btn = document.getElementById("saveProfileBtn");
     const newName = nameInput.value.trim();
-    
     if (!newName) return alert("Display Name cannot be empty!");
+    if (newName.length > 50) return alert("Display name too long (Max 50).");
 
     const originalText = btn.innerHTML;
     btn.innerHTML = `<i class='bx bx-loader-alt bx-spin'></i> Saving...`;
     btn.disabled = true;
 
     try {
-        // 🔥 The Data Payload: Name, Avatar, and Security UID
         const updateData = { 
             displayName: newName, 
-            avatar: pendingSettingsAvatar, // Added the new avatar variable
+            avatar: pendingSettingsAvatar, 
             updatedAt: Date.now(),
-            uid: auth.currentUser.uid
+            uid: currentUserUid
         };
 
-        // 🔥 Force the merge save
-        await db.collection("users").doc(user).set(updateData, { merge: true });
+        await db.collection("users").doc(currentUserUid).set(updateData, { merge: true });
+        userDisplayName = newName; userAvatar = pendingSettingsAvatar; 
         
-        // --- OPTIMISTIC UI UPDATES ---
-        userDisplayName = newName; 
-        userAvatar = pendingSettingsAvatar; // Update local memory
-        
-        // Update Name on screen
         const displayEl = document.getElementById("profileDisplayNameDisplay");
         if (displayEl) displayEl.innerText = newName;
 
-        // Update Avatar on screen
         const avatarDisplay = document.getElementById("profileAvatarDisplay");
         if (avatarDisplay) {
             avatarDisplay.innerHTML = pendingSettingsAvatar.startsWith('http') 
@@ -1473,68 +1196,37 @@ async function saveProfileData() {
                 : pendingSettingsAvatar;
         }
         
-        // --- PREMIUM BUTTON ANIMATION ---
-        btn.style.background = "var(--success)";
-        btn.innerHTML = `<i class='bx bx-check'></i> Saved!`;
-        
+        btn.style.background = "var(--success)"; btn.innerHTML = `<i class='bx bx-check'></i> Saved!`;
         setTimeout(() => {
-            btn.style.background = "var(--primary-gradient)"; // Restored your gradient!
-            btn.innerHTML = originalText;
-            btn.disabled = false;
+            btn.style.background = "var(--primary-gradient)"; btn.innerHTML = originalText; btn.disabled = false;
             closeSettingsScreen(); 
         }, 800);
-
     } catch (e) {
-        // 🔥 THE DEBUGGER: This will tell us WHY it failed in the console
         console.error("🚨 CRITICAL SAVE ERROR:", e.code, e.message);
-        
-        if (e.code === 'permission-denied') {
-            alert("Firebase blocked the save: Permission Denied. Check your Firestore rules!");
-        } else {
-            alert("Failed to save profile. Please check your connection.");
-        }
-        
-        btn.innerHTML = originalText; 
-        btn.disabled = false;
+        alert("Failed to save profile. Please check your connection.");
+        btn.innerHTML = originalText; btn.disabled = false;
     }
 }
 
 let pendingSettingsAvatar = null;
-
 function openSettingsScreen() { 
     document.getElementById("settingsScreen")?.classList.remove("hidden");
-    
-    // 1. Pre-fill the name input
     const nameInput = document.getElementById("editDisplayNameInput");
     if(nameInput) nameInput.value = document.getElementById("profileDisplayNameDisplay").innerText;
-
-    // 2. Set the pending avatar to their current one
     pendingSettingsAvatar = userAvatar; 
-    
-    // 3. Visually highlight their current emoji (if they have one)
     document.querySelectorAll('#settingsAvatarGrid .avatar-option').forEach(el => {
-        el.classList.remove('selected');
-        if (el.innerText === userAvatar) el.classList.add('selected');
+        el.classList.remove('selected'); if (el.innerText === userAvatar) el.classList.add('selected');
     });
 }
 
-// 🔥 THE FIX: Bulletproof selection logic
 function selectSettingsAvatar(element, avatarChoice) {
-    // Remove the blue highlight from all emojis
     document.querySelectorAll('#settingsAvatarGrid .avatar-option').forEach(el => el.classList.remove('selected'));
-    
     if (avatarChoice === 'google') {
-        // Grab the actual URL from their Google login, not the word "google"!
         pendingSettingsAvatar = auth.currentUser.photoURL;
-        
-        // Show a quick visual success message on the button
-        const originalText = element.innerHTML;
-        element.innerHTML = "<i class='bx bx-check'></i> Selected!";
+        const originalText = element.innerHTML; element.innerHTML = "<i class='bx bx-check'></i> Selected!";
         setTimeout(() => element.innerHTML = originalText, 1500);
     } else {
-        // Set it to the emoji and highlight the box
-        pendingSettingsAvatar = avatarChoice;
-        element.classList.add('selected');
+        pendingSettingsAvatar = avatarChoice; element.classList.add('selected');
     }
 }
 function closeSettingsScreen() { document.getElementById("settingsScreen")?.classList.add("hidden"); }
@@ -1543,27 +1235,81 @@ function closeSettingsScreen() { document.getElementById("settingsScreen")?.clas
 // 🛡️ STEALTH MODE NATIVE BACK BUTTON
 // ==========================================
 window.addEventListener('popstate', (event) => {
-    if (currentChat) {
-        closeChat();
-    } else if (currentProfileView && currentProfileView !== "") {
-        closeProfileScreen();
-    } else if (auth.currentUser) {
-        // 🔥 THE ULTIMATE TRAP: If they are logged in and swipe back on the home screen,
-        // we instantly throw a new "page" into the history stack so they can NEVER reach Google!
-        history.pushState(null, '', window.location.href);
-    }
+    if (currentChat) { closeChat(); } 
+    else if (currentProfileView && currentProfileView !== "") { closeProfileScreen(); } 
+    else if (auth.currentUser) { history.pushState(null, '', window.location.href); }
 });
 
 // ==========================================
 // 🔥 EVENT HYPE LOGIC
 // ==========================================
 function toggleHype(id, isHyped) {
+    // 🔥 ISSUE 4 FIX: Throttle click rates for Hype metrics mutations
+    const now = Date.now(); if (now - lastHypeTime < 300) return; lastHypeTime = now;
+
     const eventRef = db.collection("events").doc(id);
-    
     if (isHyped) {
-        eventRef.update({ hypedBy: firebase.firestore.FieldValue.arrayRemove(user) });
+        eventRef.update({ hypedBy: firebase.firestore.FieldValue.arrayRemove(currentUserUid) });
     } else {
-        eventRef.update({ hypedBy: firebase.firestore.FieldValue.arrayUnion(user) });
-        if (navigator.vibrate) navigator.vibrate(50); // Haptic feedback on mobile!
+        eventRef.update({ hypedBy: firebase.firestore.FieldValue.arrayUnion(currentUserUid) });
+        if (navigator.vibrate) navigator.vibrate(50); 
     }
 }
+
+// ==========================================
+// 🖱️ + 📲 HYBRID SWIPE TO REPLY ENGINE
+// ==========================================
+let startX = 0, startY = 0, currentSwipeItem = null, isSwiping = false, swipeDirection = 0;
+
+function handleDragStart(e) {
+    const wrapper = e.target.closest(".msg-wrapper"); if (!wrapper) return;
+    const touch = e.type.includes("mouse") ? e : e.touches[0];
+    startX = touch.clientX; startY = touch.clientY;
+    currentSwipeItem = wrapper; isSwiping = false; wrapper.style.transition = "none"; 
+    const isSent = wrapper.querySelector(".msg-sent") !== null;
+    swipeDirection = isSent ? -1 : 1; 
+}
+
+function handleDragMove(e) {
+    if (!currentSwipeItem) return;
+    const touch = e.type.includes("mouse") ? e : e.touches[0];
+    const deltaX = touch.clientX - startX; const deltaY = touch.clientY - startY;
+    if (!isSwiping && Math.abs(deltaY) > Math.abs(deltaX)) { currentSwipeItem = null; return; }
+    if ((swipeDirection === 1 && deltaX > 10) || (swipeDirection === -1 && deltaX < -10)) {
+        isSwiping = true; if(e.cancelable) e.preventDefault(); 
+    }
+    if (isSwiping) {
+        let movePx = 0;
+        if (swipeDirection === 1 && deltaX > 0) movePx = Math.min(deltaX * 0.4, 65);
+        else if (swipeDirection === -1 && deltaX < 0) movePx = Math.max(deltaX * 0.4, -65);
+        currentSwipeItem.style.transform = `translateX(${movePx}px)`;
+        if (Math.abs(movePx) >= 50) currentSwipeItem.classList.add("ready-to-reply");
+        else currentSwipeItem.classList.remove("ready-to-reply");
+    }
+}
+
+function handleDragEnd(e) {
+    if (!currentSwipeItem) return;
+    if (currentSwipeItem.classList.contains("ready-to-reply")) {
+        const senderUid = currentSwipeItem.getAttribute("data-sender");
+        const text = decodeURIComponent(currentSwipeItem.getAttribute("data-text"));
+        const time = parseInt(currentSwipeItem.getAttribute("data-time"));
+        initiateReply(senderUid, text, time);
+        if (navigator.vibrate) navigator.vibrate(50); 
+    }
+    currentSwipeItem.style.transition = "transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)";
+    currentSwipeItem.style.transform = "translateX(0px)"; currentSwipeItem.classList.remove("ready-to-reply");
+    currentSwipeItem = null; isSwiping = false;
+}
+
+document.addEventListener("mousedown", handleDragStart);
+document.addEventListener("mousemove", handleDragMove);
+document.addEventListener("mouseup", handleDragEnd);
+document.addEventListener("touchstart", handleDragStart, { passive: false });
+document.addEventListener("touchmove", handleDragMove, { passive: false });
+document.addEventListener("touchend", handleDragEnd);
+
+document.addEventListener("DOMContentLoaded", () => {
+  const loginBtn = document.getElementById("login-btn"); if (loginBtn) { loginBtn.addEventListener("click", () => loginWithGoogle()); }
+  const claimBtn = document.getElementById("claimBtn"); if (claimBtn) { claimBtn.addEventListener("click", async () => { const loadingScreen = document.getElementById("loading-screen"); if (loadingScreen) loadingScreen.classList.remove("hidden"); await claimUsername(); }); }
+});
