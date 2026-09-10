@@ -181,7 +181,7 @@ export function openEventChat(eventId) {
   loadMessages();
 }
 
-export function closeChat() {
+export function closeChat({ silent = false } = {}) {
   const chatId = state.currentChat;
   const type = state.currentChatType;
 
@@ -205,7 +205,7 @@ export function closeChat() {
   state.replyingToMessage = null;
 
   document.querySelector(".topbar")?.classList.remove("hidden");
-  switchScreen("home");
+  if (!silent) switchScreen("home");
 }
 
 // ---------- Sending ----------
@@ -640,6 +640,7 @@ export function loadChatList() {
     .where("userUids", "array-contains", state.uid)
     .onSnapshot(
       async (snapshot) => {
+        inboxRetries = 0;
         const list = document.getElementById("chatList");
         if (!list) return;
 
@@ -656,9 +657,12 @@ export function loadChatList() {
         snapshot.forEach((doc) => chats.push({ id: doc.id, ...doc.data() }));
         chats.sort((a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0));
 
-        await primeUsers(
-          chats.map((c) => (c.userUids || []).find((u) => u !== state.uid)).filter(Boolean)
-        );
+        // Never let a profile lookup failure stop the inbox rendering.
+        try {
+          await primeUsers(chats.map((c) => (c.userUids || []).find((u) => u !== state.uid)).filter(Boolean));
+        } catch (e) {
+          console.error("Inbox profile prefetch failed:", e.code || e.message);
+        }
 
         if (!chats.length) {
           list.innerHTML = `<div class="empty-state" style="padding-top: 20px;"><i class='bx bx-message-square-x'></i><p>No messages yet.</p></div>`;
@@ -698,6 +702,28 @@ export function loadChatList() {
         setUnreadBadge(hasGlobalUnread);
         document.title = hasGlobalUnread ? "(1) New Message - livesociya" : "livesociya";
       },
-      (error) => console.error("Inbox error:", error.code || error.message)
+      (error) => {
+        // A Firestore listener that errors is DEAD: it never retries on
+        // its own. That is why a chat could be sent successfully and
+        // still never appear in the inbox — the query had been killed
+        // earlier (by the old rules) and nothing re-attached it.
+        console.error("Inbox error:", error.code || error.message);
+        state.chatListUnsubscribe = null;
+        retryInbox();
+      }
     );
+}
+
+let inboxRetries = 0;
+function retryInbox() {
+  if (inboxRetries >= 5) {
+    const list = document.getElementById("chatList");
+    if (list) {
+      list.innerHTML = `<div class="empty-state"><h4>Can't load your chats</h4><p>Check your connection, then reload the page.</p></div>`;
+    }
+    return;
+  }
+  const wait = 1200 * Math.pow(2, inboxRetries);
+  inboxRetries++;
+  setTimeout(() => { if (state.uid) loadChatList(); }, wait);
 }

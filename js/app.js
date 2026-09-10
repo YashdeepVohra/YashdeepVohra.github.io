@@ -71,10 +71,23 @@ import { initSwipeListeners } from './interactions/swipeReply.js';
 // Only these functions are reachable from markup. Every one of them
 // takes either no argument or an id (uid / document id) — never a piece
 // of user-typed text.
+/**
+ * Tapping a tab is an escape hatch: it must work from anywhere. Chat
+ * and profile are full-screen layers, so they have to be dismissed
+ * first or the tab switches invisibly behind them.
+ */
+function goToTab(tab) {
+  if (state.currentChat) closeChat({ silent: true });
+  if (state.currentProfileUid) closeProfileScreen();
+  switchScreen("home");
+  document.querySelector(".topbar")?.classList.remove("hidden");
+  showTab(tab);
+}
+
 Object.assign(window, {
   // Navigation
   switchScreen,
-  showTab,
+  showTab: goToTab,
 
   // Auth
   loginWithGoogle,

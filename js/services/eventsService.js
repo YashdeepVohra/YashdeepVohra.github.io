@@ -156,6 +156,7 @@ export function loadEvents() {
     .where("expiresAt", ">", Date.now() - DAY_MS)
     .onSnapshot(
       async (snapshot) => {
+        feedRetries = 0;
         const events = [];
         const uids = new Set();
 
@@ -175,8 +176,20 @@ export function loadEvents() {
 
         renderEvents();
       },
-      (error) => console.error("Feed error:", error.code || error.message)
+      (error) => {
+        console.error("Feed error:", error.code || error.message);
+        state.eventsUnsubscribe = null;
+        retryFeed();
+      }
     );
+}
+
+let feedRetries = 0;
+function retryFeed() {
+  if (feedRetries >= 5) return;
+  const wait = 1200 * Math.pow(2, feedRetries);
+  feedRetries++;
+  setTimeout(() => { if (state.uid) loadEvents(); }, wait);
 }
 
 /* ---------------------------------------------------------------------

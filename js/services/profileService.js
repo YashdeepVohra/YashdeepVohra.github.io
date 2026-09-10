@@ -9,6 +9,8 @@
 import { auth, db } from '../config/firebase.js';
 import { state } from '../state/store.js';
 import { renderAvatar, escapeHtml, safeId } from '../utils/formatters.js';
+import { switchScreen } from '../utils/ui.js';
+import { closeChat } from './chatService.js';
 import { fetchUser, displayNameFor, usernameFor, avatarFor } from './userService.js';
 
 // The avatar picker only ever writes one of these, or the Google photo.
@@ -40,10 +42,17 @@ export function selectAvatar(element, type) {
 
 export function openProfileScreen(targetUid = null) {
   const uid = safeId(targetUid) || state.uid;
-  document.getElementById("home")?.classList.add("hidden");
-  document.getElementById("profileScreen")?.classList.remove("hidden");
-  history.pushState({ screen: "profile" }, "", window.location.href);
+
+  // A profile opened from a chat used to render UNDERNEATH it — the
+  // chat sits at a higher layer — so nothing appeared to happen, and
+  // the profile was then left stranded once the chat closed. Tear the
+  // chat down first and let switchScreen own the swap.
+  if (state.currentChat) closeChat({ silent: true });
+
   state.currentProfileUid = uid;
+  switchScreen("profileScreen");
+  document.querySelector(".topbar")?.classList.remove("hidden");
+  history.pushState({ screen: "profile" }, "", window.location.href);
   loadProfileUI(uid);
 }
 
@@ -52,9 +61,8 @@ export function closeProfileScreen() {
     state.profileEventsUnsubscribe();
     state.profileEventsUnsubscribe = null;
   }
-  document.getElementById("profileScreen")?.classList.add("hidden");
-  document.getElementById("home")?.classList.remove("hidden");
   state.currentProfileUid = "";
+  switchScreen("home");
 }
 
 export function loadUserEvents(targetUid) {

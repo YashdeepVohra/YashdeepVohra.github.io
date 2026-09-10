@@ -121,11 +121,11 @@ a { color: inherit; }
 @keyframes slideInL  { from { opacity: 0; transform: translateX(-18px); } to { opacity: 1; transform: none; } }
 @keyframes spin      { to { transform: rotate(360deg); } }
 @keyframes shimmer   { from { background-position: -420px 0; } to { background-position: 420px 0; } }
-@keyframes livePulse {
-  0%   { box-shadow: 0 0 0 0 rgba(46, 192, 139, 0.55); }
-  70%  { box-shadow: 0 0 0 7px rgba(46, 192, 139, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(46, 192, 139, 0); }
-}
+/* A ring that scales and fades: transform + opacity only, so it is
+   composited. The old version animated box-shadow, which repaints on
+   the main thread every frame — with one dot per live card that was
+   the single biggest cost in the feed. */
+@keyframes livePulse { 0% { transform: scale(1); opacity: 0.6; } 70%, 100% { transform: scale(2.6); opacity: 0; } }
 @keyframes hypePop   { 0% { transform: scale(1); } 40% { transform: scale(1.28) rotate(-8deg); } 100% { transform: scale(1); } }
 @keyframes float     { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-9px); } }
 @keyframes drift {
@@ -257,10 +257,14 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 
 /* Slow violet washes behind the card. They drift rather than pulse, so
    the screen feels alive without asking for attention. */
-.login-aura { position: absolute; border-radius: 50%; filter: blur(70px); opacity: 0.5; pointer-events: none; }
-.login-aura.a1 { width: 340px; height: 340px; background: var(--periwinkle); top: -80px; left: -70px; animation: drift 17s var(--ease) infinite; }
-.login-aura.a2 { width: 300px; height: 300px; background: #ffd6e8; bottom: -90px; right: -60px; animation: drift 21s var(--ease) infinite reverse; }
-.login-aura.a3 { width: 240px; height: 240px; background: #cfe6ff; bottom: 24%; left: 12%; animation: drift 25s var(--ease) infinite; }
+.login-aura { position: absolute; inset: 0; pointer-events: none; }
+.login-aura.a1 {
+  background:
+    radial-gradient(460px 400px at 14% 8%,  rgba(171, 159, 242, 0.5), transparent 66%),
+    radial-gradient(420px 380px at 88% 96%, rgba(255, 214, 232, 0.5), transparent 66%),
+    radial-gradient(360px 340px at 8% 78%,  rgba(207, 230, 255, 0.42), transparent 68%);
+}
+.login-aura.a2, .login-aura.a3 { display: none; }
 
 .login-card {
   position: relative;
@@ -268,8 +272,7 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   width: 100%;
   max-width: 380px;
   padding: var(--s-48) var(--s-32);
-  background: rgba(255, 255, 255, 0.82);
-  backdrop-filter: blur(22px) saturate(180%);
+  background: rgba(255, 255, 255, 0.94);
   border: 1px solid rgba(255, 255, 255, 0.7);
   border-radius: 30px;
   box-shadow: var(--lift-3);
@@ -314,8 +317,7 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   position: sticky; top: 0; z-index: 40;
   display: flex; align-items: center; justify-content: space-between; gap: var(--s-12);
   padding: var(--s-12) var(--s-16);
-  background: rgba(250, 249, 253, 0.82);
-  backdrop-filter: blur(18px) saturate(180%);
+  background: rgba(250, 249, 253, 0.97);
   border-bottom: 1px solid var(--ash);
 }
 .brand-lockup { display: flex; align-items: center; gap: var(--s-8); }
@@ -350,8 +352,7 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   display: flex; gap: var(--s-4);
   width: calc(100% - 28px); max-width: 390px;
   padding: 7px;
-  background: rgba(255, 255, 255, 0.86);
-  backdrop-filter: blur(20px) saturate(180%);
+  background: rgba(255, 255, 255, 0.97);
   border: 1px solid var(--ash);
   border-radius: var(--r-pill);
   box-shadow: var(--lift-2);
@@ -374,7 +375,6 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   width: 9px; height: 9px;
   background: var(--mint); border: 2px solid var(--paper);
   border-radius: 50%;
-  animation: livePulse 2.4s infinite;
 }
 
 /* ---- Compose FAB (mobile) ---- */
@@ -406,9 +406,17 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   text-transform: uppercase; color: var(--fog);
 }
 .live-dot {
+  position: relative;
   width: 7px; height: 7px; border-radius: 50%;
   background: var(--mint);
-  animation: livePulse 2.2s infinite;
+  flex-shrink: 0;
+}
+.live-dot::after {
+  content: "";
+  position: absolute; inset: 0;
+  border-radius: 50%;
+  background: var(--mint);
+  animation: livePulse 2.2s ease-out infinite;
 }
 .live-rail {
   display: flex; gap: var(--s-16);
@@ -668,8 +676,7 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 .chat-header {
   display: flex; align-items: center; gap: var(--s-12);
   padding: var(--s-12) var(--s-16);
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(18px) saturate(180%);
+  background: rgba(255, 255, 255, 0.97);
   border-bottom: 1px solid var(--ash);
   flex-shrink: 0;
 }
@@ -757,20 +764,19 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 .chat-footer {
   flex-shrink: 0; display: flex; flex-direction: column;
   padding: var(--s-12) var(--s-16) calc(var(--s-12) + env(safe-area-inset-bottom, 0px));
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(18px) saturate(180%);
+  background: rgba(255, 255, 255, 0.97);
   border-top: 1px solid var(--ash);
 }
 .input-wrapper { display: flex; gap: var(--s-8); width: 100%; align-items: center; }
 .input-wrapper input { margin-bottom: 0; }
 .input-wrapper button { width: 46px; height: 46px; flex-shrink: 0; padding: 0; font-size: 19px; border-radius: 50%; }
-.unread-pulse-dot { width: 9px; height: 9px; flex-shrink: 0; margin-left: auto; background: var(--mint); border-radius: 50%; animation: livePulse 2.2s infinite; }
+.unread-pulse-dot { width: 9px; height: 9px; flex-shrink: 0; margin-left: auto; background: var(--mint); border-radius: 50%; }
 
 /* =====================================================================
    PROFILE
    ===================================================================== */
 
-.profile-screen-wrapper { position: fixed; inset: 0; z-index: 55; display: flex; flex-direction: column; background: var(--canvas); animation: rise 0.28s var(--ease); }
+.profile-screen-wrapper { position: fixed; inset: 0; z-index: 44; display: flex; flex-direction: column; background: var(--canvas); animation: rise 0.28s var(--ease); }
 .profile-header-layout { display: flex; align-items: center; justify-content: space-between; width: 100%; }
 .header-left { display: flex; align-items: center; gap: var(--s-4); }
 .settings-gear-btn { width: 38px; height: 38px; padding: 0; font-size: 20px; background: var(--bone); color: var(--aubergine); border-radius: 50%; box-shadow: none; }
@@ -811,8 +817,7 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   position: fixed; inset: 0; z-index: 2000;
   display: flex; align-items: center; justify-content: center;
   padding: var(--s-20);
-  background: rgba(28, 28, 34, 0.42);
-  backdrop-filter: blur(5px);
+  background: rgba(28, 28, 34, 0.5);
   animation: fadeIn 0.2s var(--ease);
 }
 .modal-content {
@@ -914,7 +919,7 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   .side-item:hover:not(.active) { background: var(--bone); color: var(--aubergine); filter: none; transform: none; }
   .side-item.active { background: var(--lavender); color: var(--aubergine); }
   .side-item.active i { transform: scale(1.1); }
-  .side-badge { width: 8px; height: 8px; margin-left: auto; background: var(--mint); border-radius: 50%; animation: livePulse 2.2s infinite; }
+  .side-badge { width: 8px; height: 8px; margin-left: auto; background: var(--mint); border-radius: 50%; }
   .sidebar-create { margin-top: var(--s-12); background: linear-gradient(140deg, var(--violet), var(--periwinkle)); box-shadow: 0 6px 16px rgba(124, 107, 240, 0.32); }
   .sidebar-foot { margin-top: auto; }
   .sidebar-me {
@@ -1021,10 +1026,18 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   overflow: hidden;
   pointer-events: none;
 }
-.ambient .blob { position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.34; }
-.ambient .b1 { width: 420px; height: 420px; background: var(--periwinkle); top: -160px; right: -120px; animation: drift 24s var(--ease) infinite; }
-.ambient .b2 { width: 360px; height: 360px; background: #ffc9de; bottom: -150px; left: -130px; animation: drift 30s var(--ease) infinite reverse; }
-.ambient .b3 { width: 300px; height: 300px; background: #b9dcff; top: 42%; right: -150px; animation: drift 27s var(--ease) infinite; opacity: 0.26; }
+/* Baked soft-edged gradients instead of blurred boxes: identical look,
+   no blur pass, nothing animating. */
+.ambient .blob { display: none; }
+.ambient::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(520px 420px at 92% -6%,  rgba(171, 159, 242, 0.34), transparent 68%),
+    radial-gradient(460px 400px at -8% 104%, rgba(255, 201, 222, 0.32), transparent 68%),
+    radial-gradient(420px 380px at 104% 52%, rgba(185, 220, 255, 0.24), transparent 70%);
+}
 
 /* A faint dot grid gives the canvas texture instead of dead flat paint */
 .ambient .grid {
@@ -1037,11 +1050,14 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 }
 
 /* Everything real sits above the ambient layer.
-   The :not() matters — .app-frame is a grid on desktop, and giving the
-   ambient layer position:relative would drop it into the grid flow and
-   steal the sidebar's column. */
-.app-frame > *:not(.ambient),
-.container, #chatScreen, #profileScreen { position: relative; z-index: 1; }
+   Deliberately a NAMED list, not `.app-frame > *`. A blanket child
+   selector also hit the bottom nav, the FAB, the chat screen and the
+   profile screen — all of which are position:fixed with their own
+   z-index — overriding them to relative/1. That knocked the nav out of
+   fixed positioning and flattened the whole stacking order.
+   These four are already fixed and above the ambient layer, so they
+   need nothing here. */
+.topbar, .sidebar, .rail, #home, .container { position: relative; z-index: 1; }
 
 /* =====================================================================
    EVENT CARDS — the good stuff
@@ -1080,24 +1096,21 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 
 /* Live events get a slowly rotating gradient edge. Falls back to a
    static gradient border where @property isn't supported. */
-@property --spin { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
 .event.is-live { isolation: isolate; }
 .event.is-live > .live-edge {
   content: "";
   position: absolute; inset: 0;
   border-radius: inherit;
   padding: 1.6px;
-  background: conic-gradient(from var(--spin), var(--vibe, var(--periwinkle)), #f472b6, var(--violet), var(--vibe, var(--periwinkle)));
+  background: linear-gradient(120deg, var(--vibe, var(--periwinkle)), #f472b6 45%, var(--violet));
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   mask-composite: exclude;
-  animation: spinEdge 5s linear infinite;
   pointer-events: none;
   z-index: 2 !important;
   opacity: 0.85;
 }
-@keyframes spinEdge { to { --spin: 360deg; } }
 
 /* Hype burst: little dots thrown outward on tap */
 .burst {

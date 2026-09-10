@@ -38,11 +38,12 @@ export function switchScreen(screenId) {
   frame?.classList.toggle("chat-open", twoPaneChat);
   if (twoPaneChat) showTab("chats");
 
-  const bottomNav = document.querySelector(".bottom-nav");
-  if (bottomNav) {
-    const hideNav = !screenId || signedOut || screenId === "usernameScreen" || screenId === "chatScreen";
-    bottomNav.classList.toggle("hidden", hideNav);
-  }
+  const hideNav = !screenId || signedOut || screenId === "usernameScreen" || screenId === "chatScreen";
+  document.querySelector(".bottom-nav")?.classList.toggle("hidden", hideNav);
+
+  // The compose button belongs to the feed. Left visible it floats over
+  // an open chat or profile.
+  document.querySelector(".fab")?.classList.toggle("hidden", hideNav || screenId === "profileScreen");
 }
 
 /** Highlight a tab in both the mobile bottom nav and the desktop sidebar. */
