@@ -224,6 +224,17 @@ input, textarea, select {
   transition: border-color var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
 }
 textarea { border-radius: var(--r-card); resize: vertical; min-height: 92px; }
+
+/* Date/time and number inputs have an intrinsic width that ignores the
+   container, which is what let the create-event screen slide sideways
+   on a phone. Pin them to the box. */
+input { min-width: 0; max-width: 100%; }
+input[type="datetime-local"], input[type="date"], input[type="time"], input[type="number"] {
+  -webkit-appearance: none;
+  appearance: none;
+  min-width: 0;
+  max-width: 100%;
+}
 input[type="datetime-local"], input[type="number"] { border-radius: var(--r-card); }
 input:focus, textarea:focus { border-color: var(--periwinkle); box-shadow: var(--glow); }
 input::placeholder, textarea::placeholder { color: var(--fog); }
@@ -401,7 +412,7 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 }
 .live-rail {
   display: flex; gap: var(--s-16);
-  padding: 2px var(--s-16) var(--s-8);
+  padding: 6px var(--s-16) var(--s-12);
   overflow-x: auto;
   scrollbar-width: none; -ms-overflow-style: none;
   scroll-snap-type: x proximity;
@@ -595,7 +606,10 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 .feed-filters, .tag-selector {
   display: flex; gap: var(--s-8);
   overflow-x: auto;
-  padding-bottom: var(--s-12); margin-bottom: var(--s-8);
+  /* Horizontal scrollers clip vertically too — this headroom is what
+     stops the pills being shaved off at the top on hover. */
+  padding: 6px 0 var(--s-12);
+  margin-bottom: var(--s-8);
   scrollbar-width: none; -ms-overflow-style: none; flex-wrap: nowrap;
 }
 .feed-filters::-webkit-scrollbar, .tag-selector::-webkit-scrollbar { display: none; }
@@ -831,7 +845,13 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 
 .full-screen-view { position: fixed; inset: 0; z-index: 1500; display: flex; flex-direction: column; background: var(--canvas); overflow: hidden; animation: rise 0.28s var(--ease); }
 .screen-header { display: flex; align-items: center; justify-content: space-between; gap: var(--s-12); padding: var(--s-12) var(--s-16); background: var(--paper); border-bottom: 1px solid var(--ash); flex-shrink: 0; }
-.screen-body { flex: 1; overflow-y: auto; padding: var(--s-20) var(--s-16) var(--s-64); }
+.screen-body {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;   /* nothing inside may scroll the panel sideways */
+  padding: var(--s-20) var(--s-16) var(--s-64);
+}
+.time-stack > div { min-width: 0; }
 .onboarding-screen { align-items: center; justify-content: center; text-align: center; padding: var(--s-24); }
 .onboarding-screen input { text-align: left; }
 .settings-label { display: block; margin: var(--s-16) 0 var(--s-8); font-size: 12px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--fog); }
@@ -948,7 +968,22 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   #chatScreen .back-btn { display: none; }
   .msg-bubble { max-width: 58%; }
 
-  .full-screen-view { max-width: 620px; margin: 0 auto; border-inline: 1px solid var(--ash); }
+  /* These are true full-screen views, not floating panels. Constraining
+     the element itself to 620px left the page showing down both sides,
+     which read as broken. Instead the view fills the viewport and the
+     CONTENT is centred in a readable column — the bar still spans the
+     full width, so nothing is cut off behind it. */
+  .full-screen-view { max-width: none; margin: 0; border-inline: none; }
+  .full-screen-view .screen-header {
+    padding-block: var(--s-16);
+    padding-inline: max(var(--s-24), calc((100% - 640px) / 2));
+  }
+  .full-screen-view .screen-body {
+    max-width: 640px;
+    margin-inline: auto;
+    width: 100%;
+    padding-top: var(--s-32);
+  }
 }
 
 @media (min-width: 1440px) {

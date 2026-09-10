@@ -71,10 +71,6 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/events/$(eventId)).data;
     }
 
-    function chatData(chatId) {
-      return get(/databases/$(database)/documents/chats/$(chatId)).data;
-    }
-
     function handleIsMine(handle) {
       return exists(/databases/$(database)/documents/usernames/$(handle))
         && get(/databases/$(database)/documents/usernames/$(handle)).data.uid == uid();
@@ -258,27 +254,31 @@ service cloud.firestore {
     // ---------------------------------------------------------------
     match /chats/{chatId} {
 
-      function isMember() {
-        return signedIn() && uid() in resource.data.userUids;
+      // A chat id IS the membership proof: it is the two uids, sorted
+      // and joined by "_", and the create rule below refuses any id
+      // that doesn't match its own userUids. So we can authorise from
+      // the id alone.
+      //
+      // This matters for more than tidiness. Reading resource.data on a
+      // chat that does not exist yet evaluates against a null resource,
+      // which errors and denies — meaning the FIRST message to someone
+      // new could never be sent. Checking the id works whether or not
+      // the document exists, and costs no lookup.
+      function inThisChat() {
+        return signedIn() && uid() in chatId.split('_');
       }
 
-      function willBeMember() {
-        return signedIn() && uid() in request.resource.data.userUids;
-      }
+      allow read: if inThisChat();
 
-      allow read: if isMember();
-
-      allow create: if willBeMember()
+      allow create: if inThisChat()
+        && uid() in request.resource.data.userUids
         && request.resource.data.userUids.size() == 2
-        // The document id must be the two uids, sorted, joined by "_".
-        // Both clients therefore compute the same id, and the id itself
-        // proves who the chat belongs to.
         && request.resource.data.userUids[0] < request.resource.data.userUids[1]
         && chatId == request.resource.data.userUids[0] + '_' + request.resource.data.userUids[1]
         && request.resource.data.initiatedByUid == uid()
         && request.resource.data.status in ['unlocked', 'icebreaker'];
 
-      allow update: if isMember()
+      allow update: if inThisChat()
         && changedKeys().hasOnly(['unreadByUid', 'typingUid', 'status', 'lastUpdated'])
         // The pair is fixed for the life of the chat.
         && request.resource.data.userUids == resource.data.userUids
@@ -296,13 +296,9 @@ service cloud.firestore {
 
       match /messages/{messageId} {
 
-        function inChat() {
-          return signedIn() && uid() in chatData(chatId).userUids;
-        }
+        allow read: if inThisChat();
 
-        allow read: if inChat();
-
-        allow create: if inChat()
+        allow create: if inThisChat()
           && request.resource.data.senderUid == uid()
           && isString(request.resource.data.text, 2000)
           && request.resource.data.time is number;
