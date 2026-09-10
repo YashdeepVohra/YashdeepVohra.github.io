@@ -557,12 +557,13 @@ export function loadMessages() {
             : `<div style="font-size: 11px; font-weight: 700; color: var(--text-muted); margin-left: 14px; margin-bottom: 2px;">${label}</div>`;
         }
 
+        const enterDelay = Math.min(i, 12) * 0.022;
         html += `
-          <div id="msg-${escapeHtml(m.time)}" class="msg-wrapper"
+          <div id="msg-${escapeHtml(m.time)}" class="msg-wrapper" style="animation-delay:${enterDelay}s;"
                data-sender-uid="${escapeHtml(m.senderUid)}"
                data-time="${escapeHtml(m.time)}"
                data-text="${escapeHtml(encodedText)}"
-               style="align-items: ${isMe ? "flex-end" : "flex-start"};"
+               data-align="${isMe ? "end" : "start"}"
                onclick="window.handleMessageTap(event, this)">
             ${swipeIconHTML}
             ${nameTagHTML}
@@ -622,6 +623,17 @@ function setUnreadBadge(hasUnread) {
 // ---------- Inbox ----------
 export function loadChatList() {
   if (state.chatListUnsubscribe) state.chatListUnsubscribe();
+
+  const listEl = document.getElementById("chatList");
+  if (listEl && !listEl.children.length) {
+    listEl.innerHTML = Array.from({ length: 3 }, () => `
+      <div class="skel-card" style="padding:12px">
+        <div class="skel-row" style="margin:0">
+          <div class="skel skel-avatar"></div>
+          <div style="flex:1"><div class="skel skel-line w-40"></div></div>
+        </div>
+      </div>`).join("");
+  }
 
   state.chatListUnsubscribe = db
     .collection("chats")

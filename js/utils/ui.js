@@ -29,10 +29,10 @@ export function switchScreen(screenId) {
 
   if (screenId) document.getElementById(screenId)?.classList.remove("hidden");
 
-  // The landing page is full-bleed and owns the whole viewport.
-  const landing = screenId === "login";
-  document.body.classList.toggle("landing-mode", landing);
-  if (landing) frame?.classList.add("hidden");
+  // The sign-in screen is a full-viewport overlay; the app grid behind
+  // it stands down so it can't be scrolled or tabbed into.
+  const signedOut = screenId === "login";
+  if (signedOut) frame?.classList.add("hidden");
   else if (screenId) frame?.classList.remove("hidden");
 
   frame?.classList.toggle("chat-open", twoPaneChat);
@@ -40,7 +40,7 @@ export function switchScreen(screenId) {
 
   const bottomNav = document.querySelector(".bottom-nav");
   if (bottomNav) {
-    const hideNav = !screenId || landing || screenId === "usernameScreen" || screenId === "chatScreen";
+    const hideNav = !screenId || signedOut || screenId === "usernameScreen" || screenId === "chatScreen";
     bottomNav.classList.toggle("hidden", hideNav);
   }
 }

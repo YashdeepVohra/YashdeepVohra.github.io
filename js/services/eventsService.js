@@ -16,7 +16,7 @@ import { auth, db, FieldValue } from '../config/firebase.js';
 import { state } from '../state/store.js';
 import { renderAvatar, escapeHtml, safeId } from '../utils/formatters.js';
 import { showTab } from '../utils/ui.js';
-import { primeUsers, displayNameFor, avatarFor } from './userService.js';
+import { primeUsers, displayNameFor, usernameFor, avatarFor } from './userService.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -147,6 +147,10 @@ export async function addEvent(e) {
 export function loadEvents() {
   if (state.eventsUnsubscribe) state.eventsUnsubscribe();
 
+  // Show the shape of what's loading rather than an empty column.
+  const liveList = document.getElementById("events");
+  if (liveList && !liveList.children.length) liveList.innerHTML = skeletonFeed(3);
+
   state.eventsUnsubscribe = db
     .collection("events")
     .where("expiresAt", ">", Date.now() - DAY_MS)
@@ -175,42 +179,122 @@ export function loadEvents() {
     );
 }
 
-function participantLinks(event) {
-  const uids = (event.participantUids && event.participantUids.length)
-    ? event.participantUids
-    : [event.hostUid];
+/* ---------------------------------------------------------------------
+   Presentation helpers
+   ------------------------------------------------------------------- */
 
-  const visible = uids.slice(0, 3).map((uid) => {
+// Each vibe carries its own accent. A feed of one colour reads as a
+// wall; keyed colour lets the eye sort categories while scrolling.
+const VIBE = {
+  "☕ Chill":  "var(--vibe-chill)",
+  "🍕 Food":   "var(--vibe-food)",
+  "🎉 Party":  "var(--vibe-party)",
+  "📚 Study":  "var(--vibe-study)",
+  "🏀 Sports": "var(--vibe-sports)"
+};
+const vibeColor = (tag) => VIBE[tag] || "var(--periwinkle)";
+
+/** "12m", "3h", "in 2h" — the compact relative time every feed uses. */
+function relTime(ms, now = Date.now()) {
+  const diff = ms - now;
+  const ahead = diff > 0;
+  const mins = Math.round(Math.abs(diff) / 60000);
+  let label;
+  if (mins < 1) label = "now";
+  else if (mins < 60) label = `${mins}m`;
+  else if (mins < 1440) label = `${Math.round(mins / 60)}h`;
+  else label = `${Math.round(mins / 1440)}d`;
+  if (label === "now") return "now";
+  return ahead ? `in ${label}` : `${label} ago`;
+}
+
+/** Overlapping avatar stack, capped at four plus a counter. */
+function avatarStack(uids) {
+  const shown = uids.slice(0, 4);
+  const rest = uids.length - shown.length;
+  const chips = shown
+    .map((uid) => `<div class="mini">${renderAvatar(avatarFor(uid))}</div>`)
+    .join("");
+  const more = rest > 0 ? `<div class="mini more">+${rest}</div>` : "";
+  return `<div class="av-stack">${chips}${more}</div>`;
+}
+
+function goingText(uids) {
+  if (!uids.length) return "Nobody yet — be first";
+  const names = uids.slice(0, 2).map((uid) => {
     const id = safeId(uid);
     const name = escapeHtml(displayNameFor(uid));
-    if (!id) return name;
-    return `<span onclick="event.stopPropagation(); window.startChatWithUid('${id}')" style="cursor: pointer; color: var(--aubergine); text-decoration: underline; text-underline-offset: 2px;">${name}</span>`;
-  }).join(", ");
-
-  const extra = uids.length > 3
-    ? ` <span style="color: var(--text-muted); font-size: 12px; margin-left: 4px;">+${uids.length - 3} more</span>`
-    : "";
-
-  return visible + extra;
+    return id ? `<b onclick="event.stopPropagation(); window.startChatWithUid('${id}')">${name}</b>` : name;
+  });
+  const rest = uids.length - names.length;
+  return names.join(", ") + (rest > 0 ? ` and ${rest} more going` : " going");
 }
 
-function capacityBar(event, attendees) {
-  if (!event.maxCapacity) return "";
-  const isFull = attendees >= event.maxCapacity;
-  const percent = Math.min((attendees / event.maxCapacity) * 100, 100);
-  const barColor = isFull ? "var(--blush)" : "var(--periwinkle)";
-  return `
-    <div style="margin-top: 12px; margin-bottom: 4px;">
-      <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 350; color: var(--fog); margin-bottom: 6px;">
-        <span><i class='bx bx-user'></i> Capacity</span>
-        <span style="color: ${isFull ? "var(--obsidian)" : "inherit"}">${attendees} / ${event.maxCapacity} ${isFull ? "(Full)" : ""}</span>
-      </div>
-      <div style="width: 100%; background: var(--ash); border-radius: 100px; height: 6px; overflow: hidden;">
-        <div style="width: ${percent}%; background: ${barColor}; height: 100%; transition: width 0.3s;"></div>
-      </div>
-    </div>`;
+function skeletonFeed(count = 3) {
+  let out = "";
+  for (let i = 0; i < count; i++) {
+    out += `
+      <div class="skel-card">
+        <div class="skel-row">
+          <div class="skel skel-avatar"></div>
+          <div style="flex:1">
+            <div class="skel skel-line w-40"></div>
+            <div class="skel skel-line w-60"></div>
+          </div>
+        </div>
+        <div class="skel skel-line w-80"></div>
+        <div class="skel skel-line w-100"></div>
+      </div>`;
+  }
+  return out;
 }
 
+/* ---------------------------------------------------------------------
+   The live rail — a stories row of what is on right now
+   ------------------------------------------------------------------- */
+function renderLiveRail(order, now) {
+  const wrap = document.getElementById("liveRailWrap");
+  const rail = document.getElementById("liveRail");
+  if (!rail || !wrap) return;
+
+  const items = order
+    .map((id) => state.eventCache[id])
+    .filter((e) => e && e.expiresAt > now)
+    .sort((a, b) => a.startTime - b.startTime)
+    .slice(0, 12);
+
+  // An empty rail is worse than no rail.
+  wrap.classList.toggle("hidden", items.length === 0);
+  if (!items.length) { rail.innerHTML = ""; return; }
+
+  rail.innerHTML = items.map((e) => {
+    const id = safeId(e.id);
+    if (!id) return "";
+    const isLive = now >= e.startTime;
+    return `
+      <button class="live-story" onclick="window.focusEvent('${id}')" title="${escapeHtml(e.title)}">
+        <span class="story-ring ${isLive ? "" : "upcoming"}">
+          <span class="story-inner">${renderAvatar(avatarFor(e.hostUid))}</span>
+        </span>
+        <span class="story-label">${escapeHtml(displayNameFor(e.hostUid))}</span>
+      </button>`;
+  }).join("");
+}
+
+/** Rail shortcut: scroll a card into view and flash it. */
+export function focusEvent(eventId) {
+  const card = document.getElementById(`event-${eventId}`);
+  if (!card) return;
+  card.scrollIntoView({ behavior: "smooth", block: "center" });
+  card.classList.remove("flash");
+  void card.offsetWidth;
+  card.classList.add("flash");
+  setTimeout(() => card.classList.remove("flash"), 1400);
+}
+
+/* ---------------------------------------------------------------------
+   Feed
+   ------------------------------------------------------------------- */
 export function renderEvents() {
   const liveList = document.getElementById("events");
   const recapList = document.getElementById("recapEvents");
@@ -220,6 +304,8 @@ export function renderEvents() {
   const now = Date.now();
   const oneDayAgo = now - DAY_MS;
 
+  renderLiveRail(order, now);
+
   let liveHTML = "";
   let recapHTML = "";
   let activeCount = 0;
@@ -228,47 +314,74 @@ export function renderEvents() {
   order.forEach((eventId) => {
     const e = state.eventCache[eventId];
     if (!e) return;
-
     const id = safeId(eventId);
     if (!id) return;
 
-    const attendees = (e.participantUids || []).length || 1;
-    const hostName = escapeHtml(displayNameFor(e.hostUid));
-    const hypeCount = (e.hypedUids || []).length;
+    const participants = e.participantUids || [];
+    const attendees = participants.length || 1;
+    const isLive = now >= e.startTime;
     const hasHyped = (e.hypedUids || []).includes(state.uid);
-    const hasJoined = (e.participantUids || []).includes(state.uid);
+    const hypeCount = (e.hypedUids || []).length;
+    const hasJoined = participants.includes(state.uid);
     const isHost = e.hostUid === state.uid;
     const isFull = e.maxCapacity && attendees >= e.maxCapacity;
+    const vibe = vibeColor(e.tag);
 
-    const hypeHTML = `<button class="${hasHyped ? "hype-btn active" : "hype-btn"}" onclick="window.toggleHype('${id}', ${hasHyped})"><i class='bx ${hasHyped ? "bxs-hot" : "bx-hot"}'></i> ${hypeCount > 0 ? hypeCount : "Hype"}</button>`;
+    const header = `
+      <div class="card-top">
+        <div class="av-ring ${isLive ? "live" : ""}">
+          <div class="av-inner">${renderAvatar(avatarFor(e.hostUid))}</div>
+        </div>
+        <div class="card-who">
+          <div class="who-line">
+            <span class="who-name">${escapeHtml(displayNameFor(e.hostUid))}</span>
+            <span class="who-meta">@${escapeHtml(usernameFor(e.hostUid))} · ${escapeHtml(relTime(e.startTime, now))}</span>
+          </div>
+          <div class="who-place"><i class='bx bx-map-pin'></i> ${escapeHtml(e.place)}</div>
+        </div>
+        ${isLive
+          ? `<span class="status-chip live"><span class="live-dot"></span> Live</span>`
+          : `<span class="status-chip soon">Soon</span>`}
+      </div>`;
 
-    const tagHTML = e.tag ? `<div class="event-tag-badge">${escapeHtml(e.tag)}</div>` : "";
-    const descHTML = e.description
-      ? `<button class="read-more-btn" onclick="window.toggleEventDesc('${id}')">Read details...</button><div class="event-desc-box">${escapeHtml(e.description)}</div>`
+    const desc = e.description
+      ? `<div class="event-desc-box">${escapeHtml(e.description)}</div>
+         <button class="read-more-btn" onclick="window.toggleEventDesc('${id}')">Read details</button>`
       : "";
 
-    const statusBadge = now < e.startTime
-      ? `<span style="background: var(--buttercream); color: var(--obsidian); padding: 7px 14px; border-radius: 100px; font-size: 13px; font-weight: 350;">Upcoming</span>`
-      : `<span style="background: var(--mint); color: #fff; padding: 7px 14px; border-radius: 100px; font-size: 13px; font-weight: 350; display: inline-flex; align-items: center; gap: 5px;"><i class='bx bx-radio-circle-marked'></i> Live</span>`;
+    const capacity = e.maxCapacity
+      ? `<div class="cap-wrap">
+           <div class="cap-head"><span>${attendees} of ${e.maxCapacity} spots</span><span>${isFull ? "Full" : `${e.maxCapacity - attendees} left`}</span></div>
+           <div class="cap-track"><div class="cap-fill ${isFull ? "full" : ""}" style="width:${Math.min((attendees / e.maxCapacity) * 100, 100)}%"></div></div>
+         </div>`
+      : "";
 
-    const avatarHTML = `<div style="display:inline-block; width:24px; height:24px; border-radius:50%; vertical-align:middle; overflow:hidden; background:var(--lavender); margin-right:6px;">${renderAvatar(avatarFor(e.hostUid))}</div>`;
+    const hypeBtn = `<button class="act ${hasHyped ? "hyped" : ""}" onclick="window.toggleHype('${id}', ${hasHyped})"><i class='bx ${hasHyped ? "bxs-hot" : "bx-hot"}'></i> ${hypeCount || "Hype"}</button>`;
+    const chatBtn = `<button class="act" onclick="window.openEventChat('${id}')"><i class='bx bx-message-rounded-dots'></i> Chat</button>`;
 
-    let actionsHTML;
-    if (isHost) {
-      actionsHTML = `<div style="display:flex; gap:8px; margin-top:16px;">
-          <button class="join" style="margin-top:0; flex:2;" onclick="window.openEventChat('${id}')"><i class='bx bx-message-square-dots'></i> Open Chat</button>
-          <button class="delete-btn" style="margin-top:0; flex:1;" onclick="window.openDeleteModal('${id}')"><i class='bx bx-slider'></i> Manage</button>
-        </div>`;
-    } else if (hasJoined) {
-      actionsHTML = `<div style="display:flex; gap:8px; margin-top:16px;">
-          <button class="join" style="margin-top:0; flex:3;" onclick="window.openEventChat('${id}')"><i class='bx bx-message-square-dots'></i> Open Chat</button>
-          <button class="leave-btn" style="margin-top:0; flex:1;" onclick="window.leaveEvent('${id}')"><i class='bx bx-exit'></i></button>
-        </div>`;
-    } else if (isFull) {
-      actionsHTML = `<button class="join" disabled>Event full</button>`;
-    } else {
-      actionsHTML = `<button class="join" onclick="window.joinEvent('${id}')">Join Hangout</button>`;
-    }
+    let primary;
+    if (isHost) primary = `<button class="act joined" onclick="window.openDeleteModal('${id}')"><i class='bx bx-slider-alt'></i> Manage</button>`;
+    else if (hasJoined) primary = `<button class="act joined" onclick="window.leaveEvent('${id}')"><i class='bx bx-check'></i> Going</button>`;
+    else if (isFull) primary = `<button class="act full" disabled>Full</button>`;
+    else primary = `<button class="act primary" onclick="window.joinEvent('${id}')">Join</button>`;
+
+    const actions = `
+      <div class="card-actions">
+        ${hypeBtn}
+        ${(isHost || hasJoined) ? chatBtn : ""}
+        <div style="flex:1"></div>
+        ${primary}
+      </div>`;
+
+    const body = `
+      <div class="event-title">${escapeHtml(e.title)}</div>
+      ${desc}
+      ${e.tag ? `<div class="vibe-chip">${escapeHtml(e.tag)}</div>` : ""}
+      <div class="going-row">
+        ${avatarStack(participants)}
+        <span class="going-text">${goingText(participants)}</span>
+      </div>
+      ${capacity}`;
 
     const matchesLive = state.currentLiveFilter === "All" || e.tag === state.currentLiveFilter;
     const matchesRecap = state.currentRecapFilter === "All" || e.tag === state.currentRecapFilter;
@@ -276,47 +389,33 @@ export function renderEvents() {
     if (e.expiresAt > now) {
       if (!matchesLive) return;
       activeCount++;
-      liveHTML += `
-        <div class="event card" id="event-${id}">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-            <div style="display: flex; gap: 8px; align-items: center;">${tagHTML} ${statusBadge}</div>
-            ${hypeHTML}
-          </div>
-          <div class="event-title">${escapeHtml(e.title)}</div>
-          <div class="event-meta" style="display:flex; align-items:center;">
-            ${avatarHTML} <span>${escapeHtml(e.place)} • hosted by ${hostName}</span>
-          </div>
-          ${descHTML}
-          <div class="attendees">
-            <i class='bx bx-group'></i> Going (${attendees}): ${participantLinks(e)}
-          </div>
-          ${capacityBar(e, attendees)}
-          ${actionsHTML}
-        </div>`;
+      liveHTML += `<article class="event card" id="event-${id}" style="--vibe:${vibe}">${header}${body}${actions}</article>`;
     } else if (e.expiresAt > oneDayAgo) {
       if (!matchesRecap) return;
       recapCount++;
       recapHTML += `
-        <div class="event card" style="background: var(--bone); border-color: transparent;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-            <div style="display: flex; gap: 8px; align-items: center;">${tagHTML}</div>
-            ${hypeHTML}
-          </div>
+        <article class="event card recap" id="event-${id}" style="--vibe:${vibe}">
+          ${header}
           <div class="event-title">${escapeHtml(e.title)}</div>
-          <div class="event-meta" style="display:flex; align-items:center;">${avatarHTML} <span>${escapeHtml(e.place)} • hosted by ${hostName}</span></div>
-          <div class="attendees" style="background: var(--ash);"><i class='bx bx-check-double'></i> Attended (${attendees}): ${participantLinks(e)}</div>
-        </div>`;
+          ${e.tag ? `<div class="vibe-chip">${escapeHtml(e.tag)}</div>` : ""}
+          <div class="going-row">
+            ${avatarStack(participants)}
+            <span class="going-text">${attendees} ${attendees === 1 ? "person" : "people"} went</span>
+          </div>
+        </article>`;
     }
   });
 
-  updateRail(order, now);
-
+  liveList.className = "stagger";
+  recapList.className = "stagger";
   liveList.innerHTML = activeCount
     ? liveHTML
-    : `<div class="empty-state"><i class='bx bx-ghost'></i><p>Nothing matching that filter right now.</p></div>`;
+    : `<div class="empty-state"><i class='bx bx-ghost'></i><p>Nothing live right now. Be the one who starts something.</p></div>`;
   recapList.innerHTML = recapCount
     ? recapHTML
-    : `<div class="empty-state"><i class='bx bx-history'></i><p>No recent history for this filter.</p></div>`;
+    : `<div class="empty-state"><i class='bx bx-time-five'></i><p>No history for this filter yet.</p></div>`;
+
+  updateRail(order, now);
 }
 
 // ---------- Membership ----------
@@ -413,6 +512,25 @@ function updateRail(order, now) {
     if (e.expiresAt > now - DAY_MS) (e.participantUids || []).forEach((u) => people.add(u));
   });
 
-  if (liveEl) liveEl.innerText = live;
-  if (peopleEl) peopleEl.innerText = people.size;
+  countTo(liveEl, live);
+  countTo(peopleEl, people.size);
+}
+
+
+/** Animate a stat to its new value so a change is noticed, not missed. */
+function countTo(el, target) {
+  if (!el) return;
+  const from = parseInt(el.dataset.value || "0", 10);
+  if (from === target) { el.innerText = target; return; }
+  el.dataset.value = target;
+
+  const steps = Math.min(Math.abs(target - from), 18);
+  if (steps === 0) { el.innerText = target; return; }
+  let i = 0;
+  const tick = () => {
+    i++;
+    el.innerText = Math.round(from + ((target - from) * i) / steps);
+    if (i < steps) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
 }

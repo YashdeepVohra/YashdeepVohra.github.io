@@ -23,77 +23,28 @@
 <!-- =====================================================================
      LANDING — what a stranger sees when a classmate shares the link
      ===================================================================== -->
-<div id="login" class="landing hidden">
+<div id="login" class="hidden">
+  <div class="login-aura a1"></div>
+  <div class="login-aura a2"></div>
+  <div class="login-aura a3"></div>
 
-  <nav class="landing-nav">
-    <div class="logo-lockup">
-      <div class="logo-dot"></div>
-      livesociya
-    </div>
-    <div class="nav-pill">
-      <a href="#how">How it works</a>
-      <a href="#recap">The recap</a>
-      <a href="#safety">Safety</a>
-    </div>
-    <button class="nav-cta" onclick="loginWithGoogle()">Launch app</button>
-  </nav>
+  <div class="login-card">
+    <div class="login-mark"><i class='bx bxs-bolt'></i></div>
+    <h1 class="login-title">livesociya</h1>
+    <p class="login-sub">See what's happening on campus, right now.</p>
 
-  <section class="band band-paper hero">
-    <div class="band-inner">
-      <h1 class="display">Campus is happening right now.</h1>
-      <p class="hero-sub">livesociya is a live feed of what's actually going on around you — not a timeline of what already did.</p>
-      <div class="hero-actions">
-        <button id="login-btn" type="button">Continue with Google</button>
-        <a class="pill-link" href="#how">How it works</a>
-      </div>
-    </div>
-  </section>
+    <button id="login-btn" class="google-btn" type="button">
+      <svg class="google-logo" viewBox="0 0 48 48" aria-hidden="true">
+        <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+        <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+        <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+        <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+      </svg>
+      Continue with Google
+    </button>
 
-  <section class="band band-bone" id="how">
-    <div class="band-inner">
-      <span class="eyebrow">How it works</span>
-      <h2 class="heading-lg">Three steps, and you're out of your room.</h2>
-      <p class="section-lead">No profiles to maintain, no follower counts, nothing to keep up with. Post what you're doing, see who's in.</p>
-      <div class="step-grid">
-        <div class="step-card">
-          <span class="step-index">1</span>
-          <h3>Broadcast</h3>
-          <p>Free for two hours? Put it on the feed with a place, a time and a vibe. Cap the numbers if you want a small group.</p>
-        </div>
-        <div class="step-card">
-          <span class="step-index">2</span>
-          <h3>Join</h3>
-          <p>Tap into anything live on campus. Everyone who joins gets a group chat, so plans stop dying in a group DM.</p>
-        </div>
-        <div class="step-card">
-          <span class="step-index">3</span>
-          <h3>Meet</h3>
-          <p>Message someone you've never crossed paths with and you get one icebreaker until they reply. Quiet by design.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section class="band band-dark" id="recap">
-    <div class="band-inner">
-      <span class="eyebrow">Nothing sticks around</span>
-      <h2 class="heading-lg">Everything is gone in twenty-four hours.</h2>
-      <p class="section-lead">Events expire when they end. The Recap holds the last day of campus, and then that goes too. There's no archive, no old posts, nothing following you into next term.</p>
-      <div class="hero-actions" style="justify-content:flex-start;">
-        <button class="btn-invert" type="button" onclick="loginWithGoogle()">Get in with your college email</button>
-      </div>
-    </div>
-  </section>
-
-  <section class="band band-paper" id="safety">
-    <div class="band-inner">
-      <span class="eyebrow">Built for a campus</span>
-      <h2 class="heading-lg">Verified students only.</h2>
-      <p class="section-lead">Sign-in is tied to your college Google account. Handles are claimed once and never change, so the person you met at an event is the same person in your inbox tomorrow.</p>
-    </div>
-  </section>
-
-  <footer class="landing-foot">livesociya — built for campus, by a student.</footer>
+    <p class="login-foot">Verified students only</p>
+  </div>
 </div>
 
 <!-- =====================================================================
@@ -104,7 +55,7 @@
   <!-- Desktop sidebar -->
   <aside class="sidebar">
     <div class="sidebar-brand">
-      <div class="logo-dot"></div>
+      <div class="brand-dot"><i class='bx bxs-bolt'></i></div>
       <div class="title">livesociya</div>
     </div>
     <button class="side-item active" onclick="showTab('events')"><i class='bx bx-bolt-circle'></i> Live Now</button>
@@ -124,7 +75,10 @@
 
   <!-- Mobile top bar -->
   <header class="topbar">
-    <div class="title">livesociya</div>
+    <div class="brand-lockup">
+      <div class="brand-dot"><i class='bx bxs-bolt'></i></div>
+      <div class="title">livesociya</div>
+    </div>
     <button class="profileBtn hidden" onclick="window.openProfileScreen()" id="topAvatar">👤</button>
   </header>
 
@@ -133,7 +87,11 @@
     <div id="eventsTab">
       <div class="section-head">
         <h3>Live Now</h3>
-        <button class="text-action-btn" onclick="openCreateScreen()">+ New</button>
+      </div>
+
+      <div class="live-rail-wrap" id="liveRailWrap">
+        <div class="live-rail-head"><span class="live-dot"></span> Happening now</div>
+        <div class="live-rail" id="liveRail"></div>
       </div>
 
       <div class="feed-filters" id="liveFilters">
@@ -262,6 +220,8 @@
     </div>
   </div>
 
+  <button class="fab" onclick="openCreateScreen()" aria-label="New event"><i class='bx bx-plus'></i></button>
+
   <!-- Mobile bottom nav -->
   <nav class="bottom-nav">
     <button class="nav-item active" onclick="showTab('events')">
@@ -321,8 +281,8 @@
 </div>
 
 <div id="usernameScreen" class="full-screen-view onboarding-screen hidden">
-  <div style="font-size:56px; margin-bottom:8px;">👋</div>
-  <h2 class="display" style="font-size:52px; margin-bottom:12px;">Claim your<br>handle</h2>
+  <div class="login-mark" style="margin-bottom:20px;"><i class='bx bx-at'></i></div>
+  <h2 style="font-size:30px; font-weight:700; letter-spacing:-0.04em; margin-bottom:8px;">Claim your handle</h2>
   <p style="font-weight:500; margin-bottom:28px;">This is your campus identity. It's permanent.</p>
 
   <div style="position:relative; width:100%; max-width:340px;">
