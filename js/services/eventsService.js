@@ -194,6 +194,23 @@ const VIBE = {
 };
 const vibeColor = (tag) => VIBE[tag] || "var(--periwinkle)";
 
+// Drawn rather than an icon font: it carries the palette and can move.
+const EMPTY_ART = `
+  <svg class="empty-art" viewBox="0 0 120 90" fill="none" aria-hidden="true">
+    <ellipse cx="60" cy="78" rx="34" ry="5" fill="var(--periwinkle)" opacity="0.25"/>
+    <g class="float-a">
+      <rect x="34" y="24" width="52" height="40" rx="12" fill="var(--paper)" stroke="var(--periwinkle)" stroke-width="2"/>
+      <circle cx="49" cy="42" r="3.4" fill="var(--periwinkle)"/>
+      <circle cx="71" cy="42" r="3.4" fill="var(--periwinkle)"/>
+      <path d="M50 53c4 4 16 4 20 0" stroke="var(--periwinkle)" stroke-width="2" stroke-linecap="round"/>
+    </g>
+    <g class="float-b">
+      <circle cx="24" cy="26" r="6" fill="var(--vibe-food)" opacity="0.5"/>
+      <circle cx="98" cy="34" r="4.5" fill="var(--vibe-party)" opacity="0.5"/>
+      <circle cx="92" cy="16" r="3" fill="var(--vibe-sports)" opacity="0.5"/>
+    </g>
+  </svg>`;
+
 /** "12m", "3h", "in 2h" — the compact relative time every feed uses. */
 function relTime(ms, now = Date.now()) {
   const diff = ms - now;
@@ -389,12 +406,19 @@ export function renderEvents() {
     if (e.expiresAt > now) {
       if (!matchesLive) return;
       activeCount++;
-      liveHTML += `<article class="event card" id="event-${id}" style="--vibe:${vibe}">${header}${body}${actions}</article>`;
+      const glyph = (e.tag || "").trim().split(" ")[0];
+      liveHTML += `
+        <article class="event card ${isLive ? "is-live" : ""}" id="event-${id}" style="--vibe:${vibe}">
+          ${isLive ? `<span class="live-edge"></span>` : ""}
+          <span class="vibe-watermark">${escapeHtml(glyph)}</span>
+          ${header}${body}${actions}
+        </article>`;
     } else if (e.expiresAt > oneDayAgo) {
       if (!matchesRecap) return;
       recapCount++;
       recapHTML += `
         <article class="event card recap" id="event-${id}" style="--vibe:${vibe}">
+          <span class="vibe-watermark">${escapeHtml((e.tag || "").trim().split(" ")[0])}</span>
           ${header}
           <div class="event-title">${escapeHtml(e.title)}</div>
           ${e.tag ? `<div class="vibe-chip">${escapeHtml(e.tag)}</div>` : ""}
@@ -410,10 +434,10 @@ export function renderEvents() {
   recapList.className = "stagger";
   liveList.innerHTML = activeCount
     ? liveHTML
-    : `<div class="empty-state"><i class='bx bx-ghost'></i><p>Nothing live right now. Be the one who starts something.</p></div>`;
+    : `<div class="empty-state">${EMPTY_ART}<h4>Campus is quiet</h4><p>Nothing live right now — be the one who starts something.</p></div>`;
   recapList.innerHTML = recapCount
     ? recapHTML
-    : `<div class="empty-state"><i class='bx bx-time-five'></i><p>No history for this filter yet.</p></div>`;
+    : `<div class="empty-state">${EMPTY_ART}<h4>Nothing here yet</h4><p>No history for this filter.</p></div>`;
 
   updateRail(order, now);
 }
@@ -441,8 +465,36 @@ export function toggleHype(id, isHyped) {
     ? { hypedUids: FieldValue.arrayRemove(state.uid) }
     : { hypedUids: FieldValue.arrayUnion(state.uid) };
 
-  if (!isHyped && navigator.vibrate) navigator.vibrate(50);
+  if (!isHyped) {
+    if (navigator.vibrate) navigator.vibrate(45);
+    burstFrom(document.activeElement || document.querySelector(`#event-${id} .act`));
+  }
   ref.update(op).catch((err) => console.error("Hype failed:", err.code || err.message));
+}
+
+/**
+ * Throw a few coloured dots out of an element. Purely an
+ * acknowledgement — it confirms the tap landed before the round trip
+ * to Firestore comes back.
+ */
+function burstFrom(el) {
+  if (!el || !el.getBoundingClientRect) return;
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+  const r = el.getBoundingClientRect();
+  const colors = ["var(--vibe-party)", "var(--vibe-food)", "var(--violet)", "var(--periwinkle)", "var(--vibe-sports)"];
+
+  for (let i = 0; i < 7; i++) {
+    const dot = document.createElement("span");
+    dot.className = "burst";
+    const angle = (Math.PI * 2 * i) / 7 + Math.random() * 0.5;
+    const dist = 26 + Math.random() * 22;
+    dot.style.cssText = `left:${r.left + r.width / 2}px; top:${r.top + r.height / 2}px;` +
+      `position:fixed; background:${colors[i % colors.length]};` +
+      `--bx:${Math.cos(angle) * dist}px; --by:${Math.sin(angle) * dist - 12}px;`;
+    document.body.appendChild(dot);
+    setTimeout(() => dot.remove(), 700);
+  }
 }
 
 // ---------- Host controls ----------

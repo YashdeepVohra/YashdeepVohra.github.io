@@ -1006,3 +1006,134 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 /* Recap cards read as past tense */
 .event.recap { opacity: 0.88; }
 .event.recap .event-title { color: var(--fog); }
+
+/* =====================================================================
+   AMBIENT LAYER
+   Soft colour behind the whole app. It sits below everything, never
+   catches a pointer, and drifts slowly enough that you notice depth
+   rather than movement.
+   ===================================================================== */
+
+.ambient {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.ambient .blob { position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.34; }
+.ambient .b1 { width: 420px; height: 420px; background: var(--periwinkle); top: -160px; right: -120px; animation: drift 24s var(--ease) infinite; }
+.ambient .b2 { width: 360px; height: 360px; background: #ffc9de; bottom: -150px; left: -130px; animation: drift 30s var(--ease) infinite reverse; }
+.ambient .b3 { width: 300px; height: 300px; background: #b9dcff; top: 42%; right: -150px; animation: drift 27s var(--ease) infinite; opacity: 0.26; }
+
+/* A faint dot grid gives the canvas texture instead of dead flat paint */
+.ambient .grid {
+  position: absolute; inset: 0;
+  background-image: radial-gradient(circle at 1px 1px, rgba(60, 49, 91, 0.10) 1px, transparent 0);
+  background-size: 26px 26px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 20%, transparent 78%);
+  -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 20%, transparent 78%);
+  opacity: 0.55;
+}
+
+/* Everything real sits above the ambient layer.
+   The :not() matters — .app-frame is a grid on desktop, and giving the
+   ambient layer position:relative would drop it into the grid flow and
+   steal the sidebar's column. */
+.app-frame > *:not(.ambient),
+.container, #chatScreen, #profileScreen { position: relative; z-index: 1; }
+
+/* =====================================================================
+   EVENT CARDS — the good stuff
+   ===================================================================== */
+
+/* A wash of the event's own colour bleeding down from the top edge */
+.event::after {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 96px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--vibe, var(--periwinkle)) 13%, transparent), transparent);
+  pointer-events: none;
+  z-index: 0;
+}
+.event > * { position: relative; z-index: 1; }
+
+/* Oversized vibe glyph tucked into the corner, mostly transparent —
+   texture and category recognition in one mark */
+.vibe-watermark {
+  position: absolute;
+  top: -12px; right: -10px;
+  font-size: 84px;
+  line-height: 1;
+  opacity: 0.09;
+  transform: rotate(14deg);
+  pointer-events: none;
+  z-index: 0 !important;
+  transition: transform 0.5s var(--ease), opacity 0.5s var(--ease);
+}
+.event:hover .vibe-watermark { transform: rotate(6deg) scale(1.08); opacity: 0.14; }
+
+/* The leading accent bar swells on hover */
+.event::before { transition: width var(--base) var(--ease); }
+.event:hover::before { width: 6px; }
+
+/* Live events get a slowly rotating gradient edge. Falls back to a
+   static gradient border where @property isn't supported. */
+@property --spin { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
+.event.is-live { isolation: isolate; }
+.event.is-live > .live-edge {
+  content: "";
+  position: absolute; inset: 0;
+  border-radius: inherit;
+  padding: 1.6px;
+  background: conic-gradient(from var(--spin), var(--vibe, var(--periwinkle)), #f472b6, var(--violet), var(--vibe, var(--periwinkle)));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: spinEdge 5s linear infinite;
+  pointer-events: none;
+  z-index: 2 !important;
+  opacity: 0.85;
+}
+@keyframes spinEdge { to { --spin: 360deg; } }
+
+/* Hype burst: little dots thrown outward on tap */
+.burst {
+  position: absolute;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 5;
+  animation: burstOut 0.62s var(--ease) forwards;
+}
+@keyframes burstOut {
+  0%   { opacity: 1; transform: translate(0, 0) scale(1); }
+  100% { opacity: 0; transform: translate(var(--bx), var(--by)) scale(0.2); }
+}
+
+/* =====================================================================
+   SECTION HEADINGS & EMPTY STATES
+   ===================================================================== */
+
+.section-head h3 { position: relative; display: inline-block; }
+.section-head h3::after {
+  content: "";
+  position: absolute;
+  left: 0; bottom: -4px;
+  height: 4px; width: 100%;
+  border-radius: var(--r-pill);
+  background: linear-gradient(90deg, var(--violet), var(--periwinkle), transparent);
+  transform-origin: left;
+  animation: sweep 0.7s var(--ease) 0.15s backwards;
+}
+@keyframes sweep { from { transform: scaleX(0); opacity: 0; } to { transform: scaleX(1); opacity: 1; } }
+
+.empty-art { width: 120px; height: 90px; margin: 0 auto var(--s-12); display: block; }
+.empty-art .float-a { animation: float 4.5s var(--ease) infinite; transform-origin: center; }
+.empty-art .float-b { animation: float 5.5s var(--ease) 0.4s infinite; transform-origin: center; }
+.empty-state h4 { font-size: 16px; margin-bottom: 4px; color: var(--aubergine); }
+
+/* Rail decoration */
+.rail-art { width: 100%; height: 64px; opacity: 0.5; margin-top: var(--s-4); }

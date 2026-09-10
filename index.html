@@ -52,6 +52,14 @@
      ===================================================================== -->
 <div class="app-frame">
 
+  <!-- Ambient colour behind everything. Decorative only. -->
+  <div class="ambient" aria-hidden="true">
+    <div class="blob b1"></div>
+    <div class="blob b2"></div>
+    <div class="blob b3"></div>
+    <div class="grid"></div>
+  </div>
+
   <!-- Desktop sidebar -->
   <aside class="sidebar">
     <div class="sidebar-brand">
@@ -157,6 +165,17 @@
     <div class="rail-card">
       <div class="rail-title">Reminder</div>
       <p class="rail-note">Events vanish when they end. The recap holds them for a day, then they're gone for good.</p>
+      <svg class="rail-art" viewBox="0 0 200 64" fill="none" aria-hidden="true">
+        <circle cx="34" cy="34" r="17" fill="var(--periwinkle)" opacity="0.45"/>
+        <circle cx="34" cy="34" r="17" stroke="var(--violet)" stroke-width="1.5" stroke-dasharray="4 5">
+          <animateTransform attributeName="transform" type="rotate" from="0 34 34" to="360 34 34" dur="18s" repeatCount="indefinite"/>
+        </circle>
+        <path d="M34 25v10l7 4" stroke="var(--violet)" stroke-width="2" stroke-linecap="round"/>
+        <rect x="66" y="20" width="54" height="9" rx="4.5" fill="var(--periwinkle)" opacity="0.4"/>
+        <rect x="66" y="36" width="86" height="9" rx="4.5" fill="var(--periwinkle)" opacity="0.24"/>
+        <circle cx="170" cy="24" r="4" fill="var(--vibe-food)" opacity="0.55"/>
+        <circle cx="182" cy="42" r="3" fill="var(--vibe-party)" opacity="0.5"/>
+      </svg>
     </div>
   </aside>
 
