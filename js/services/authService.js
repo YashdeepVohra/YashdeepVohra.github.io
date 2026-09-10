@@ -251,6 +251,11 @@ export function initializeUserApp(userData) {
     topAvatarEl.classList.remove("hidden");
   }
 
+  const sideAvatarEl = document.getElementById("sideAvatar");
+  if (sideAvatarEl) sideAvatarEl.innerHTML = renderAvatar(state.userAvatar);
+  const sideNameEl = document.getElementById("sideName");
+  if (sideNameEl) sideNameEl.innerText = state.userDisplayName;
+
   history.pushState({ screen: "home" }, "", window.location.pathname);
   switchScreen("home");
   loadChatList();
@@ -274,7 +279,7 @@ export async function checkUsernameAvailability() {
   const block = (text, color) => {
     status.innerText = text;
     status.style.color = color;
-    btn.style.background = "#cbd5e1";
+    btn.style.background = "var(--ash)";
     btn.style.cursor = "not-allowed";
     btn.disabled = true;
   };
@@ -287,8 +292,8 @@ export async function checkUsernameAvailability() {
     if (doc.exists) return block("Taken \u{1F614}", "var(--danger)");
 
     status.innerText = "Available! \u{1F389}";
-    status.style.color = "var(--success)";
-    btn.style.background = "var(--primary)";
+    status.style.color = "var(--mint)";
+    btn.style.background = "var(--lavender)";
     btn.style.cursor = "pointer";
     btn.disabled = false;
   } catch (e) {
@@ -346,7 +351,7 @@ export async function claimUsername() {
         (error.code === "permission-denied" || error.code === "handle-taken")
           ? "That handle was just taken. Try another."
           : "Could not claim right now. Check your connection.";
-      status.style.color = "var(--danger)";
+      status.style.color = "var(--obsidian)";
     }
 
     if (btn) {

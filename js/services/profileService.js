@@ -18,7 +18,7 @@ export function openProfileModal() { document.getElementById("profileModal")?.cl
 export function closeProfileModal() { document.getElementById("profileModal")?.classList.add("hidden"); }
 
 function applyAvatarEverywhere(avatar) {
-  ["topAvatar", "profileAvatarDisplay", "profileLargeAvatar"].forEach((id) => {
+  ["topAvatar", "profileAvatarDisplay", "profileLargeAvatar", "sideAvatar"].forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.innerHTML = renderAvatar(avatar);
   });
@@ -80,7 +80,7 @@ export function loadUserEvents(targetUid) {
         }
 
         list.innerHTML = events.map((e) => `
-          <div class="card" style="padding: 16px; margin-bottom: 12px; box-shadow: none; border: 1px solid var(--border);">
+          <div class="card" style="padding: 16px 20px; margin-bottom: 12px; border-radius: 20px;">
             <div style="font-size: 16px; font-weight: 700; margin-bottom: 4px;">${escapeHtml(e.title)}</div>
             <div style="font-size: 12px; color: var(--text-muted);"><i class='bx bx-map'></i> ${escapeHtml(e.place)}</div>
           </div>`).join("");
@@ -210,10 +210,12 @@ export async function saveProfileData() {
 
     const displayEl = document.getElementById("profileDisplayNameDisplay");
     if (displayEl) displayEl.innerText = newName;
+    const sideNameEl = document.getElementById("sideName");
+    if (sideNameEl) sideNameEl.innerText = newName;
     applyAvatarEverywhere(avatar);
 
     if (btn) {
-      btn.style.background = "var(--success)";
+      btn.style.background = "var(--periwinkle)";
       btn.innerHTML = `<i class='bx bx-check'></i> Saved!`;
       setTimeout(() => {
         btn.style.background = "";

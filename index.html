@@ -3,12 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <title>livesociya</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  
-  <meta name="theme-color" content="#4f46e5">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#fdfcfe">
+  <meta name="description" content="The campus live feed. See what's happening right now, join it, and meet the people who showed up.">
 
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css' rel='stylesheet'>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300..700&display=swap" rel="stylesheet">
+  <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
 
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
@@ -18,94 +20,212 @@
 </head>
 <body>
 
+<!-- =====================================================================
+     LANDING — what a stranger sees when a classmate shares the link
+     ===================================================================== -->
+<div id="login" class="landing hidden">
+
+  <nav class="landing-nav">
+    <div class="logo-lockup">
+      <div class="logo-dot"></div>
+      livesociya
+    </div>
+    <div class="nav-pill">
+      <a href="#how">How it works</a>
+      <a href="#recap">The recap</a>
+      <a href="#safety">Safety</a>
+    </div>
+    <button class="nav-cta" onclick="loginWithGoogle()">Launch app</button>
+  </nav>
+
+  <section class="band band-paper hero">
+    <div class="band-inner">
+      <h1 class="display">Campus is happening right now.</h1>
+      <p class="hero-sub">livesociya is a live feed of what's actually going on around you — not a timeline of what already did.</p>
+      <div class="hero-actions">
+        <button id="login-btn" type="button">Continue with Google</button>
+        <a class="pill-link" href="#how">How it works</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="band band-bone" id="how">
+    <div class="band-inner">
+      <span class="eyebrow">How it works</span>
+      <h2 class="heading-lg">Three steps, and you're out of your room.</h2>
+      <p class="section-lead">No profiles to maintain, no follower counts, nothing to keep up with. Post what you're doing, see who's in.</p>
+      <div class="step-grid">
+        <div class="step-card">
+          <span class="step-index">1</span>
+          <h3>Broadcast</h3>
+          <p>Free for two hours? Put it on the feed with a place, a time and a vibe. Cap the numbers if you want a small group.</p>
+        </div>
+        <div class="step-card">
+          <span class="step-index">2</span>
+          <h3>Join</h3>
+          <p>Tap into anything live on campus. Everyone who joins gets a group chat, so plans stop dying in a group DM.</p>
+        </div>
+        <div class="step-card">
+          <span class="step-index">3</span>
+          <h3>Meet</h3>
+          <p>Message someone you've never crossed paths with and you get one icebreaker until they reply. Quiet by design.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="band band-dark" id="recap">
+    <div class="band-inner">
+      <span class="eyebrow">Nothing sticks around</span>
+      <h2 class="heading-lg">Everything is gone in twenty-four hours.</h2>
+      <p class="section-lead">Events expire when they end. The Recap holds the last day of campus, and then that goes too. There's no archive, no old posts, nothing following you into next term.</p>
+      <div class="hero-actions" style="justify-content:flex-start;">
+        <button class="btn-invert" type="button" onclick="loginWithGoogle()">Get in with your college email</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="band band-paper" id="safety">
+    <div class="band-inner">
+      <span class="eyebrow">Built for a campus</span>
+      <h2 class="heading-lg">Verified students only.</h2>
+      <p class="section-lead">Sign-in is tied to your college Google account. Handles are claimed once and never change, so the person you met at an event is the same person in your inbox tomorrow.</p>
+    </div>
+  </section>
+
+  <footer class="landing-foot">livesociya — built for campus, by a student.</footer>
+</div>
+
+<!-- =====================================================================
+     THE APP
+     ===================================================================== -->
 <div class="app-frame">
 
+  <!-- Desktop sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <div class="logo-dot"></div>
+      <div class="title">livesociya</div>
+    </div>
+    <button class="side-item active" onclick="showTab('events')"><i class='bx bx-bolt-circle'></i> Live Now</button>
+    <button class="side-item" onclick="showTab('recap')"><i class='bx bx-history'></i> Recap</button>
+    <button class="side-item" onclick="showTab('chats')">
+      <i class='bx bx-message-rounded-dots'></i> Chats
+      <div id="sideBadge" class="side-badge hidden"></div>
+    </button>
+    <button class="sidebar-create" onclick="openCreateScreen()">+ New Event</button>
+    <div class="sidebar-foot">
+      <button class="sidebar-me" onclick="openProfileScreen()">
+        <div class="avatar-chip" id="sideAvatar">👤</div>
+        <span id="sideName">Your profile</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- Mobile top bar -->
   <header class="topbar">
     <div class="title">livesociya</div>
     <button class="profileBtn hidden" onclick="window.openProfileScreen()" id="topAvatar">👤</button>
   </header>
 
-  <div class="container screen hidden" id="login">
-    <div class="card" style="margin-top: 40px; text-align: center; padding: 40px 20px;">
-      <div style="font-size: 56px; margin-bottom: 16px; color: var(--primary);"><i class='bx bxs-bolt-circle'></i></div>
-      <h2 style="font-size: 28px; margin-bottom: 8px;">livesociya</h2>
-      <p style="color: var(--text-muted); font-size: 15px; margin-bottom: 32px;">The campus live feed. Verified students only.</p>
-      
-      <button id="login-btn" type="button" style="background: var(--surface); color: var(--text); border: 1px solid var(--border); font-weight: 600; font-size: 16px; padding: 12px; border-radius: 24px;">
-        <img src="https://www.svgrepo.com/show/475656/google-color.svg" style="width: 20px; margin-right: 12px;"> Continue with Google
-      </button>
-    </div>
-  </div>
-
   <div class="container hidden" id="home">
-    
+
     <div id="eventsTab">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-        <h3 style="margin: 0; display: flex; align-items: center; gap: 8px;"><i class='bx bx-bolt-circle' style="color: var(--primary);"></i> The Campus Feed</h3>
-        <button onclick="openCreateScreen()" style="width: auto; padding: 8px 16px; font-size: 13px; border-radius: 20px; box-shadow: var(--shadow-sm);">+ New Event</button>
+      <div class="section-head">
+        <h3>Live Now</h3>
+        <button class="text-action-btn" onclick="openCreateScreen()">+ New</button>
       </div>
 
       <div class="feed-filters" id="liveFilters">
-        <div class="filter-pill active" onclick="setLiveFilter(this, 'All')">All</div>
-        <div class="filter-pill" onclick="setLiveFilter(this, '☕ Chill')">☕ Chill</div>
-        <div class="filter-pill" onclick="setLiveFilter(this, '🍕 Food')">🍕 Food</div>
-        <div class="filter-pill" onclick="setLiveFilter(this, '🎉 Party')">🎉 Party</div>
-        <div class="filter-pill" onclick="setLiveFilter(this, '📚 Study')">📚 Study</div>
-        <div class="filter-pill" onclick="setLiveFilter(this, '🏀 Sports')">🏀 Sports</div>
+        <div class="filter-pill active" data-tag="All" onclick="setLiveFilter(this, 'All')">All</div>
+        <div class="filter-pill" data-tag="☕ Chill" onclick="setLiveFilter(this, '☕ Chill')">☕ Chill</div>
+        <div class="filter-pill" data-tag="🍕 Food" onclick="setLiveFilter(this, '🍕 Food')">🍕 Food</div>
+        <div class="filter-pill" data-tag="🎉 Party" onclick="setLiveFilter(this, '🎉 Party')">🎉 Party</div>
+        <div class="filter-pill" data-tag="📚 Study" onclick="setLiveFilter(this, '📚 Study')">📚 Study</div>
+        <div class="filter-pill" data-tag="🏀 Sports" onclick="setLiveFilter(this, '🏀 Sports')">🏀 Sports</div>
       </div>
 
       <div id="events"></div>
     </div>
 
     <div id="recapTab" class="hidden">
-      <h3 style="display: flex; align-items: center; gap: 8px;"><i class='bx bx-time-five' style="color: var(--primary);"></i> Campus Recap</h3>
-      <p style="font-size: 14px; color: var(--text-muted); margin-top:-10px; margin-bottom:16px;">Everything that went down on campus in the last 24 hours.</p>
-      
+      <div class="section-head"><h3>Campus Recap</h3></div>
+      <p class="section-sub">Everything that went down in the last 24 hours.</p>
+
       <div class="feed-filters" id="recapFilters">
-        <div class="filter-pill active" onclick="setRecapFilter(this, 'All')">All</div>
-        <div class="filter-pill" onclick="setRecapFilter(this, '☕ Chill')">☕ Chill</div>
-        <div class="filter-pill" onclick="setRecapFilter(this, '🍕 Food')">🍕 Food</div>
-        <div class="filter-pill" onclick="setRecapFilter(this, '🎉 Party')">🎉 Party</div>
-        <div class="filter-pill" onclick="setRecapFilter(this, '📚 Study')">📚 Study</div>
-        <div class="filter-pill" onclick="setRecapFilter(this, '🏀 Sports')">🏀 Sports</div>
+        <div class="filter-pill active" data-tag="All" onclick="setRecapFilter(this, 'All')">All</div>
+        <div class="filter-pill" data-tag="☕ Chill" onclick="setRecapFilter(this, '☕ Chill')">☕ Chill</div>
+        <div class="filter-pill" data-tag="🍕 Food" onclick="setRecapFilter(this, '🍕 Food')">🍕 Food</div>
+        <div class="filter-pill" data-tag="🎉 Party" onclick="setRecapFilter(this, '🎉 Party')">🎉 Party</div>
+        <div class="filter-pill" data-tag="📚 Study" onclick="setRecapFilter(this, '📚 Study')">📚 Study</div>
+        <div class="filter-pill" data-tag="🏀 Sports" onclick="setRecapFilter(this, '🏀 Sports')">🏀 Sports</div>
       </div>
       <div id="recapEvents"></div>
     </div>
 
     <div id="chatsTab" class="hidden">
-      <h3 style="display: flex; align-items: center; gap: 8px;"><i class='bx bx-message-square-dots' style="color: var(--primary);"></i> Messages</h3>
-      <div style="display: flex; gap: 10px; margin-bottom: 24px;">
-        <input id="chatUser" placeholder="Search exact username..." style="margin-bottom: 0;" onkeydown="if(event.key === 'Enter') startChat()" />
-        <button onclick="startChat()" style="width: auto; white-space: nowrap; padding: 0 20px;">Start</button>
+      <div class="section-head"><h3>Messages</h3></div>
+      <div style="display:flex; gap:10px; margin-bottom:24px;">
+        <input id="chatUser" placeholder="Search exact username..." style="margin-bottom:0;" onkeydown="if(event.key === 'Enter') startChat()" autocomplete="off" spellcheck="false" />
+        <button onclick="startChat()" style="width:auto; white-space:nowrap; padding-inline:22px;">Start</button>
       </div>
       <div id="chatList"></div>
     </div>
 
-  </div> <div id="chatScreen" class="hidden">
+  </div>
+
+  <!-- Desktop right rail -->
+  <aside class="rail">
+    <div class="rail-card accent-dark">
+      <div class="rail-title">Live right now</div>
+      <div class="rail-stat" id="railLiveCount">0</div>
+      <p class="rail-note">events happening on campus</p>
+    </div>
+    <div class="rail-card">
+      <div class="rail-title">Out today</div>
+      <div class="rail-stat" id="railPeopleCount">0</div>
+      <p class="rail-note">students joined something</p>
+    </div>
+    <div class="rail-card accent-lavender">
+      <div class="rail-title">Jump to a vibe</div>
+      <div class="rail-tags">
+        <div class="filter-pill" onclick="jumpToVibe('☕ Chill')">☕ Chill</div>
+        <div class="filter-pill" onclick="jumpToVibe('🍕 Food')">🍕 Food</div>
+        <div class="filter-pill" onclick="jumpToVibe('🎉 Party')">🎉 Party</div>
+        <div class="filter-pill" onclick="jumpToVibe('📚 Study')">📚 Study</div>
+        <div class="filter-pill" onclick="jumpToVibe('🏀 Sports')">🏀 Sports</div>
+      </div>
+    </div>
+    <div class="rail-card">
+      <div class="rail-title">Reminder</div>
+      <p class="rail-note">Events vanish when they end. The recap holds them for a day, then they're gone for good.</p>
+    </div>
+  </aside>
+
+  <!-- Chat -->
+  <div id="chatScreen" class="hidden">
     <div class="chat-header">
       <button class="back-btn" onclick="history.back()"><i class='bx bx-left-arrow-alt'></i></button>
-      <div class="chat-avatar" id="chatHeaderAvatar" style="width: 36px; height: 36px; font-size: 14px;">?</div>
-      <div id="chatWithTitle" style="font-weight: 700; font-size: 18px;">User</div>
+      <div class="chat-avatar" id="chatHeaderAvatar" style="width:38px; height:38px; font-size:16px;">?</div>
+      <div id="chatWithTitle" class="header-title">User</div>
     </div>
-    
+
     <div id="messages"></div>
-    
-    <div class="chat-footer" style="flex-direction: column;">
-        <div id="icebreakerMsg" class="hidden" style="width: 100%; text-align: center; color: var(--text-muted); font-size: 13px; font-weight: bold; padding: 10px;">
-            <i class='bx bxs-lock-alt'></i> Icebreaker sent! Waiting for reply...
-        </div>
-  
-        <div id="replyPreviewContainer" style="width: 100%;"></div>
-  
-        <div id="inputWrapper" class="input-wrapper" style="display: flex; gap: 10px; width: 100%;">
-            <input id="msgInput" placeholder="Message..." autocomplete="off" oninput="handleTyping()" onkeydown="if(event.key === 'Enter') sendMessage()" style="margin-bottom:0;" />
-            <button onclick="sendMessage()" style="height: 50px; width: 50px; flex-shrink: 0;"><i class='bx bxs-send'></i></button>
-        </div>
+
+    <div class="chat-footer">
+      <div id="icebreakerMsg" class="hidden" style="width:100%; text-align:center; font-size:13px; font-weight:700; padding:10px;">
+        <i class='bx bxs-lock-alt'></i> Icebreaker sent — waiting for a reply
+      </div>
+      <div id="replyPreviewContainer" style="width:100%;"></div>
+      <div id="inputWrapper" class="input-wrapper">
+        <input id="msgInput" placeholder="Message..." autocomplete="off" oninput="handleTyping()" onkeydown="if(event.key === 'Enter') sendMessage()" />
+        <button onclick="sendMessage()"><i class='bx bxs-send'></i></button>
+      </div>
     </div>
   </div>
 
+  <!-- Profile -->
   <div id="profileScreen" class="hidden profile-screen-wrapper">
-    
     <div class="chat-header profile-header-layout">
       <div class="header-left">
         <button class="back-btn" onclick="history.back()"><i class='bx bx-left-arrow-alt'></i></button>
@@ -115,19 +235,16 @@
         <i class='bx bx-cog'></i>
       </button>
     </div>
-    
+
     <div class="profile-scroll-body">
-      
       <div class="profile-clean-card">
         <div class="profile-card-header">
-          <div class="profile-avatar-pro" id="profileAvatarDisplay" style="cursor: default;">👤</div>
-          
+          <div class="profile-avatar-pro" id="profileAvatarDisplay">👤</div>
           <div class="profile-name-group">
             <div id="profileDisplayNameDisplay" class="profile-name-pro read-only-name">Display Name</div>
             <div class="profile-handle-pro" id="profileUsernameDisplay">@username</div>
           </div>
         </div>
-        
         <div class="profile-stats-pro no-margin-bottom">
           <div class="stat-box-pro">
             <span class="stat-num" id="statEventsJoined">0</span>
@@ -140,94 +257,138 @@
         </div>
       </div>
 
-      <h3 class="hosted-events-title"><i class='bx bx-calendar-star'></i> Hosted Events</h3>
+      <h3 class="hosted-events-title">Hosted Events</h3>
       <div id="myProfileEvents" class="profile-events-scroll"></div>
     </div>
   </div>
 
-  <div id="settingsScreen" class="full-screen-view hidden">
-    <div class="screen-header">
-      <button class="back-btn" onclick="closeSettingsScreen()"><i class='bx bx-left-arrow-alt'></i></button>
-      <div class="header-title" style="font-size: 18px; font-weight: 800;">Settings</div>
-      <div style="width: 44px;"></div> 
-    </div>
-    
-    <div class="screen-body">
-      <div class="card" style="border-radius: 20px; padding: 20px;">
-        
-        <label class="settings-label" style="margin-top: 0;">Profile Picture</label>
-        <div class="avatar-grid" id="settingsAvatarGrid" style="margin-bottom: 12px;">
-          <div class="avatar-option" onclick="selectSettingsAvatar(this, '🦊')">🦊</div>
-          <div class="avatar-option" onclick="selectSettingsAvatar(this, '🐼')">🐼</div>
-          <div class="avatar-option" onclick="selectSettingsAvatar(this, '🐯')">🐯</div>
-          <div class="avatar-option" onclick="selectSettingsAvatar(this, '🐸')">🐸</div>
-          <div class="avatar-option" onclick="selectSettingsAvatar(this, '🐶')">🐶</div>
-          <div class="avatar-option" onclick="selectSettingsAvatar(this, '🐱')">🐱</div>
-          <div class="avatar-option" onclick="selectSettingsAvatar(this, '🦄')">🦄</div>
-          <div class="avatar-option" onclick="selectSettingsAvatar(this, '👽')">👽</div>
-          <div class="avatar-option" onclick="selectSettingsAvatar(this, '👻')">👻</div>
-        </div>
-        
-        <button onclick="selectSettingsAvatar(this, 'google')" style="background: #e0e7ff; color: var(--primary); margin-bottom: 24px; box-shadow: none;">
-          <i class='bx bxl-google'></i> Revert to Google Photo
-        </button>
-
-        <label class="settings-label">Display Name</label>
-        <input type="text" id="editDisplayNameInput" placeholder="New Display Name" maxlength="20" class="settings-input" autocomplete="off" spellcheck="false">
-        
-        <button id="saveProfileBtn" onclick="saveProfileData()" class="save-settings-btn" style="margin-bottom: 0;">Save Changes</button>
-      </div>
-      
-      <button class="logoutBtn" onclick="logout()" style="margin-top: 24px; padding: 16px; font-size: 15px; font-weight: 800;">
-        <i class='bx bx-log-out'></i> Log Out of livesociya
-      </button>
-    </div>
-  </div>
-
+  <!-- Mobile bottom nav -->
   <nav class="bottom-nav">
     <button class="nav-item active" onclick="showTab('events')">
-      <i class='bx bx-bolt-circle'></i><span>Live Now</span>
+      <i class='bx bx-bolt-circle'></i><span>Live</span>
     </button>
     <button class="nav-item" onclick="showTab('recap')">
       <i class='bx bx-history'></i><span>Recap</span>
     </button>
-    <button class="nav-item" onclick="showTab('chats')" style="position: relative;">
+    <button class="nav-item" onclick="showTab('chats')" style="position:relative;">
       <div id="chatBadge" class="nav-badge hidden"></div>
       <i class='bx bx-message-rounded-dots'></i><span>Chats</span>
     </button>
   </nav>
 
-</div> <div id="usernameScreen" class="full-screen-view onboarding-screen hidden">
-  <div style="font-size: 56px; margin-bottom: 16px;">👋</div>
-  <h2 style="font-size: 28px; margin-bottom: 8px;">Claim Your Handle</h2>
-  <p style="font-size:15px; color: var(--text-muted); margin-bottom: 32px;">This is your unique campus identity.</p>
-  
-  <div style="position: relative; width: 100%; max-width: 320px;">
-    <span style="position: absolute; left: 16px; top: 18px; color: var(--text-muted); font-weight: 800; font-size: 16px;">@</span>
-    <input type="text" style="display:none" autocomplete="username">
-    <input id="newUsername" type="text" placeholder="username" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" readonly onfocus="this.removeAttribute('readonly');" style="padding-left: 38px; font-weight: 700; font-size: 16px;">
+</div>
+
+<!-- =====================================================================
+     OVERLAYS
+     ===================================================================== -->
+
+<div id="settingsScreen" class="full-screen-view hidden">
+  <div class="screen-header">
+    <button class="back-btn" onclick="closeSettingsScreen()"><i class='bx bx-left-arrow-alt'></i></button>
+    <div class="header-title">Settings</div>
+    <div style="width:42px;"></div>
   </div>
-  
-  <div id="usernameStatus" style="font-size: 13px; font-weight: 600; margin-top: -4px; margin-bottom: 24px; min-height: 18px;"></div>
-  
-  <button id="claimBtn" style="background: #cbd5e1; cursor: not-allowed; max-width: 320px;" disabled>Join Campus</button>
+
+  <div class="screen-body">
+    <div class="card">
+      <label class="settings-label" style="margin-top:0;">Profile Picture</label>
+      <div class="avatar-grid" id="settingsAvatarGrid">
+        <div class="avatar-option" onclick="selectSettingsAvatar(this, '🦊')">🦊</div>
+        <div class="avatar-option" onclick="selectSettingsAvatar(this, '🐼')">🐼</div>
+        <div class="avatar-option" onclick="selectSettingsAvatar(this, '🐯')">🐯</div>
+        <div class="avatar-option" onclick="selectSettingsAvatar(this, '🐸')">🐸</div>
+        <div class="avatar-option" onclick="selectSettingsAvatar(this, '🐶')">🐶</div>
+        <div class="avatar-option" onclick="selectSettingsAvatar(this, '🐱')">🐱</div>
+        <div class="avatar-option" onclick="selectSettingsAvatar(this, '🦄')">🦄</div>
+        <div class="avatar-option" onclick="selectSettingsAvatar(this, '👽')">👽</div>
+        <div class="avatar-option" onclick="selectSettingsAvatar(this, '👻')">👻</div>
+      </div>
+
+      <button class="btn-ghost" onclick="selectSettingsAvatar(this, 'google')" style="margin-bottom:24px;">
+        <i class='bx bxl-google'></i> Revert to Google Photo
+      </button>
+
+      <label class="settings-label">Display Name</label>
+      <input type="text" id="editDisplayNameInput" placeholder="New Display Name" maxlength="20" class="settings-input" autocomplete="off" spellcheck="false">
+
+      <button id="saveProfileBtn" onclick="saveProfileData()" class="save-settings-btn" style="margin-bottom:0;">Save Changes</button>
+    </div>
+
+    <button class="logoutBtn" onclick="logout()" style="margin-top:24px;">
+      <i class='bx bx-log-out'></i> Log Out
+    </button>
+  </div>
+</div>
+
+<div id="usernameScreen" class="full-screen-view onboarding-screen hidden">
+  <div style="font-size:56px; margin-bottom:8px;">👋</div>
+  <h2 class="display" style="font-size:52px; margin-bottom:12px;">Claim your<br>handle</h2>
+  <p style="font-weight:500; margin-bottom:28px;">This is your campus identity. It's permanent.</p>
+
+  <div style="position:relative; width:100%; max-width:340px;">
+    <span style="position:absolute; left:20px; top:14px; font-weight:800; font-size:16px; pointer-events:none;">@</span>
+    <input id="newUsername" type="text" placeholder="username" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" style="padding-left:40px; font-weight:700;">
+  </div>
+
+  <div id="usernameStatus" style="font-size:13px; font-weight:700; margin-bottom:20px; min-height:18px;"></div>
+
+  <button id="claimBtn" style="max-width:340px;" disabled>Join Campus</button>
+</div>
+
+<div id="createScreen" class="full-screen-view hidden">
+  <div class="screen-header">
+    <button class="back-btn" onclick="closeCreateScreen()"><i class='bx bx-x'></i></button>
+    <div class="header-title">New Broadcast</div>
+    <button class="text-action-btn" onclick="addEvent(event)">Publish</button>
+  </div>
+
+  <div class="screen-body">
+    <label class="settings-label" style="margin-top:0;">What's the vibe?</label>
+    <div class="tag-selector" id="tagSelector">
+      <div class="tag active" onclick="selectTag(this, '☕ Chill')">☕ Chill</div>
+      <div class="tag" onclick="selectTag(this, '🍕 Food')">🍕 Food</div>
+      <div class="tag" onclick="selectTag(this, '🎉 Party')">🎉 Party</div>
+      <div class="tag" onclick="selectTag(this, '📚 Study')">📚 Study</div>
+      <div class="tag" onclick="selectTag(this, '🏀 Sports')">🏀 Sports</div>
+    </div>
+
+    <label class="settings-label">The details</label>
+    <input id="title" placeholder="Event Title" autocomplete="off" spellcheck="false">
+    <input id="place" placeholder="Location" autocomplete="off" spellcheck="false">
+    <textarea id="description" placeholder="Add a short note or vibe check (optional)..." rows="3"></textarea>
+
+    <label class="settings-label">Schedule &amp; limits</label>
+    <div class="time-stack">
+      <div>
+        <label class="settings-label" style="margin-top:0;">Start time</label>
+        <input type="datetime-local" id="startTime">
+      </div>
+      <div>
+        <label class="settings-label" style="margin-top:0;">End time</label>
+        <input type="datetime-local" id="endTime">
+      </div>
+    </div>
+
+    <input type="number" id="maxCapacity" placeholder="Max capacity (e.g. 5)" min="2">
+    <p style="font-size:13px; font-weight:500;">Leave blank for unlimited attendees.</p>
+  </div>
 </div>
 
 <div id="deleteModal" class="modal-overlay hidden">
   <div class="modal-content">
-    <div style="font-size: 40px; color: var(--primary); margin-bottom: 10px;"><i class='bx bx-slider-alt'></i></div>
-    <h3 style="margin-top:0; font-size: 20px;">Manage Live Event</h3>
-    <p style="font-size:14px; color: var(--text-muted); margin-bottom: 24px;">Are you wrapping up early or do you want to completely erase this broadcast?</p>
-    <button onclick="confirmMoveToRecap()" style="background: var(--success);">Send to Campus Recap</button>
-    <button onclick="confirmDeletePermanently()" style="background: var(--danger);">Delete Completely</button>
-    <button onclick="closeDeleteModal()" style="background: #f1f5f9; color: var(--text);">Cancel</button>
+    <div style="font-size:40px; margin-bottom:8px;">🎛️</div>
+    <h3 style="font-size:22px;">Manage live event</h3>
+    <p style="font-size:14px; margin-bottom:24px;">Wrapping up early, or erasing this broadcast completely?</p>
+    <button onclick="confirmMoveToRecap()">Send to Campus Recap</button>
+    <button class="delete-btn" onclick="confirmDeletePermanently()">Delete Completely</button>
+    <button class="btn-ghost" onclick="closeDeleteModal()">Cancel</button>
   </div>
 </div>
 
 <div id="profileModal" class="modal-overlay hidden">
-  <div class="modal-content" style="max-width: 320px;">
-    <h3 style="margin-top:0;">Choose Your Avatar</h3>
-    <p style="font-size:13px; color: var(--text-muted); margin-bottom: 20px;">This is how campus will see you.</p>
+  <div class="modal-content">
+    <h3 style="font-size:22px;">Choose your avatar</h3>
+    <p style="font-size:14px; margin-bottom:20px;">This is how campus will see you.</p>
     <div class="avatar-grid" id="avatarGrid">
       <div class="avatar-option" onclick="selectAvatar(this, '🦊')">🦊</div>
       <div class="avatar-option" onclick="selectAvatar(this, '🐼')">🐼</div>
@@ -239,56 +400,17 @@
       <div class="avatar-option" onclick="selectAvatar(this, '👽')">👽</div>
       <div class="avatar-option" onclick="selectAvatar(this, '👻')">👻</div>
     </div>
-    <button onclick="selectAvatar(this, 'google')" style="background: #e0e7ff; color: var(--primary); margin-bottom: 12px;"><i class='bx bxl-google'></i> Use Google Photo</button>
-    <button onclick="closeProfileModal()" style="background: #f1f5f9; color: var(--text);">Cancel</button>
-  </div>
-</div>
-
-<div id="createScreen" class="full-screen-view hidden">
-  <div class="screen-header">
-    <button class="back-btn" onclick="closeCreateScreen()"><i class='bx bx-x'></i></button>
-    <div class="header-title" style="font-size: 18px; font-weight: 800;">New Broadcast</div>
-    <button class="text-action-btn" onclick="addEvent(event)">Publish</button>
-  </div>
-  
-  <div class="screen-body">
-    <label class="settings-label">What's the vibe?</label>
-    <div class="tag-selector" id="tagSelector">
-      <div class="tag active" onclick="selectTag(this, '☕ Chill')">☕ Chill</div>
-      <div class="tag" onclick="selectTag(this, '🍕 Food')">🍕 Food</div>
-      <div class="tag" onclick="selectTag(this, '🎉 Party')">🎉 Party</div>
-      <div class="tag" onclick="selectTag(this, '📚 Study')">📚 Study</div>
-      <div class="tag" onclick="selectTag(this, '🏀 Sports')">🏀 Sports</div>
-    </div>
-
-    <label class="settings-label" style="margin-top: 24px;">The Details</label>
-    <input id="title" placeholder="Event Title" autocomplete="off" spellcheck="false">
-    <input id="place" placeholder="Location" autocomplete="off" spellcheck="false">
-    <textarea id="description" placeholder="Add a short note or vibe check (optional)..." rows="3"></textarea>
-
-    <label class="settings-label" style="margin-top: 16px;">Schedule & Limits</label>
-    <div class="time-stack">
-      <div>
-        <label style="font-size: 11px; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">Start Time</label>
-        <input type="datetime-local" id="startTime">
-      </div>
-      <div>
-        <label style="font-size: 11px; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">End Time</label>
-        <input type="datetime-local" id="endTime">
-      </div>
-    </div>
-
-    <input type="number" id="maxCapacity" placeholder="Max Capacity (e.g., 5)" min="2">
-    <p style="font-size: 12px; color: var(--text-muted); margin-top: -8px;">Leave blank for unlimited attendees.</p>
+    <button class="btn-ghost" onclick="selectAvatar(this, 'google')" style="margin-bottom:12px;"><i class='bx bxl-google'></i> Use Google Photo</button>
+    <button class="btn-ghost" onclick="closeProfileModal()">Cancel</button>
   </div>
 </div>
 
 <div id="loading-screen">
   <div class="spinner"></div>
   <p id="loading-text">Logging you in...</p>
-  <div id="boot-error" class="hidden" style="max-width: 340px; text-align: center; padding: 0 24px; margin-top: 8px;">
-    <p style="font-weight: 700; color: var(--danger); margin-bottom: 8px;">The app didn't start.</p>
-    <p id="boot-error-detail" style="font-size: 13px; color: var(--text-muted); line-height: 1.5;"></p>
+  <div id="boot-error" class="hidden" style="max-width:340px; text-align:center;">
+    <p style="font-weight:800; color:var(--ember); margin-bottom:8px;">The app didn't start.</p>
+    <p id="boot-error-detail" style="font-size:13px; font-weight:500; line-height:1.5;"></p>
   </div>
 </div>
 
@@ -301,12 +423,12 @@
       "You've opened this file directly, so the browser is blocking " +
       "js/app.js for security reasons. Serve the folder over http " +
       "instead: open Terminal in this folder and run " +
-      "<code style=\'background:#eee;padding:2px 5px;border-radius:4px;\'>python3 -m http.server 8000</code> " +
+      "<code>python3 -m http.server 8000</code> " +
       "then visit <b>http://localhost:8000</b>";
 
     var GENERIC_HELP =
       "js/app.js failed to load or threw before it finished. Open the " +
-      "browser console (Cmd+Option+J) and check the first red error.";
+      "browser console and check the first red error.";
 
     function fail(message) {
       var spinner = document.querySelector("#loading-screen .spinner");
@@ -320,7 +442,6 @@
     }
 
     if (location.protocol === "file:") {
-      // No point waiting — modules can never load from file://
       fail(FILE_PROTOCOL_HELP);
       return;
     }

@@ -15,6 +15,7 @@
 import { auth, db, FieldValue } from '../config/firebase.js';
 import { state } from '../state/store.js';
 import { renderAvatar, escapeHtml, safeId } from '../utils/formatters.js';
+import { showTab } from '../utils/ui.js';
 import { primeUsers, displayNameFor, avatarFor } from './userService.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -26,18 +27,32 @@ export function selectTag(element, tag) {
   state.currentSelectedTag = tag || element.innerText;
 }
 
+/** Mark the pill whose data-tag matches, wherever that pill lives. */
+function syncFilterPills(containerSelector, tag) {
+  document.querySelectorAll(`${containerSelector} .filter-pill`).forEach((pill) => {
+    pill.classList.toggle("active", pill.dataset.tag === tag);
+  });
+}
+
 export function setLiveFilter(element, tag) {
   state.currentLiveFilter = tag;
-  document.querySelectorAll("#liveFilters .filter-pill").forEach((p) => p.classList.remove("active"));
-  element.classList.add("active");
+  syncFilterPills("#liveFilters", tag);
   renderEvents();
 }
 
 export function setRecapFilter(element, tag) {
   state.currentRecapFilter = tag;
-  document.querySelectorAll("#recapFilters .filter-pill").forEach((p) => p.classList.remove("active"));
-  element.classList.add("active");
+  syncFilterPills("#recapFilters", tag);
   renderEvents();
+}
+
+/**
+ * Desktop rail shortcut: switch to the live feed and apply a vibe
+ * filter, keeping the real filter row in sync so the two never disagree.
+ */
+export function jumpToVibe(tag) {
+  showTab("events");
+  setLiveFilter(null, tag);
 }
 
 export function toggleEventDesc(eventId) {
@@ -169,7 +184,7 @@ function participantLinks(event) {
     const id = safeId(uid);
     const name = escapeHtml(displayNameFor(uid));
     if (!id) return name;
-    return `<span onclick="event.stopPropagation(); window.startChatWithUid('${id}')" style="color: var(--primary); cursor: pointer; font-weight: 700;">${name}</span>`;
+    return `<span onclick="event.stopPropagation(); window.startChatWithUid('${id}')" style="cursor: pointer; color: var(--aubergine); text-decoration: underline; text-underline-offset: 2px;">${name}</span>`;
   }).join(", ");
 
   const extra = uids.length > 3
@@ -183,15 +198,15 @@ function capacityBar(event, attendees) {
   if (!event.maxCapacity) return "";
   const isFull = attendees >= event.maxCapacity;
   const percent = Math.min((attendees / event.maxCapacity) * 100, 100);
-  const barColor = isFull ? "var(--danger)" : "var(--primary)";
+  const barColor = isFull ? "var(--blush)" : "var(--periwinkle)";
   return `
     <div style="margin-top: 12px; margin-bottom: 4px;">
-      <div style="display: flex; justify-content: space-between; font-size: 11px; font-weight: 700; color: var(--text-muted); margin-bottom: 4px;">
+      <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: 350; color: var(--fog); margin-bottom: 6px;">
         <span><i class='bx bx-user'></i> Capacity</span>
-        <span style="color: ${isFull ? "var(--danger)" : "inherit"}">${attendees} / ${event.maxCapacity} ${isFull ? "(Full)" : ""}</span>
+        <span style="color: ${isFull ? "var(--obsidian)" : "inherit"}">${attendees} / ${event.maxCapacity} ${isFull ? "(Full)" : ""}</span>
       </div>
-      <div style="width: 100%; background: #e2e8f0; border-radius: 4px; height: 6px; overflow: hidden;">
-        <div style="width: ${percent}%; background: ${barColor}; height: 100%; border-radius: 4px; transition: width 0.3s;"></div>
+      <div style="width: 100%; background: var(--ash); border-radius: 100px; height: 6px; overflow: hidden;">
+        <div style="width: ${percent}%; background: ${barColor}; height: 100%; transition: width 0.3s;"></div>
       </div>
     </div>`;
 }
@@ -227,16 +242,16 @@ export function renderEvents() {
 
     const hypeHTML = `<button class="${hasHyped ? "hype-btn active" : "hype-btn"}" onclick="window.toggleHype('${id}', ${hasHyped})"><i class='bx ${hasHyped ? "bxs-hot" : "bx-hot"}'></i> ${hypeCount > 0 ? hypeCount : "Hype"}</button>`;
 
-    const tagHTML = e.tag ? `<div class="event-tag-badge" style="margin-bottom: 0;">${escapeHtml(e.tag)}</div>` : "";
+    const tagHTML = e.tag ? `<div class="event-tag-badge">${escapeHtml(e.tag)}</div>` : "";
     const descHTML = e.description
       ? `<button class="read-more-btn" onclick="window.toggleEventDesc('${id}')">Read details...</button><div class="event-desc-box">${escapeHtml(e.description)}</div>`
       : "";
 
     const statusBadge = now < e.startTime
-      ? `<span style="background: #fef08a; color: #854d0e; padding: 4px 8px; border-radius: 12px; font-size: 10px; font-weight: 800; text-transform: uppercase;">Upcoming</span>`
-      : `<span style="background: #fee2e2; color: #dc2626; padding: 4px 8px; border-radius: 12px; font-size: 10px; font-weight: 800; text-transform: uppercase;"><i class='bx bx-radio-circle-marked bx-burst'></i> Live</span>`;
+      ? `<span style="background: var(--buttercream); color: var(--obsidian); padding: 7px 14px; border-radius: 100px; font-size: 13px; font-weight: 350;">Upcoming</span>`
+      : `<span style="background: var(--mint); color: #fff; padding: 7px 14px; border-radius: 100px; font-size: 13px; font-weight: 350; display: inline-flex; align-items: center; gap: 5px;"><i class='bx bx-radio-circle-marked'></i> Live</span>`;
 
-    const avatarHTML = `<div style="display:inline-block; width:24px; height:24px; border-radius:50%; vertical-align:middle; overflow:hidden; border:1px solid var(--border); margin-right:4px;">${renderAvatar(avatarFor(e.hostUid))}</div>`;
+    const avatarHTML = `<div style="display:inline-block; width:24px; height:24px; border-radius:50%; vertical-align:middle; overflow:hidden; background:var(--lavender); margin-right:6px;">${renderAvatar(avatarFor(e.hostUid))}</div>`;
 
     let actionsHTML;
     if (isHost) {
@@ -250,7 +265,7 @@ export function renderEvents() {
           <button class="leave-btn" style="margin-top:0; flex:1;" onclick="window.leaveEvent('${id}')"><i class='bx bx-exit'></i></button>
         </div>`;
     } else if (isFull) {
-      actionsHTML = `<button class="join" style="background: #cbd5e1; color: #64748b; cursor: not-allowed;" disabled>Event Full \u{1F6D1}</button>`;
+      actionsHTML = `<button class="join" disabled>Event full</button>`;
     } else {
       actionsHTML = `<button class="join" onclick="window.joinEvent('${id}')">Join Hangout</button>`;
     }
@@ -282,17 +297,19 @@ export function renderEvents() {
       if (!matchesRecap) return;
       recapCount++;
       recapHTML += `
-        <div class="event card" style="background: #f9fafb; border: none; box-shadow: none;">
+        <div class="event card" style="background: var(--bone); border-color: transparent;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
             <div style="display: flex; gap: 8px; align-items: center;">${tagHTML}</div>
             ${hypeHTML}
           </div>
-          <div class="event-title" style="color: #4b5563;">${escapeHtml(e.title)}</div>
+          <div class="event-title">${escapeHtml(e.title)}</div>
           <div class="event-meta" style="display:flex; align-items:center;">${avatarHTML} <span>${escapeHtml(e.place)} • hosted by ${hostName}</span></div>
-          <div class="attendees" style="background:#f3f4f6; color: var(--text-muted);"><i class='bx bx-check-double'></i> Attended (${attendees}): ${participantLinks(e)}</div>
+          <div class="attendees" style="background: var(--ash);"><i class='bx bx-check-double'></i> Attended (${attendees}): ${participantLinks(e)}</div>
         </div>`;
     }
   });
+
+  updateRail(order, now);
 
   liveList.innerHTML = activeCount
     ? liveHTML
@@ -374,4 +391,28 @@ export function confirmDeletePermanently() {
     );
     loadEvents();
   });
+}
+
+
+/**
+ * Right-rail stats. Derived from the same cache the feed renders from,
+ * so they can never drift from what the user is looking at.
+ */
+function updateRail(order, now) {
+  const liveEl = document.getElementById("railLiveCount");
+  const peopleEl = document.getElementById("railPeopleCount");
+  if (!liveEl && !peopleEl) return;
+
+  let live = 0;
+  const people = new Set();
+
+  order.forEach((id) => {
+    const e = state.eventCache[id];
+    if (!e) return;
+    if (e.expiresAt > now) live++;
+    if (e.expiresAt > now - DAY_MS) (e.participantUids || []).forEach((u) => people.add(u));
+  });
+
+  if (liveEl) liveEl.innerText = live;
+  if (peopleEl) peopleEl.innerText = people.size;
 }

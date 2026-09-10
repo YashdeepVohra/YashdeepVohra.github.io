@@ -122,7 +122,7 @@ export function formatMessage(text, isMediaOnly = false) {
     const videoId = youTubeId(rawUrl);
     if (/^[A-Za-z0-9_-]{6,20}$/.test(videoId)) {
       return `${lead}
-        <div style="margin-top: ${margin}; width: 100%; max-width: 280px; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.15); background: #18181b; position: relative; min-height: 160px;">
+        <div style="margin-top: ${margin}; width: 100%; max-width: 280px; border-radius: 16px; overflow: hidden; border: 1px solid #e9e8ea; background: #18181b; position: relative; min-height: 160px;">
           <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #ff0000; font-size: 36px; z-index: 1;">
             <i class='bx bxl-youtube bx-flashing'></i>
           </div>
@@ -134,7 +134,7 @@ export function formatMessage(text, isMediaOnly = false) {
     const embedUrl = spotifyEmbed(rawUrl);
     if (embedUrl) {
       return `${lead}
-        <div style="margin-top: ${margin}; width: 100%; max-width: 280px; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.15); background: #121212; position: relative; min-height: 152px;">
+        <div style="margin-top: ${margin}; width: 100%; max-width: 280px; border-radius: 16px; overflow: hidden; border: 1px solid #e9e8ea; background: #121212; position: relative; min-height: 152px;">
           <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #1ed760; font-size: 32px; z-index: 1;">
             <i class='bx bxl-spotify bx-flashing'></i>
           </div>

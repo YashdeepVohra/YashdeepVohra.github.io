@@ -405,7 +405,7 @@ export function updateReadReceipts() {
   const receipt = document.getElementById("readReceipt");
   if (!receipt || !state.currentChatData) return;
   receipt.innerHTML = state.currentChatData.unreadByUid === ""
-    ? `Read <i class='bx bx-check-double' style="color: var(--primary);"></i>`
+    ? `Read <i class='bx bx-check-double'></i>`
     : `Sent <i class='bx bx-check'></i>`;
 }
 
@@ -458,11 +458,11 @@ export function updateChatFooterUI() {
       ? "Yourself"
       : displayNameFor(state.replyingToMessage.senderUid);
     previewContainer.innerHTML = `
-      <div style="background: rgba(79, 70, 229, 0.1); padding: 8px 12px; border-radius: 12px; border-left: 4px solid var(--primary); margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
-        <div style="color: var(--primary); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;">
+      <div style="background: var(--bone); border-left: 2px solid var(--periwinkle); padding: 10px 16px; border-radius: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
+        <div style="font-size: 14px; font-weight: 350; color: var(--aubergine); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;">
           <b>Replying to ${escapeHtml(name)}:</b><br>${escapeHtml(state.replyingToMessage.text)}
         </div>
-        <div onclick="window.cancelReply()" style="cursor: pointer; color: var(--danger); margin-left: 10px; font-size: 20px;"><i class='bx bx-x'></i></div>
+        <div onclick="window.cancelReply()" style="cursor: pointer; margin-left: 10px; font-size: 20px;"><i class='bx bx-x'></i></div>
       </div>`;
   } else {
     previewContainer.innerHTML = "";
@@ -577,7 +577,7 @@ export function loadMessages() {
 
         if (i === msgs.length - 1 && isMe && state.currentChatType === "direct") {
           const statusHtml = state.currentChatData && state.currentChatData.unreadByUid === ""
-            ? `Read <i class='bx bx-check-double' style="color: var(--primary);"></i>`
+            ? `Read <i class='bx bx-check-double'></i>`
             : `Sent <i class='bx bx-check'></i>`;
           html += `<div class="msg-status" id="readReceipt">${statusHtml}</div>`;
         }
@@ -612,6 +612,13 @@ export function loadMessages() {
   );
 }
 
+/** The unread dot appears in the mobile bottom nav and the desktop sidebar. */
+function setUnreadBadge(hasUnread) {
+  ["chatBadge", "sideBadge"].forEach((id) => {
+    document.getElementById(id)?.classList.toggle("hidden", !hasUnread);
+  });
+}
+
 // ---------- Inbox ----------
 export function loadChatList() {
   if (state.chatListUnsubscribe) state.chatListUnsubscribe();
@@ -643,7 +650,7 @@ export function loadChatList() {
 
         if (!chats.length) {
           list.innerHTML = `<div class="empty-state" style="padding-top: 20px;"><i class='bx bx-message-square-x'></i><p>No messages yet.</p></div>`;
-          document.getElementById("chatBadge")?.classList.add("hidden");
+          setUnreadBadge(false);
           document.title = "livesociya";
           return;
         }
@@ -676,8 +683,7 @@ export function loadChatList() {
 
         list.innerHTML = html;
 
-        const badge = document.getElementById("chatBadge");
-        badge?.classList.toggle("hidden", !hasGlobalUnread);
+        setUnreadBadge(hasGlobalUnread);
         document.title = hasGlobalUnread ? "(1) New Message - livesociya" : "livesociya";
       },
       (error) => console.error("Inbox error:", error.code || error.message)
