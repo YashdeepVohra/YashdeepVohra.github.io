@@ -1,139 +1,182 @@
 // ==========================================
 // MAIN ENTRY POINT
 // ==========================================
+// Loaded from index.html as <script type="module" src="js/app.js">.
+// Modules are deferred by definition, so the Firebase compat scripts in
+// <head> have already run by the time this executes.
+// ==========================================
+
 import { auth } from './config/firebase.js';
 import { state } from './state/store.js';
-import { switchScreen, showTab, toggleTime } from './utils/ui.js';
-import { 
-  loginWithGoogle, 
-  claimUsername, 
-  checkUsernameAvailability, 
-  logout, 
-  initAuthListener, 
-  checkRedirectLock 
+import { switchScreen, showTab, toggleTime, setLoading } from './utils/ui.js';
+
+import {
+  loginWithGoogle,
+  claimUsername,
+  checkUsernameAvailability,
+  logout,
+  initAuthListener,
+  checkRedirectLock,
+  describeAuthError
 } from './services/authService.js';
-import { 
-  addEvent, 
-  joinEvent, 
-  leaveEvent, 
-  toggleHype, 
-  selectTag, 
-  setLiveFilter, 
-  setRecapFilter, 
-  toggleEventDesc, 
-  openCreateScreen, 
-  closeCreateScreen, 
-  openDeleteModal, 
-  closeDeleteModal, 
-  confirmMoveToRecap, 
-  confirmDeletePermanently 
+
+import {
+  addEvent,
+  joinEvent,
+  leaveEvent,
+  toggleHype,
+  selectTag,
+  setLiveFilter,
+  setRecapFilter,
+  toggleEventDesc,
+  openCreateScreen,
+  closeCreateScreen,
+  openDeleteModal,
+  closeDeleteModal,
+  confirmMoveToRecap,
+  confirmDeletePermanently
 } from './services/eventsService.js';
-import { 
-  startChat, 
-  openChat, 
-  closeChat, 
-  openEventChat, 
-  sendMessage, 
-  handleTyping, 
-  cancelReply, 
-  handleMessageTap 
+
+import {
+  startChat,
+  startChatWithUid,
+  openChat,
+  closeChat,
+  openEventChat,
+  sendMessage,
+  handleTyping,
+  cancelReply,
+  handleMessageTap
 } from './services/chatService.js';
-import { 
-  openProfileScreen, 
-  closeProfileScreen, 
-  openProfileModal, 
-  closeProfileModal, 
-  selectAvatar, 
-  openSettingsScreen, 
-  closeSettingsScreen, 
-  selectSettingsAvatar, 
-  saveProfileData 
+
+import {
+  openProfileScreen,
+  closeProfileScreen,
+  openProfileModal,
+  closeProfileModal,
+  selectAvatar,
+  openSettingsScreen,
+  closeSettingsScreen,
+  selectSettingsAvatar,
+  saveProfileData
 } from './services/profileService.js';
+
 import { initSwipeListeners } from './interactions/swipeReply.js';
 
 // ==========================================
-// EXPOSE FUNCTIONS TO WINDOW FOR INLINE HTML
+// EXPOSE TO WINDOW FOR INLINE HTML HANDLERS
 // ==========================================
-window.switchScreen = switchScreen;
-window.showTab = showTab;
-window.loginWithGoogle = loginWithGoogle;
-window.checkUsernameAvailability = checkUsernameAvailability;
-window.claimUsername = claimUsername;
-window.logout = logout;
+// Only these functions are reachable from markup. Every one of them
+// takes either no argument or an id (uid / document id) — never a piece
+// of user-typed text.
+Object.assign(window, {
+  // Navigation
+  switchScreen,
+  showTab,
 
-// Event Functions
-window.selectTag = selectTag;
-window.setLiveFilter = setLiveFilter;
-window.setRecapFilter = setRecapFilter;
-window.toggleEventDesc = toggleEventDesc;
-window.openCreateScreen = openCreateScreen;
-window.closeCreateScreen = closeCreateScreen;
-window.addEvent = addEvent;
-window.joinEvent = joinEvent;
-window.leaveEvent = leaveEvent;
-window.toggleHype = toggleHype;
-window.openDeleteModal = openDeleteModal;
-window.closeDeleteModal = closeDeleteModal;
-window.confirmMoveToRecap = confirmMoveToRecap;
-window.confirmDeletePermanently = confirmDeletePermanently;
+  // Auth
+  loginWithGoogle,
+  checkUsernameAvailability,
+  claimUsername,
+  logout,
 
-// Chat Functions
-window.startChat = startChat;
-window.openChat = openChat;
-window.closeChat = closeChat;
-window.openEventChat = openEventChat;
-window.sendMessage = sendMessage;
-window.handleTyping = handleTyping;
-window.cancelReply = cancelReply;
-window.handleMessageTap = handleMessageTap;
-window.toggleTime = toggleTime;
+  // Events
+  selectTag,
+  setLiveFilter,
+  setRecapFilter,
+  toggleEventDesc,
+  openCreateScreen,
+  closeCreateScreen,
+  addEvent,
+  joinEvent,
+  leaveEvent,
+  toggleHype,
+  openDeleteModal,
+  closeDeleteModal,
+  confirmMoveToRecap,
+  confirmDeletePermanently,
 
-// Profile Functions
-window.openProfileScreen = openProfileScreen;
-window.closeProfileScreen = closeProfileScreen;
-window.openProfileModal = openProfileModal;
-window.closeProfileModal = closeProfileModal;
-window.selectAvatar = selectAvatar;
-window.openSettingsScreen = openSettingsScreen;
-window.closeSettingsScreen = closeSettingsScreen;
-window.selectSettingsAvatar = selectSettingsAvatar;
-window.saveProfileData = saveProfileData;
+  // Chat
+  startChat,
+  startChatWithUid,
+  openChat,
+  closeChat,
+  openEventChat,
+  sendMessage,
+  handleTyping,
+  cancelReply,
+  handleMessageTap,
+  toggleTime,
+
+  // Profile
+  openProfileScreen,
+  closeProfileScreen,
+  openProfileModal,
+  closeProfileModal,
+  selectAvatar,
+  openSettingsScreen,
+  closeSettingsScreen,
+  selectSettingsAvatar,
+  saveProfileData
+});
 
 // ==========================================
-// BOOTSTRAP APP & LISTENERS
+// BOOTSTRAP
 // ==========================================
-document.addEventListener("DOMContentLoaded", () => {
+function boot() {
+  window.__livesociyaBooted = true;
   checkRedirectLock();
   initAuthListener();
   initSwipeListeners();
 
-  const loginBtn = document.getElementById("login-btn");
-  if (loginBtn) loginBtn.addEventListener("click", () => loginWithGoogle());
+  document.getElementById("login-btn")?.addEventListener("click", () => loginWithGoogle());
 
-  const claimBtn = document.getElementById("claimBtn");
-  if (claimBtn) claimBtn.addEventListener("click", async () => {
-    const loadingScreen = document.getElementById("loading-screen");
-    if (loadingScreen) loadingScreen.classList.remove("hidden");
+  document.getElementById("claimBtn")?.addEventListener("click", async () => {
+    setLoading(true);
     await claimUsername();
   });
+
+  document.getElementById("newUsername")?.addEventListener("input", checkUsernameAvailability);
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", boot);
+} else {
+  boot();
+}
+
+// Firebase throws some failures as unhandled promise rejections that no
+// callback of ours ever sees. Catch them so the user gets a readable
+// reason instead of a spinner that never stops.
+window.addEventListener("unhandledrejection", (event) => {
+  const code = String(event.reason?.code || event.reason?.message || "");
+  if (!code.includes("auth/") && !code.includes("Firebase")) return;
+
+  console.error("Unhandled Firebase error:", code);
+  setLoading(false);
+
+  const detail = document.getElementById("boot-error-detail");
+  const box = document.getElementById("boot-error");
+  if (detail && box) {
+    detail.innerText = describeAuthError(event.reason);
+    box.classList.remove("hidden");
+  }
 });
 
-// Desktop Notification Unlocker
+// Ask for desktop notifications on the first interaction, once.
 document.addEventListener("click", () => {
   if ("Notification" in window && Notification.permission === "default") {
-    Notification.requestPermission().then(permission => {
-      if (permission === "granted") console.log("Desktop notifications enabled!");
-    });
+    Notification.requestPermission().catch(() => {});
   }
 }, { once: true });
 
-// Stealth Native Back Button Engine
-window.addEventListener('popstate', () => {
+// Native back button: close chat, then profile, then trap at home.
+window.addEventListener("popstate", () => {
   if (state.currentChat) {
     closeChat();
-  } else if (state.currentProfileView && state.currentProfileView !== "") {
+  } else if (state.currentProfileUid) {
     closeProfileScreen();
   } else if (auth.currentUser) {
-    history.pushState(null, '', window.location.href);
+    history.pushState(null, "", window.location.href);
   }
 });

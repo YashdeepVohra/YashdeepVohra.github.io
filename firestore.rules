@@ -1,0 +1,323 @@
+rules_version = '2';
+
+// =====================================================================
+// livesociya — Firestore Security Rules
+// =====================================================================
+//
+// The whole point of moving from usernames to UIDs: every rule below
+// decides using request.auth.uid, which the server already knows and
+// cannot be forged. A username-keyed schema would need a document read
+// on every single write just to answer "is this really you?".
+//
+// Deploy:   firebase deploy --only firestore:rules
+// Test:     Firebase console > Firestore > Rules > Rules Playground
+//
+// Data model
+//   users/{uid}                   public profile
+//   users/{uid}/private/{doc}     email etc. — owner only
+//   usernames/{handle}            { uid } — handle reservation, create-once
+//   events/{eventId}              hostUid, participantUids[], hypedUids[]
+//   events/{eventId}/messages/*   event chat, participants only
+//   chats/{uidA_uidB}             userUids[2], sorted, id == the join
+//   chats/{chatId}/messages/*     direct messages, the two members only
+// =====================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------------------------------------------------------------
+    // HELPERS
+    // ---------------------------------------------------------------
+    function signedIn() {
+      return request.auth != null && request.auth.uid != null;
+    }
+
+    function uid() {
+      return request.auth.uid;
+    }
+
+    function isMe(userId) {
+      return signedIn() && uid() == userId;
+    }
+
+    // OPTIONAL CAMPUS LOCK ------------------------------------------
+    // Replace the domain and swap signedIn() for campusMember() in the
+    // read/write rules below to restrict the app to your college.
+    // Google sign-in already verifies the email, so this cannot be
+    // faked by editing the client.
+    function campusMember() {
+      return signedIn()
+        && request.auth.token.email_verified == true
+        && request.auth.token.email.matches('.*@yourcollege[.]edu$');
+    }
+
+    function changedKeys() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+
+    // True when the only difference between two uid arrays is the
+    // caller adding or removing THEMSELVES. This is what stops someone
+    // signing other people up for events or faking hype counts.
+    function selfToggleOnly(before, after) {
+      return after.toSet().difference(before.toSet()).hasOnly([uid()])
+          && before.toSet().difference(after.toSet()).hasOnly([uid()]);
+    }
+
+    function isString(value, maxLen) {
+      return value is string && value.size() > 0 && value.size() <= maxLen;
+    }
+
+    function eventData(eventId) {
+      return get(/databases/$(database)/documents/events/$(eventId)).data;
+    }
+
+    function chatData(chatId) {
+      return get(/databases/$(database)/documents/chats/$(chatId)).data;
+    }
+
+    function handleIsMine(handle) {
+      return exists(/databases/$(database)/documents/usernames/$(handle))
+        && get(/databases/$(database)/documents/usernames/$(handle)).data.uid == uid();
+    }
+
+    function myProfile() {
+      return get(/databases/$(database)/documents/users/$(uid())).data;
+    }
+
+    function haveNoHandleYet() {
+      return exists(/databases/$(database)/documents/users/$(uid()))
+        && !('username' in myProfile());
+    }
+
+    // ---------------------------------------------------------------
+    // USERS  —  users/{userId}
+    // ---------------------------------------------------------------
+    match /users/{userId} {
+
+      // Profiles are visible to signed-in students only, never to the
+      // open internet. Note that no email is stored in this document.
+      allow read: if signedIn();
+
+      allow create: if isMe(userId)
+        && request.resource.data.uid == userId
+        && request.resource.data.banned == false
+        // A handle can never be granted at creation time — it has to go
+        // through the reservation flow below.
+        && !('username' in request.resource.data)
+        && isString(request.resource.data.displayName, 20)
+        && request.resource.data.avatar is string
+        && request.resource.data.avatar.size() <= 300;
+
+      allow update: if isMe(userId)
+        // Fields the client is allowed to touch at all.
+        && changedKeys().hasOnly(['username', 'displayName', 'avatar', 'googlePfp', 'updatedAt'])
+        // Nobody promotes or un-bans themselves.
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.banned == resource.data.banned
+        && (!(changedKeys().hasAny(['displayName'])) || isString(request.resource.data.displayName, 20))
+        && (!(changedKeys().hasAny(['avatar'])) || request.resource.data.avatar.size() <= 300)
+        // HANDLES ARE PERMANENT. Once set, it can never change; and it
+        // can only be set to a handle already reserved by this uid.
+        && (
+             !(changedKeys().hasAny(['username']))
+             || (
+                  !('username' in resource.data)
+                  && request.resource.data.username is string
+                  && request.resource.data.username.matches('^[a-z0-9_]{3,20}$')
+                  && handleIsMine(request.resource.data.username)
+                )
+           );
+
+      // Accounts are never deleted from the client — that would free a
+      // handle and orphan every event and message it owns.
+      allow delete: if false;
+
+      // Email and anything else private. Only the owner, ever.
+      match /private/{docId} {
+        allow read, write: if isMe(userId);
+      }
+    }
+
+    // ---------------------------------------------------------------
+    // HANDLES  —  usernames/{handle}
+    // ---------------------------------------------------------------
+    match /usernames/{handle} {
+
+      // Needed so the "is this taken?" check and the @handle chat
+      // search work. Only maps a handle to a uid, nothing sensitive.
+      allow read: if signedIn();
+
+      // CREATE-ONLY is the uniqueness guarantee. Firestore treats a
+      // write to an existing document as an update, and there is no
+      // update rule here, so the second person to try a handle is
+      // rejected by the database itself. No race, no server needed.
+      allow create: if signedIn()
+        && handle.matches('^[a-z0-9_]{3,20}$')
+        && request.resource.data.uid == uid()
+        && request.resource.data.keys().hasOnly(['uid', 'createdAt'])
+        // One handle per account: you cannot reserve a second one.
+        && haveNoHandleYet();
+
+      allow update, delete: if false;
+    }
+
+    // ---------------------------------------------------------------
+    // EVENTS  —  events/{eventId}
+    // ---------------------------------------------------------------
+    match /events/{eventId} {
+
+      function isHost() {
+        return signedIn() && resource.data.hostUid == uid();
+      }
+
+      function isParticipant() {
+        return signedIn() && uid() in resource.data.participantUids;
+      }
+
+      function withinCapacity() {
+        return request.resource.data.maxCapacity == null
+            || request.resource.data.participantUids.size() <= request.resource.data.maxCapacity;
+      }
+
+      allow read: if signedIn();
+
+      allow create: if signedIn()
+        && request.resource.data.hostUid == uid()
+        && isString(request.resource.data.title, 80)
+        && isString(request.resource.data.place, 80)
+        && request.resource.data.description is string
+        && request.resource.data.description.size() <= 500
+        && request.resource.data.tag is string
+        && request.resource.data.startTime is number
+        && request.resource.data.expiresAt is number
+        && request.resource.data.expiresAt > request.resource.data.startTime
+        // A host cannot open with a pre-filled guest list or fake hype.
+        && request.resource.data.participantUids == [uid()]
+        && request.resource.data.hypedUids == []
+        && (request.resource.data.maxCapacity == null
+            || (request.resource.data.maxCapacity is int && request.resource.data.maxCapacity > 1));
+
+      // Two very different kinds of update, kept strictly apart.
+      allow update: if
+        // (a) The host editing their own event. Ownership is frozen.
+        (
+          isHost()
+          && request.resource.data.hostUid == resource.data.hostUid
+          // A host edits details, not people. Joining, leaving and
+          // hyping their own event goes through branch (b) like
+          // everyone else.
+          && request.resource.data.participantUids == resource.data.participantUids
+          && request.resource.data.get('hypedUids', []) == resource.data.get('hypedUids', [])
+          && isString(request.resource.data.title, 80)
+          && isString(request.resource.data.place, 80)
+          && request.resource.data.description.size() <= 500
+          && withinCapacity()
+        )
+        ||
+        // (b) Anyone else joining, leaving, hyping or typing — and the
+        // ONLY thing they may change is their own membership.
+        (
+          signedIn()
+          && changedKeys().hasOnly(['participantUids', 'hypedUids', 'typingUids'])
+          && selfToggleOnly(resource.data.participantUids, request.resource.data.participantUids)
+          && selfToggleOnly(resource.data.get('hypedUids', []), request.resource.data.get('hypedUids', []))
+          && selfToggleOnly(resource.data.get('typingUids', []), request.resource.data.get('typingUids', []))
+          // Capacity is now enforced by the database, not just the UI.
+          && withinCapacity()
+        );
+
+      allow delete: if isHost();
+
+      // ---- Event group chat ----
+      // Messages are a SUBCOLLECTION so one lookup of the parent event
+      // authorises the whole query, instead of one lookup per message.
+      match /messages/{messageId} {
+
+        function inEvent() {
+          return signedIn() && uid() in eventData(eventId).participantUids;
+        }
+
+        allow read: if inEvent();
+
+        allow create: if inEvent()
+          && request.resource.data.senderUid == uid()
+          && isString(request.resource.data.text, 2000)
+          && request.resource.data.time is number;
+
+        // Messages are immutable — nobody rewrites history.
+        allow update: if false;
+
+        // Sender can retract; host can moderate.
+        allow delete: if signedIn()
+          && (resource.data.senderUid == uid() || eventData(eventId).hostUid == uid());
+      }
+    }
+
+    // ---------------------------------------------------------------
+    // DIRECT CHATS  —  chats/{chatId}
+    // ---------------------------------------------------------------
+    match /chats/{chatId} {
+
+      function isMember() {
+        return signedIn() && uid() in resource.data.userUids;
+      }
+
+      function willBeMember() {
+        return signedIn() && uid() in request.resource.data.userUids;
+      }
+
+      allow read: if isMember();
+
+      allow create: if willBeMember()
+        && request.resource.data.userUids.size() == 2
+        // The document id must be the two uids, sorted, joined by "_".
+        // Both clients therefore compute the same id, and the id itself
+        // proves who the chat belongs to.
+        && request.resource.data.userUids[0] < request.resource.data.userUids[1]
+        && chatId == request.resource.data.userUids[0] + '_' + request.resource.data.userUids[1]
+        && request.resource.data.initiatedByUid == uid()
+        && request.resource.data.status in ['unlocked', 'icebreaker'];
+
+      allow update: if isMember()
+        && changedKeys().hasOnly(['unreadByUid', 'typingUid', 'status', 'lastUpdated'])
+        // The pair is fixed for the life of the chat.
+        && request.resource.data.userUids == resource.data.userUids
+        && request.resource.data.initiatedByUid == resource.data.initiatedByUid
+        // You may only mark yourself as typing.
+        && (!(changedKeys().hasAny(['typingUid']))
+            || request.resource.data.typingUid == uid()
+            || request.resource.data.typingUid == '')
+        && (!(changedKeys().hasAny(['status']))
+            || request.resource.data.status in ['unlocked', 'icebreaker']);
+
+      // Keeping the thread means the icebreaker state can't be reset by
+      // deleting and recreating the chat.
+      allow delete: if false;
+
+      match /messages/{messageId} {
+
+        function inChat() {
+          return signedIn() && uid() in chatData(chatId).userUids;
+        }
+
+        allow read: if inChat();
+
+        allow create: if inChat()
+          && request.resource.data.senderUid == uid()
+          && isString(request.resource.data.text, 2000)
+          && request.resource.data.time is number;
+
+        allow update: if false;
+        allow delete: if signedIn() && resource.data.senderUid == uid();
+      }
+    }
+
+    // ---------------------------------------------------------------
+    // DEFAULT DENY
+    // Anything not matched above is refused. Never remove this.
+    // ---------------------------------------------------------------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

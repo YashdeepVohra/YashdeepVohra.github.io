@@ -1,0 +1,22 @@
+# OS noise
+.DS_Store
+._*
+Thumbs.db
+
+# Dependencies / tooling
+node_modules/
+.firebase/
+firebase-debug.log
+*.log
+
+# Local secrets — the Firebase web config in js/config/firebase.js is
+# NOT a secret and is meant to be committed. This is for anything that
+# genuinely is: service-account keys, admin SDK credentials, .env files.
+.env
+.env.*
+serviceAccountKey.json
+*-firebase-adminsdk-*.json
+
+# Pre-refactor snapshot. Git is the backup now — safe to delete this
+# folder once the first push has landed.
+_backup_pre_uid/

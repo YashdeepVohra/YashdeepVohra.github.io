@@ -55,11 +55,11 @@ function handleDragEnd() {
   if (!currentSwipeItem) return;
 
   if (currentSwipeItem.classList.contains("ready-to-reply")) {
-    const sender = currentSwipeItem.getAttribute("data-sender");
+    const senderUid = currentSwipeItem.getAttribute("data-sender-uid");
     const text = decodeURIComponent(currentSwipeItem.getAttribute("data-text"));
     const time = parseInt(currentSwipeItem.getAttribute("data-time"));
 
-    initiateReply(sender, text, time);
+    initiateReply(senderUid, text, time);
     if (navigator.vibrate) navigator.vibrate(50);
   }
 

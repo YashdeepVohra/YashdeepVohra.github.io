@@ -1,0 +1,10 @@
+# Normalise line endings so files edited in the GitHub web UI (which
+# writes CRLF) don't show up as whole-file rewrites next to files
+# edited locally. index.html was already in that state.
+* text=auto eol=lf
+
+# Never touch binaries.
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff2 binary

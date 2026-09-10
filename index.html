@@ -22,10 +22,10 @@
 
   <header class="topbar">
     <div class="title">livesociya</div>
-    <button class="profileBtn hidden" onclick="openProfileScreen()" id="topAvatar">👤</button>
+    <button class="profileBtn hidden" onclick="window.openProfileScreen()" id="topAvatar">👤</button>
   </header>
 
-  <div class="container" id="login" class="screen hidden">
+  <div class="container screen hidden" id="login">
     <div class="card" style="margin-top: 40px; text-align: center; padding: 40px 20px;">
       <div style="font-size: 56px; margin-bottom: 16px; color: var(--primary);"><i class='bx bxs-bolt-circle'></i></div>
       <h2 style="font-size: 28px; margin-bottom: 8px;">livesociya</h2>
@@ -205,12 +205,12 @@
   <div style="position: relative; width: 100%; max-width: 320px;">
     <span style="position: absolute; left: 16px; top: 18px; color: var(--text-muted); font-weight: 800; font-size: 16px;">@</span>
     <input type="text" style="display:none" autocomplete="username">
-    <input id="newUsername" type="text" placeholder="username" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" readonly onfocus="this.removeAttribute('readonly');" style="padding-left: 38px; font-weight: 700; font-size: 16px;" oninput="checkUsernameAvailability()">
+    <input id="newUsername" type="text" placeholder="username" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" readonly onfocus="this.removeAttribute('readonly');" style="padding-left: 38px; font-weight: 700; font-size: 16px;">
   </div>
   
   <div id="usernameStatus" style="font-size: 13px; font-weight: 600; margin-top: -4px; margin-bottom: 24px; min-height: 18px;"></div>
   
-  <button id="claimBtn" onclick="claimUsername()" style="background: #cbd5e1; cursor: not-allowed; max-width: 320px;" disabled>Join Campus</button>
+  <button id="claimBtn" style="background: #cbd5e1; cursor: not-allowed; max-width: 320px;" disabled>Join Campus</button>
 </div>
 
 <div id="deleteModal" class="modal-overlay hidden">
@@ -248,7 +248,7 @@
   <div class="screen-header">
     <button class="back-btn" onclick="closeCreateScreen()"><i class='bx bx-x'></i></button>
     <div class="header-title" style="font-size: 18px; font-weight: 800;">New Broadcast</div>
-    <button class="text-action-btn" onclick="addEvent()">Publish</button>
+    <button class="text-action-btn" onclick="addEvent(event)">Publish</button>
   </div>
   
   <div class="screen-body">
@@ -285,9 +285,52 @@
 
 <div id="loading-screen">
   <div class="spinner"></div>
-  <p>Logging you in...</p>
+  <p id="loading-text">Logging you in...</p>
+  <div id="boot-error" class="hidden" style="max-width: 340px; text-align: center; padding: 0 24px; margin-top: 8px;">
+    <p style="font-weight: 700; color: var(--danger); margin-bottom: 8px;">The app didn't start.</p>
+    <p id="boot-error-detail" style="font-size: 13px; color: var(--text-muted); line-height: 1.5;"></p>
+  </div>
 </div>
 
-<script src="app.js"></script>
+<script>
+  // Boot watchdog (classic script — always runs, even when the module
+  // graph is blocked). If js/app.js never executes, say why instead of
+  // spinning forever.
+  (function () {
+    var FILE_PROTOCOL_HELP =
+      "You've opened this file directly, so the browser is blocking " +
+      "js/app.js for security reasons. Serve the folder over http " +
+      "instead: open Terminal in this folder and run " +
+      "<code style=\'background:#eee;padding:2px 5px;border-radius:4px;\'>python3 -m http.server 8000</code> " +
+      "then visit <b>http://localhost:8000</b>";
+
+    var GENERIC_HELP =
+      "js/app.js failed to load or threw before it finished. Open the " +
+      "browser console (Cmd+Option+J) and check the first red error.";
+
+    function fail(message) {
+      var spinner = document.querySelector("#loading-screen .spinner");
+      var text = document.getElementById("loading-text");
+      var box = document.getElementById("boot-error");
+      var detail = document.getElementById("boot-error-detail");
+      if (spinner) spinner.style.display = "none";
+      if (text) text.style.display = "none";
+      if (detail) detail.innerHTML = message;
+      if (box) box.classList.remove("hidden");
+    }
+
+    if (location.protocol === "file:") {
+      // No point waiting — modules can never load from file://
+      fail(FILE_PROTOCOL_HELP);
+      return;
+    }
+
+    setTimeout(function () {
+      if (!window.__livesociyaBooted) fail(GENERIC_HELP);
+    }, 12000);
+  })();
+</script>
+
+<script type="module" src="js/app.js"></script>
 </body>
 </html>
