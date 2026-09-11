@@ -29,6 +29,14 @@ import {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+// Only the newest messages get a live listener. Older ones are fetched
+// once, on demand, when you scroll back — messages are immutable, so
+// they never need watching. Opening a conversation used to cost 300
+// reads, then 60; now it costs 25, and you only pay for history you
+// actually look at.
+const LIVE_WINDOW = 25;
+const OLDER_PAGE = 25;
+
 /** The right messages subcollection for whatever chat is open. */
 function messagesRef(chatId = state.currentChat, type = state.currentChatType) {
   if (!chatId) return null;
@@ -431,6 +439,9 @@ export function handleChatScroll() {
   const box = document.getElementById("messages");
   if (!box) return;
 
+  // Near the top? Pull in the previous page of history.
+  if (box.scrollTop < 120) loadOlderMessages();
+
   let floatingDate = document.getElementById("floatingDate");
   if (!floatingDate) {
     floatingDate = document.createElement("div");
@@ -450,6 +461,70 @@ export function handleChatScroll() {
     floatingDate.classList.add("visible");
     clearTimeout(state.scrollTimeout);
     state.scrollTimeout = setTimeout(() => floatingDate.classList.remove("visible"), 1200);
+  }
+}
+
+/**
+ * One page of history, fetched once. Older messages are immutable, so a
+ * plain get() is correct — and far cheaper than widening the listener,
+ * which would re-read everything already on screen.
+ */
+export async function loadOlderMessages() {
+  if (state.loadingOlder || state.noMoreMessages) return;
+
+  const ref = messagesRef();
+  const oldest = (state.olderMessages[0] || state.liveMessages[0]);
+  if (!ref || !oldest) return;
+
+  state.loadingOlder = true;
+  const box = document.getElementById("messages");
+  const openedChat = state.currentChat;
+
+  // Remember where we are so the view doesn't jump when we prepend.
+  const heightBefore = box ? box.scrollHeight : 0;
+  const topBefore = box ? box.scrollTop : 0;
+  showHistorySpinner(true);
+
+  try {
+    const snap = await ref
+      .orderBy("time", "asc")
+      .endBefore(oldest.time)
+      .limitToLast(OLDER_PAGE)
+      .get();
+
+    if (state.currentChat !== openedChat) return;
+
+    const older = [];
+    snap.forEach((doc) => older.push({ id: doc.id, ...doc.data() }));
+
+    if (older.length < OLDER_PAGE) state.noMoreMessages = true;
+    if (!older.length) return;
+
+    state.olderMessages = older.concat(state.olderMessages);
+    await primeUsers(older.map((m) => m.senderUid));
+    if (state.currentChat !== openedChat) return;
+
+    renderMessages(state.olderMessages.concat(state.liveMessages), { keepScroll: { heightBefore, topBefore } });
+  } catch (e) {
+    console.error("History load failed:", e.code || e.message);
+  } finally {
+    state.loadingOlder = false;
+    showHistorySpinner(false);
+  }
+}
+
+function showHistorySpinner(on) {
+  const box = document.getElementById("messages");
+  if (!box) return;
+  let el = document.getElementById("historySpinner");
+  if (on && !el) {
+    el = document.createElement("div");
+    el.id = "historySpinner";
+    el.className = "history-spinner";
+    el.innerHTML = `<div class="spinner" style="width:22px;height:22px;border-width:2px;"></div>`;
+    box.prepend(el);
+  } else if (!on && el) {
+    el.remove();
   }
 }
 
@@ -536,6 +611,12 @@ export function updateChatFooterUI() {
 export function loadMessages() {
   if (state.messagesUnsubscribe) state.messagesUnsubscribe();
 
+  // Fresh conversation, fresh paging state.
+  state.liveMessages = [];
+  state.olderMessages = [];
+  state.noMoreMessages = false;
+  state.loadingOlder = false;
+
   const box = document.getElementById("messages");
   const ref = messagesRef();
   if (!box || !ref) return;
@@ -547,133 +628,160 @@ export function loadMessages() {
 
   const openedChat = state.currentChat;
 
-  state.messagesUnsubscribe = ref.orderBy("time", "asc").limitToLast(60).onSnapshot(
+  state.messagesUnsubscribe = ref.orderBy("time", "asc").limitToLast(LIVE_WINDOW).onSnapshot(
     async (snapshot) => {
       if (state.currentChat !== openedChat) return;
 
-      const msgs = [];
-      snapshot.forEach((doc) => msgs.push({ id: doc.id, ...doc.data() }));
+      state.liveMessages = [];
+      snapshot.forEach((doc) => state.liveMessages.push({ id: doc.id, ...doc.data() }));
 
+      // Nothing older than the window can exist if the window isn't full.
+      if (state.liveMessages.length < LIVE_WINDOW && !state.olderMessages.length) {
+        state.noMoreMessages = true;
+      }
+
+      const msgs = state.olderMessages.concat(state.liveMessages);
       await primeUsers(msgs.map((m) => m.senderUid));
       if (state.currentChat !== openedChat) return;
 
-      state.myMessageCount = 0;
-      let theirMessageCount = 0;
-      let lastDateString = "";
-      let html = "";
-
-      msgs.forEach((m, i) => {
-        const isMe = m.senderUid === state.uid;
-        if (isMe) state.myMessageCount++;
-        else theirMessageCount++;
-
-        // ---- Date separator ----
-        const msgDate = new Date(m.time).toLocaleDateString();
-        if (msgDate !== lastDateString) {
-          const today = new Date().toLocaleDateString();
-          const y = new Date();
-          y.setDate(y.getDate() - 1);
-          const yesterday = y.toLocaleDateString();
-
-          const displayDate = msgDate === today
-            ? "Today"
-            : msgDate === yesterday
-              ? "Yesterday"
-              : new Date(m.time).toLocaleDateString([], { month: "short", day: "numeric" });
-
-          html += `<div class="date-wrapper"><div class="date-separator">${escapeHtml(displayDate)}</div></div>`;
-          lastDateString = msgDate;
-        }
-
-        // ---- Bubble grouping ----
-        const prev = msgs[i - 1];
-        const next = msgs[i + 1];
-        const samePrev = prev && prev.senderUid === m.senderUid;
-        const sameNext = next && next.senderUid === m.senderUid;
-        const shape = samePrev && sameNext ? "middle" : !samePrev && sameNext ? "first" : samePrev && !sameNext ? "last" : "single";
-
-        const rawText = String(m.text || "").trim();
-        const encodedText = encodeURIComponent(rawText);
-        const isMediaOnly =
-          /^https?:\/\/[^\s]+$/.test(rawText) &&
-          /(youtube\.com|youtu\.be|open\.spotify\.com)/.test(rawText);
-
-        // ---- Quoted reply ----
-        let replyBlock = "";
-        if (m.replyTo) {
-          const replyName = m.replyTo.senderUid === state.uid ? "You" : displayNameFor(m.replyTo.senderUid);
-          const timeAttr = m.replyTo.time ? `data-target-time="${escapeHtml(m.replyTo.time)}"` : "";
-          replyBlock = `<div class="msg-replied-to" ${timeAttr}><b>${escapeHtml(replyName)}:</b> ${escapeHtml(m.replyTo.text)}</div>`;
-        }
-
-        const swipeIconHTML = isMe
-          ? `<div class="swipe-reply-icon right"><i class='bx bx-reply' style="transform: scaleX(-1);"></i></div>`
-          : `<div class="swipe-reply-icon left"><i class='bx bx-reply'></i></div>`;
-
-        // ---- Sender label in event chats ----
-        let nameTagHTML = "";
-        if (state.currentChatType === "event" && !isMe && !samePrev) {
-          const uid = safeId(m.senderUid);
-          const label = escapeHtml(displayNameFor(m.senderUid));
-          nameTagHTML = uid
-            ? `<div style="font-size: 11px; font-weight: 700; color: var(--text-muted); margin-left: 14px; margin-bottom: 2px; cursor: pointer; display: inline-block;" onclick="event.stopPropagation(); window.openProfileScreen('${uid}')">${label}</div>`
-            : `<div style="font-size: 11px; font-weight: 700; color: var(--text-muted); margin-left: 14px; margin-bottom: 2px;">${label}</div>`;
-        }
-
-        const enterDelay = Math.min(i, 12) * 0.022;
-        html += `
-          <div id="msg-${escapeHtml(m.time)}" class="msg-wrapper" style="animation-delay:${enterDelay}s;"
-               data-sender-uid="${escapeHtml(m.senderUid)}"
-               data-time="${escapeHtml(m.time)}"
-               data-text="${escapeHtml(encodedText)}"
-               data-align="${isMe ? "end" : "start"}"
-               onclick="window.handleMessageTap(event, this)">
-            ${swipeIconHTML}
-            ${nameTagHTML}
-            <div class="${isMediaOnly ? "msg-bubble media-only" : "msg-bubble"} ${isMe ? "msg-sent" : "msg-received"} ${shape}">
-               ${replyBlock}
-               ${formatMessage(rawText, isMediaOnly)}
-            </div>
-            <div class="msg-time" style="text-align: ${isMe ? "right" : "left"}">
-               ${formatTime(m.time)}
-            </div>
-          </div>`;
-
-        if (i === msgs.length - 1 && isMe && state.currentChatType === "direct") {
-          const statusHtml = state.currentChatData && state.currentChatData.unreadByUid === ""
-            ? `Read <i class='bx bx-check-double'></i>`
-            : `Sent <i class='bx bx-check'></i>`;
-          html += `<div class="msg-status" id="readReceipt">${statusHtml}</div>`;
-        }
-      });
-
-      html += `
-        <div id="typingBubble" class="typing-indicator hidden" style="align-items: center; margin-top: 8px;">
-          <span id="typingName" style="font-size: 12px; font-weight: 700; color: var(--primary); margin-right: 8px;"></span>
-          <div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>
-        </div>`;
-
-      box.innerHTML = html;
-
-      // The icebreaker unlocks as soon as the other side replies.
-      if (
-        state.currentChatType === "direct" &&
-        state.currentChatStatus === "icebreaker" &&
-        theirMessageCount > 0 &&
-        state.currentChatInitiatorUid === state.uid
-      ) {
-        db.collection("chats").doc(state.currentChat)
-          .set({ status: "unlocked" }, { merge: true })
-          .catch(() => {});
-      }
-
-      box.scrollTop = box.scrollHeight;
-      updateChatFooterUI();
-      updateReadReceipts();
-      updateTypingIndicator();
+      renderMessages(msgs);
     },
     (error) => console.error("Messages error:", error.code || error.message)
   );
+}
+
+/**
+ * Paint the thread. Shared by the live listener and the history
+ * loader, so both produce identical markup.
+ *
+ * `keepScroll` is passed when prepending older messages: without it
+ * the view would jump to the bottom and throw you out of the history
+ * you were reading.
+ */
+function renderMessages(msgs, { keepScroll = null } = {}) {
+  const box = document.getElementById("messages");
+  if (!box) return;
+
+  state.myMessageCount = 0;
+  let theirMessageCount = 0;
+  let lastDateString = "";
+  let html = "";
+
+  msgs.forEach((m, i) => {
+    const isMe = m.senderUid === state.uid;
+    if (isMe) state.myMessageCount++;
+    else theirMessageCount++;
+
+    // ---- Date separator ----
+    const msgDate = new Date(m.time).toLocaleDateString();
+    if (msgDate !== lastDateString) {
+      const today = new Date().toLocaleDateString();
+      const y = new Date();
+      y.setDate(y.getDate() - 1);
+      const yesterday = y.toLocaleDateString();
+
+      const displayDate = msgDate === today
+        ? "Today"
+        : msgDate === yesterday
+          ? "Yesterday"
+          : new Date(m.time).toLocaleDateString([], { month: "short", day: "numeric" });
+
+      html += `<div class="date-wrapper"><div class="date-separator">${escapeHtml(displayDate)}</div></div>`;
+      lastDateString = msgDate;
+    }
+
+    // ---- Bubble grouping ----
+    const prev = msgs[i - 1];
+    const next = msgs[i + 1];
+    const samePrev = prev && prev.senderUid === m.senderUid;
+    const sameNext = next && next.senderUid === m.senderUid;
+    const shape = samePrev && sameNext ? "middle" : !samePrev && sameNext ? "first" : samePrev && !sameNext ? "last" : "single";
+
+    const rawText = String(m.text || "").trim();
+    const encodedText = encodeURIComponent(rawText);
+    const isMediaOnly =
+      /^https?:\/\/[^\s]+$/.test(rawText) &&
+      /(youtube\.com|youtu\.be|open\.spotify\.com)/.test(rawText);
+
+    // ---- Quoted reply ----
+    let replyBlock = "";
+    if (m.replyTo) {
+      const replyName = m.replyTo.senderUid === state.uid ? "You" : displayNameFor(m.replyTo.senderUid);
+      const timeAttr = m.replyTo.time ? `data-target-time="${escapeHtml(m.replyTo.time)}"` : "";
+      replyBlock = `<div class="msg-replied-to" ${timeAttr}><b>${escapeHtml(replyName)}:</b> ${escapeHtml(m.replyTo.text)}</div>`;
+    }
+
+    const swipeIconHTML = isMe
+      ? `<div class="swipe-reply-icon right"><i class='bx bx-reply' style="transform: scaleX(-1);"></i></div>`
+      : `<div class="swipe-reply-icon left"><i class='bx bx-reply'></i></div>`;
+
+    // ---- Sender label in event chats ----
+    let nameTagHTML = "";
+    if (state.currentChatType === "event" && !isMe && !samePrev) {
+      const uid = safeId(m.senderUid);
+      const label = escapeHtml(displayNameFor(m.senderUid));
+      nameTagHTML = uid
+        ? `<div style="font-size: 11px; font-weight: 700; color: var(--text-muted); margin-left: 14px; margin-bottom: 2px; cursor: pointer; display: inline-block;" onclick="event.stopPropagation(); window.openProfileScreen('${uid}')">${label}</div>`
+        : `<div style="font-size: 11px; font-weight: 700; color: var(--text-muted); margin-left: 14px; margin-bottom: 2px;">${label}</div>`;
+    }
+
+    const enterDelay = Math.min(i, 12) * 0.022;
+    html += `
+      <div id="msg-${escapeHtml(m.time)}" class="msg-wrapper" style="animation-delay:${enterDelay}s;"
+           data-sender-uid="${escapeHtml(m.senderUid)}"
+           data-time="${escapeHtml(m.time)}"
+           data-text="${escapeHtml(encodedText)}"
+           data-align="${isMe ? "end" : "start"}"
+           onclick="window.handleMessageTap(event, this)">
+        ${swipeIconHTML}
+        ${nameTagHTML}
+        <div class="${isMediaOnly ? "msg-bubble media-only" : "msg-bubble"} ${isMe ? "msg-sent" : "msg-received"} ${shape}">
+           ${replyBlock}
+           ${formatMessage(rawText, isMediaOnly)}
+        </div>
+        <div class="msg-time" style="text-align: ${isMe ? "right" : "left"}">
+           ${formatTime(m.time)}
+        </div>
+      </div>`;
+
+    if (i === msgs.length - 1 && isMe && state.currentChatType === "direct") {
+      const statusHtml = state.currentChatData && state.currentChatData.unreadByUid === ""
+        ? `Read <i class='bx bx-check-double'></i>`
+        : `Sent <i class='bx bx-check'></i>`;
+      html += `<div class="msg-status" id="readReceipt">${statusHtml}</div>`;
+    }
+  });
+
+  html += `
+    <div id="typingBubble" class="typing-indicator hidden" style="align-items: center; margin-top: 8px;">
+      <span id="typingName" style="font-size: 12px; font-weight: 700; color: var(--primary); margin-right: 8px;"></span>
+      <div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>
+    </div>`;
+
+  box.innerHTML = html;
+
+  if (keepScroll) {
+    // Stay anchored to the message you were looking at.
+    box.scrollTop = box.scrollHeight - keepScroll.heightBefore + keepScroll.topBefore;
+  } else {
+    box.scrollTop = box.scrollHeight;
+  }
+
+  // The icebreaker unlocks as soon as the other side replies.
+  if (
+    state.currentChatType === "direct" &&
+    state.currentChatStatus === "icebreaker" &&
+    theirMessageCount > 0 &&
+    state.currentChatInitiatorUid === state.uid
+  ) {
+    db.collection("chats").doc(state.currentChat)
+      .set({ status: "unlocked" }, { merge: true })
+      .catch(() => {});
+  }
+
+  updateChatFooterUI();
+  updateReadReceipts();
+  updateTypingIndicator();
 }
 
 /** The unread dot appears in the mobile bottom nav and the desktop sidebar. */

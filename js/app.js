@@ -39,6 +39,9 @@ import {
   setRecapFilter,
   jumpToVibe,
   focusEvent,
+  loadRecap,
+  ensureRecapLoaded,
+  onRecapScroll,
   toggleEventDesc,
   openCreateScreen,
   closeCreateScreen,
@@ -110,6 +113,8 @@ function peopleForManagedEvent() {
  */
 function goToTab(tab) {
   clearOverlays();
+  // Recap is only fetched the first time someone actually asks for it.
+  if (tab === "recap") ensureRecapLoaded();
   if (state.currentChat) closeChat({ silent: true });
   if (state.currentProfileUid) closeProfileScreen();
   switchScreen("home");
@@ -134,6 +139,9 @@ Object.assign(window, {
   setRecapFilter,
   jumpToVibe,
   focusEvent,
+  loadRecap,
+  ensureRecapLoaded,
+  onRecapScroll,
   toggleEventDesc,
   openCreateScreen,
   closeCreateScreen,
@@ -218,6 +226,20 @@ function boot() {
   });
 
   document.getElementById("newUsername")?.addEventListener("input", checkUsernameAvailability);
+
+  // Page in more recap as it is scrolled, rather than all at once.
+  const scroller = document.querySelector(".container");
+  scroller?.addEventListener("scroll", () => {
+    const recapOpen = !document.getElementById("recapTab")?.classList.contains("hidden");
+    if (recapOpen) onRecapScroll(scroller);
+  }, { passive: true });
+
+  window.addEventListener("scroll", () => {
+    const recapOpen = !document.getElementById("recapTab")?.classList.contains("hidden");
+    if (!recapOpen) return;
+    const doc = document.documentElement;
+    if (doc.scrollTop + window.innerHeight > doc.scrollHeight - 320) loadRecap();
+  }, { passive: true });
 }
 
 if (document.readyState === "loading") {

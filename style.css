@@ -1406,3 +1406,6 @@ html:not(.kb-open) .chat-footer {
   font-weight: 700;
   white-space: nowrap;
 }
+
+/* Loading older messages */
+.history-spinner { display: flex; justify-content: center; padding: var(--s-12) 0; }

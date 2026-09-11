@@ -22,6 +22,11 @@ import { isBlocked, withoutBlocked } from './blockService.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+// A campus does not have 60 things happening at once. The live feed is
+// bounded rather than paged, because it has to stay realtime.
+const LIVE_LIMIT = 60;
+const RECAP_PAGE = 12;
+
 // ---------- Create screen ----------
 export function selectTag(element, tag) {
   document.querySelectorAll("#tagSelector .tag").forEach((t) => t.classList.remove("active"));
@@ -220,12 +225,13 @@ export function loadEvents() {
 
   state.eventsUnsubscribe = db
     .collection("events")
-    .where("expiresAt", ">", Date.now() - DAY_MS)
-    // Every document this returns is a billed read, for every user,
-    // every time the app opens. A campus does not have 200 live events;
-    // if it ever does, the newest 120 are the ones worth showing.
+    // ONLY what is still running. Recap is 24 hours of finished events
+    // that most people never open — loading it with the feed meant
+    // every user paid for it on every launch. It is paged in on demand
+    // now, by loadRecap().
+    .where("expiresAt", ">", Date.now())
     .orderBy("expiresAt", "desc")
-    .limit(120)
+    .limit(LIVE_LIMIT)
     .onSnapshot(
       async (snapshot) => {
         feedRetries = 0;
@@ -422,7 +428,16 @@ export function renderEvents() {
   let activeCount = 0;
   let recapCount = 0;
 
-  order.forEach((eventId) => {
+  // Live ids come from the listener; recap ids are paged in separately.
+  // An event that expired while the app was open appears in both, so
+  // the Set keeps it from rendering twice.
+  const seen = new Set();
+  const allIds = order.concat(state.recapOrder || []);
+
+  allIds.forEach((eventId) => {
+    if (seen.has(eventId)) return;
+    seen.add(eventId);
+
     const e = state.eventCache[eventId];
     if (!e) return;
     const id = safeId(eventId);
@@ -574,8 +589,10 @@ export function renderEvents() {
     ? liveHTML
     : `<div class="empty-state">${EMPTY_ART}<h4>Campus is quiet</h4><p>Nothing live right now — be the one who starts something.</p></div>`;
   recapList.innerHTML = recapCount
-    ? recapHTML
-    : `<div class="empty-state">${EMPTY_ART}<h4>Nothing here yet</h4><p>No history for this filter.</p></div>`;
+    ? recapHTML + (state.recapDone ? "" : `<button class="btn-ghost" style="margin-top:8px;" onclick="window.loadRecap()">Load more</button>`)
+    : (state.recapLoading
+        ? skeletonFeed(2)
+        : `<div class="empty-state">${EMPTY_ART}<h4>Nothing here yet</h4><p>No history for this filter.</p></div>`);
 
   updateRail(order, now);
 
@@ -979,4 +996,70 @@ export function removeAttendee(uid) {
       console.error("Remove failed:", err.code || err.message);
       alert("Couldn't remove them right now.");
     });
+}
+
+
+/* ---------------------------------------------------------------------
+   RECAP — paged in, never preloaded
+   ------------------------------------------------------------------- */
+
+/**
+ * One page of finished events. A plain get(), not a listener: these
+ * have already happened and will not change, so watching them would
+ * bill reads for nothing.
+ */
+export async function loadRecap({ reset = false } = {}) {
+  if (state.recapLoading) return;
+  if (reset) {
+    state.recapOrder = [];
+    state.recapCursor = null;
+    state.recapDone = false;
+  }
+  if (state.recapDone) return;
+
+  state.recapLoading = true;
+  const list = document.getElementById("recapEvents");
+  if (list && !state.recapOrder.length) list.innerHTML = skeletonFeed(2);
+
+  try {
+    const now = Date.now();
+    let q = db.collection("events")
+      .where("expiresAt", "<=", now)
+      .where("expiresAt", ">", now - DAY_MS)
+      .orderBy("expiresAt", "desc")
+      .limit(RECAP_PAGE);
+
+    if (state.recapCursor) q = q.startAfter(state.recapCursor);
+
+    const snap = await q.get();
+
+    if (snap.size < RECAP_PAGE) state.recapDone = true;
+    if (snap.size) state.recapCursor = snap.docs[snap.docs.length - 1];
+
+    const uids = new Set();
+    snap.forEach((doc) => {
+      const data = { id: doc.id, ...doc.data() };
+      state.eventCache[doc.id] = data;
+      if (!state.recapOrder.includes(doc.id)) state.recapOrder.push(doc.id);
+      if (data.hostUid) uids.add(data.hostUid);
+      (data.participantUids || []).forEach((u) => uids.add(u));
+    });
+
+    await primeUsers([...uids]);
+    renderEvents();
+  } catch (e) {
+    console.error("Recap load failed:", e.code || e.message);
+  } finally {
+    state.recapLoading = false;
+  }
+}
+
+/** Called when the Recap tab is opened, and as it is scrolled. */
+export function ensureRecapLoaded() {
+  if (!state.recapOrder.length && !state.recapDone) loadRecap({ reset: true });
+}
+
+export function onRecapScroll(el) {
+  if (!el) return;
+  if (el.scrollTop + el.clientHeight > el.scrollHeight - 320) loadRecap();
 }

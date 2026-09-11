@@ -26,7 +26,11 @@ export const state = {
   userCache: {},           // uid -> { username, displayName, avatar }
   blockedUids: [],         // blocked in EITHER direction — always hidden
   eventCache: {},          // eventId -> event data (avoids passing text through inline HTML)
-  eventOrder: [],          // eventIds, newest first
+  eventOrder: [],          // live eventIds, newest first
+  recapOrder: [],          // past eventIds, paged in on demand
+  recapCursor: null,       // last doc of the previous recap page
+  recapDone: false,
+  recapLoading: false,
 
   // ---- Active chat ----
   currentChat: null,       // chatId (direct) or eventId (event chat)
@@ -37,6 +41,14 @@ export const state = {
   currentOtherUid: "",
   replyingToMessage: null,
   myMessageCount: 0,
+
+  // Message paging: a small live window of the newest messages, plus
+  // older pages fetched once on demand. Messages are immutable, so
+  // older pages never need a listener.
+  liveMessages: [],
+  olderMessages: [],
+  loadingOlder: false,
+  noMoreMessages: false,
 
   // ---- Events / screens ----
   currentEventData: null,
@@ -85,6 +97,12 @@ export function resetState() {
   state.blockedUids = [];
   state.eventCache = {};
   state.eventOrder = [];
+  state.recapOrder = [];
+  state.recapCursor = null;
+  state.recapDone = false;
+  state.liveMessages = [];
+  state.olderMessages = [];
+  state.noMoreMessages = false;
   state.currentChat = null;
   state.currentChatData = null;
   state.currentOtherUid = "";
