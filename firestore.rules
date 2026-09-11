@@ -298,6 +298,21 @@ service cloud.firestore {
 
       allow delete: if isHost();
 
+      // ---- Typing, in its own subcollection ----
+      //
+      // This used to live in `typingUids` ON the event document, which
+      // every user with the app open is listening to. One person
+      // typing therefore billed a read to the whole campus and
+      // re-rendered everyone's feed. Down here only the people in that
+      // chat are listening.
+      match /typing/{typingUid} {
+        function inEventChat() {
+          return signedIn() && uid() in eventData(eventId).participantUids;
+        }
+        allow read: if inEventChat();
+        allow write: if inEventChat() && typingUid == uid();
+      }
+
       // ---- Event group chat ----
       // Messages are a SUBCOLLECTION so one lookup of the parent event
       // authorises the whole query, instead of one lookup per message.

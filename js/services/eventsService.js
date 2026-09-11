@@ -189,7 +189,6 @@ export async function addEvent(e) {
       hypedUids: [],
       pendingUids: [],
       unconfirmedUids: [],
-      typingUids: [],
       requiresApproval: !!document.getElementById("requiresApproval")?.checked,
       maxCapacity: Number.isFinite(maxCapacity) && maxCapacity > 1 ? maxCapacity : null,
       createdAt: Date.now()
@@ -222,6 +221,11 @@ export function loadEvents() {
   state.eventsUnsubscribe = db
     .collection("events")
     .where("expiresAt", ">", Date.now() - DAY_MS)
+    // Every document this returns is a billed read, for every user,
+    // every time the app opens. A campus does not have 200 live events;
+    // if it ever does, the newest 120 are the ones worth showing.
+    .orderBy("expiresAt", "desc")
+    .limit(120)
     .onSnapshot(
       async (snapshot) => {
         feedRetries = 0;

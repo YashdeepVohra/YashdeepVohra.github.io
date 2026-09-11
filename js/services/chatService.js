@@ -186,8 +186,19 @@ export function openEventChat(eventId) {
     if (!doc.exists) return;
     state.currentEventData = doc.data();
     if (hTitle) hTitle.innerText = state.currentEventData.title || "Event chat";
-    updateTypingIndicator();
   }, (err) => console.error("Event chat error:", err.code || err.message));
+
+  // Typing lives in a subcollection so only this chat pays for it.
+  if (state.typingUnsubscribe) state.typingUnsubscribe();
+  state.typingUnsubscribe = db.collection("events").doc(eventId).collection("typing")
+    .onSnapshot((snap) => {
+      const fresh = Date.now() - 6000;
+      state.eventTypingUids = snap.docs
+        .filter((d) => (d.data().at || 0) > fresh)
+        .map((d) => d.id)
+        .filter((u) => u !== state.uid);
+      updateTypingIndicator();
+    }, () => {});
 
   updateChatFooterUI();
   loadMessages();
@@ -197,18 +208,15 @@ export function closeChat({ silent = false } = {}) {
   const chatId = state.currentChat;
   const type = state.currentChatType;
 
-  if (chatId && type === "direct") {
-    db.collection("chats").doc(chatId).set({ typingUid: "" }, { merge: true }).catch(() => {});
-  } else if (chatId && type === "event") {
-    db.collection("events").doc(chatId)
-      .update({ typingUids: FieldValue.arrayRemove(state.uid) })
-      .catch(() => {});
-  }
+  stopTyping();
 
   if (state.messagesUnsubscribe) state.messagesUnsubscribe();
   if (state.chatDocUnsubscribe) state.chatDocUnsubscribe();
+  if (state.typingUnsubscribe) state.typingUnsubscribe();
   state.messagesUnsubscribe = null;
   state.chatDocUnsubscribe = null;
+  state.typingUnsubscribe = null;
+  state.eventTypingUids = [];
 
   state.currentChat = null;
   state.currentChatData = null;
@@ -249,9 +257,7 @@ export async function sendMessage() {
         time: Date.now(),
         replyTo: replyData
       });
-      await db.collection("events").doc(state.currentChat)
-        .update({ typingUids: FieldValue.arrayRemove(state.uid) })
-        .catch(() => {});
+      stopTyping();
       return;
     }
 
@@ -306,23 +312,57 @@ export async function sendMessage() {
   }
 }
 
-export function handleTyping() {
-  if (!state.currentChat) return;
-  clearTimeout(state.typingTimer);
+// A typing indicator is a nicety; it must not cost a write per
+// keystroke. One write starts it, one clears it, and nothing in
+// between — so a 40-character message costs 2 writes, not 40.
+const TYPING_REFRESH_MS = 4000;
+let typingActive = false;
+let typingWroteAt = 0;
+
+function typingRef() {
+  if (!state.currentChat) return null;
+  return state.currentChatType === "event"
+    ? db.collection("events").doc(state.currentChat).collection("typing").doc(state.uid)
+    : db.collection("chats").doc(state.currentChat);
+}
+
+function writeTyping(on) {
+  const ref = typingRef();
+  if (!ref) return;
 
   if (state.currentChatType === "event") {
-    const ref = db.collection("events").doc(state.currentChat);
-    ref.update({ typingUids: FieldValue.arrayUnion(state.uid) }).catch(() => {});
-    state.typingTimer = setTimeout(() => {
-      if (state.currentChat) ref.update({ typingUids: FieldValue.arrayRemove(state.uid) }).catch(() => {});
-    }, 1500);
+    if (on) ref.set({ at: Date.now() }).catch(() => {});
+    else ref.delete().catch(() => {});
   } else {
-    const ref = db.collection("chats").doc(state.currentChat);
-    ref.set({ typingUid: state.uid }, { merge: true }).catch(() => {});
-    state.typingTimer = setTimeout(() => {
-      if (state.currentChat) ref.set({ typingUid: "" }, { merge: true }).catch(() => {});
-    }, 1500);
+    ref.set({ typingUid: on ? state.uid : "" }, { merge: true }).catch(() => {});
   }
+}
+
+export function handleTyping() {
+  if (!state.currentChat) return;
+
+  const now = Date.now();
+  // Only announce on the first keystroke, then refresh occasionally so
+  // the indicator doesn't expire mid-sentence.
+  if (!typingActive || now - typingWroteAt > TYPING_REFRESH_MS) {
+    typingActive = true;
+    typingWroteAt = now;
+    writeTyping(true);
+  }
+
+  clearTimeout(state.typingTimer);
+  state.typingTimer = setTimeout(() => {
+    typingActive = false;
+    writeTyping(false);
+  }, 2200);
+}
+
+/** Called when a chat closes or a message is sent. */
+export function stopTyping() {
+  clearTimeout(state.typingTimer);
+  if (!typingActive) return;
+  typingActive = false;
+  writeTyping(false);
 }
 
 // ---------- Replies ----------
@@ -432,8 +472,8 @@ export function updateTypingIndicator() {
     box.scrollTop = box.scrollHeight;
   };
 
-  if (state.currentChatType === "event" && state.currentEventData) {
-    const typists = (state.currentEventData.typingUids || []).filter((u) => u !== state.uid);
+  if (state.currentChatType === "event") {
+    const typists = state.eventTypingUids || [];
     if (!typists.length) return bubble.classList.add("hidden");
     if (nameEl) {
       nameEl.innerText = typists.length === 1
@@ -507,7 +547,7 @@ export function loadMessages() {
 
   const openedChat = state.currentChat;
 
-  state.messagesUnsubscribe = ref.orderBy("time", "asc").limitToLast(300).onSnapshot(
+  state.messagesUnsubscribe = ref.orderBy("time", "asc").limitToLast(60).onSnapshot(
     async (snapshot) => {
       if (state.currentChat !== openedChat) return;
 

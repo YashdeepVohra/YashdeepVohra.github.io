@@ -40,6 +40,7 @@ export const state = {
 
   // ---- Events / screens ----
   currentEventData: null,
+  eventTypingUids: [],
   currentSelectedTag: "☕ Chill",
   currentLiveFilter: "All",
   currentRecapFilter: "All",
@@ -51,6 +52,7 @@ export const state = {
   // ---- Listeners & timers ----
   messagesUnsubscribe: null,
   chatDocUnsubscribe: null,
+  typingUnsubscribe: null,
   chatListUnsubscribe: null,
   blocksUnsubscribe: null,
   eventsUnsubscribe: null,
@@ -66,6 +68,7 @@ export function resetState() {
   [
     state.messagesUnsubscribe,
     state.chatDocUnsubscribe,
+    state.typingUnsubscribe,
     state.chatListUnsubscribe,
     state.blocksUnsubscribe,
     state.eventsUnsubscribe,
@@ -89,6 +92,8 @@ export function resetState() {
   state.replyingToMessage = null;
   state.messagesUnsubscribe = null;
   state.chatDocUnsubscribe = null;
+  state.typingUnsubscribe = null;
+  state.eventTypingUids = [];
   state.chatListUnsubscribe = null;
   state.blocksUnsubscribe = null;
   state.eventsUnsubscribe = null;
