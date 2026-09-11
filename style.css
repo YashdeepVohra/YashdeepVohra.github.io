@@ -149,6 +149,12 @@ a { color: inherit; }
 .stagger > *:nth-child(6) { animation-delay: 0.27s; }
 .stagger > *:nth-child(n+7) { animation-delay: 0.3s; }
 
+/* A card that appears on its own after the feed has already settled —
+   someone starting an event while you are looking at the list. The
+   whole feed no longer re-animates on every change, so this is the
+   only thing left that should move. */
+.card-in { animation: riseIn 0.34s var(--ease); }
+
 .screen-enter { animation: rise 0.32s var(--ease); }
 
 /* Skeletons: the shape of the content that's coming, not a spinner */

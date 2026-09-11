@@ -369,6 +369,10 @@ function skeletonFeed(count = 3) {
 /* ---------------------------------------------------------------------
    The live rail — a stories row of what is on right now
    ------------------------------------------------------------------- */
+
+// Last markup written into the story rail, so an unchanged rail is left alone.
+let railPainted = "";
+
 function renderLiveRail(order, now) {
   const wrap = document.getElementById("liveRailWrap");
   const rail = document.getElementById("liveRail");
@@ -382,9 +386,9 @@ function renderLiveRail(order, now) {
 
   // An empty rail is worse than no rail.
   wrap.classList.toggle("hidden", items.length === 0);
-  if (!items.length) { rail.innerHTML = ""; return; }
+  if (!items.length) { rail.innerHTML = ""; railPainted = ""; return; }
 
-  rail.innerHTML = items.map((e) => {
+  const railHTML = items.map((e) => {
     const id = safeId(e.id);
     if (!id) return "";
     const isLive = now >= e.startTime;
@@ -396,6 +400,13 @@ function renderLiveRail(order, now) {
         <span class="story-label">${escapeHtml(displayNameFor(e.hostUid))}</span>
       </button>`;
   }).join("");
+
+  // Same story as the feed: rewriting this on every hype restarted the
+  // avatar animations for no reason. Only write when it really differs.
+  if (railPainted !== railHTML) {
+    rail.innerHTML = railHTML;
+    railPainted = railHTML;
+  }
 }
 
 /** Rail shortcut: scroll a card into view and flash it. */
@@ -407,6 +418,105 @@ export function focusEvent(eventId) {
   void card.offsetWidth;
   card.classList.add("flash");
   setTimeout(() => card.classList.remove("flash"), 1400);
+}
+
+/* ---------------------------------------------------------------------
+   Painting the feed without the blink
+   ---------------------------------------------------------------------
+   The feed re-renders on every hype, join, request and edit, and it
+   used to do that by rewriting the whole list's innerHTML. Every card
+   was thrown away and built again, which replayed the staggered entry
+   animation on all of them — so tapping Hype made the card fade out
+   and float back in half a second later. It read as the card
+   disappearing, because on screen that is exactly what happened.
+
+   Now the list is patched. Each card's markup is remembered, and a
+   re-render only touches the cards whose markup actually changed.
+   Hyping swaps one button; your scroll position, any description you
+   had expanded, and every other card on screen stay untouched. It also
+   means the optimistic paint and the echo from the server produce
+   identical markup, so the second one writes nothing at all.
+   ------------------------------------------------------------------- */
+
+// list element id -> Map(event id -> the markup last written there)
+const painted = new Map();
+
+function paintedFor(listEl) {
+  if (!painted.has(listEl.id)) painted.set(listEl.id, new Map());
+  return painted.get(listEl.id);
+}
+
+function cardFromHTML(html) {
+  const holder = document.createElement("div");
+  holder.innerHTML = html.trim();
+  return holder.firstElementChild;
+}
+
+/**
+ * Bring `listEl` in line with `cards` ([{ id, html }]) using as few DOM
+ * writes as possible. The first paint is a single write and is allowed
+ * to animate; after that only genuinely new cards animate.
+ */
+function syncList(listEl, cards, tailHTML, emptyHTML) {
+  const seen = paintedFor(listEl);
+
+  if (!cards.length) {
+    listEl.classList.remove("stagger");
+    listEl.innerHTML = emptyHTML;
+    seen.clear();
+    return;
+  }
+
+  // Nothing real on screen yet (empty state, or skeletons): one write,
+  // and let the whole list rise in the way it always has.
+  if (!seen.size || !listEl.querySelector(".event")) {
+    seen.clear();
+    listEl.classList.add("stagger");
+    listEl.innerHTML = cards.map((c) => c.html).join("") + tailHTML;
+    cards.forEach((c) => seen.set(c.id, c.html));
+    return;
+  }
+
+  // A re-render. The stagger has already played and replaying it is
+  // precisely the flicker we are here to remove.
+  listEl.classList.remove("stagger");
+
+  const wanted = new Set(cards.map((c) => c.id));
+  const current = new Map();
+  Array.from(listEl.children).forEach((el) => {
+    const id = el.id && el.id.indexOf("event-") === 0 ? el.id.slice(6) : "";
+    // Anything that is not a card we still want goes: dead cards, and
+    // the "Load more" button, which is re-appended in its new place.
+    if (!id || !wanted.has(id)) { el.remove(); if (id) seen.delete(id); return; }
+    current.set(id, el);
+  });
+
+  let prev = null;
+  cards.forEach((c) => {
+    let el = current.get(c.id);
+
+    if (el && seen.get(c.id) !== c.html) {
+      const fresh = cardFromHTML(c.html);
+      // Keep what the reader themselves opened on this card.
+      if (fresh && el.classList.contains("expanded")) {
+        fresh.classList.add("expanded");
+        const btn = fresh.querySelector(".read-more-btn");
+        if (btn) btn.innerText = "Hide details";
+      }
+      if (fresh) { el.replaceWith(fresh); el = fresh; }
+    } else if (!el) {
+      el = cardFromHTML(c.html);
+      if (el) el.classList.add("card-in");   // genuinely new — this one may animate
+    }
+    if (!el) return;
+
+    const slot = prev ? prev.nextElementSibling : listEl.firstElementChild;
+    if (el !== slot) listEl.insertBefore(el, slot);
+    prev = el;
+    seen.set(c.id, c.html);
+  });
+
+  if (tailHTML) listEl.insertAdjacentHTML("beforeend", tailHTML);
 }
 
 /* ---------------------------------------------------------------------
@@ -423,10 +533,8 @@ export function renderEvents() {
 
   renderLiveRail(order, now);
 
-  let liveHTML = "";
-  let recapHTML = "";
-  let activeCount = 0;
-  let recapCount = 0;
+  const liveCards = [];
+  const recapCards = [];
 
   // Live ids come from the listener; recap ids are paged in separately.
   // An event that expired while the app was open appears in both, so
@@ -558,18 +666,16 @@ export function renderEvents() {
 
     if (e.expiresAt > now) {
       if (!matchesLive) return;
-      activeCount++;
       const glyph = (e.tag || "").trim().split(" ")[0];
-      liveHTML += `
+      liveCards.push({ id, html: `
         <article class="event card ${isLive ? "is-live" : ""}" id="event-${id}" style="--vibe:${vibe}">
           ${isLive ? `<span class="live-edge"></span>` : ""}
           <span class="vibe-watermark">${escapeHtml(glyph)}</span>
           ${header}${body}${actions}
-        </article>`;
+        </article>` });
     } else if (e.expiresAt > oneDayAgo) {
       if (!matchesRecap) return;
-      recapCount++;
-      recapHTML += `
+      recapCards.push({ id, html: `
         <article class="event card recap" id="event-${id}" style="--vibe:${vibe}">
           <span class="vibe-watermark">${escapeHtml((e.tag || "").trim().split(" ")[0])}</span>
           ${header}
@@ -579,20 +685,24 @@ export function renderEvents() {
             ${avatarStack(participants)}
             <span class="going-text">${attendees} ${attendees === 1 ? "person" : "people"} went</span>
           </div>
-        </article>`;
+        </article>` });
     }
   });
 
-  liveList.className = "stagger";
-  recapList.className = "stagger";
-  liveList.innerHTML = activeCount
-    ? liveHTML
-    : `<div class="empty-state">${EMPTY_ART}<h4>Campus is quiet</h4><p>Nothing live right now — be the one who starts something.</p></div>`;
-  recapList.innerHTML = recapCount
-    ? recapHTML + (state.recapDone ? "" : `<button class="btn-ghost" style="margin-top:8px;" onclick="window.loadRecap()">Load more</button>`)
-    : (state.recapLoading
-        ? skeletonFeed(2)
-        : `<div class="empty-state">${EMPTY_ART}<h4>Nothing here yet</h4><p>No history for this filter.</p></div>`);
+  syncList(
+    liveList,
+    liveCards,
+    "",
+    `<div class="empty-state">${EMPTY_ART}<h4>Campus is quiet</h4><p>Nothing live right now — be the one who starts something.</p></div>`
+  );
+  syncList(
+    recapList,
+    recapCards,
+    state.recapDone ? "" : `<button class="btn-ghost" style="margin-top:8px;" onclick="window.loadRecap()">Load more</button>`,
+    state.recapLoading
+      ? skeletonFeed(2)
+      : `<div class="empty-state">${EMPTY_ART}<h4>Nothing here yet</h4><p>No history for this filter.</p></div>`
+  );
 
   updateRail(order, now);
 
