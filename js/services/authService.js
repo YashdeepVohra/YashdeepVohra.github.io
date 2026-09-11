@@ -17,7 +17,7 @@ import { state, resetState } from '../state/store.js';
 import { switchScreen, setLoading } from '../utils/ui.js';
 import { clearOverlays } from '../utils/overlays.js';
 import { renderAvatar } from '../utils/formatters.js';
-import { normalizeUsername } from './userService.js';
+import { normalizeUsername, hydrateProfileCache, rememberUser, clearProfileCache } from './userService.js';
 import { loadEvents, renderEvents } from './eventsService.js';
 import { loadBlocks } from './blockService.js';
 import { loadChatList } from './chatService.js';
@@ -239,6 +239,10 @@ export function initializeUserApp(userData) {
   state.userAvatar = userData.avatar || "\u{1F464}";
   state.googlePfp = userData.googlePfp || "";
 
+  // Names and avatars saved on a previous visit go back into the cache
+  // before anything renders, so the first paint costs zero reads.
+  hydrateProfileCache();
+
   // Own profile is always in the cache, keyed by uid like everyone else.
   state.userCache[state.uid] = {
     uid: state.uid,
@@ -246,6 +250,7 @@ export function initializeUserApp(userData) {
     displayName: state.userDisplayName,
     avatar: state.userAvatar
   };
+  rememberUser(state.uid, state.userCache[state.uid]);
 
   const topAvatarEl = document.getElementById("topAvatar");
   if (topAvatarEl) {
@@ -376,6 +381,7 @@ export function logout() {
   setLoading(true);
   switchScreen(null);
   resetState();
+  clearProfileCache();
 
   auth.signOut()
     .then(() => {

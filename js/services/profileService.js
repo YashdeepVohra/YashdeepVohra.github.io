@@ -13,7 +13,7 @@ import { switchScreen, showTab } from '../utils/ui.js';
 import { focusEvent } from './eventsService.js';
 import { openOverlay, closeOverlay } from '../utils/overlays.js';
 import { closeChat, startChatWithUid } from './chatService.js';
-import { fetchUser, displayNameFor, usernameFor, avatarFor } from './userService.js';
+import { fetchUser, displayNameFor, usernameFor, avatarFor, rememberUser } from './userService.js';
 import { isBlocked, blockUser, unblockUser, submitReport, myBlockList } from './blockService.js';
 
 // The avatar picker only ever writes one of these, or the Google photo.
@@ -38,7 +38,10 @@ export function selectAvatar(element, type) {
     .catch((e) => console.error("Avatar save failed:", e.code || e.message));
 
   state.userAvatar = newAvatar;
-  if (state.userCache[state.uid]) state.userCache[state.uid].avatar = newAvatar;
+  if (state.userCache[state.uid]) {
+    state.userCache[state.uid].avatar = newAvatar;
+    rememberUser(state.uid, state.userCache[state.uid]);
+  }
   applyAvatarEverywhere(newAvatar);
   closeProfileModal();
 }
@@ -228,6 +231,7 @@ export async function saveProfileData() {
     if (state.userCache[state.uid]) {
       state.userCache[state.uid].displayName = newName;
       state.userCache[state.uid].avatar = avatar;
+      rememberUser(state.uid, state.userCache[state.uid]);
     }
 
     const displayEl = document.getElementById("profileDisplayNameDisplay");

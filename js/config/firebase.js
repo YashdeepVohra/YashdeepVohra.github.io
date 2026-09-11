@@ -51,6 +51,35 @@ try {
 export const auth = firebase.auth();
 export const db = firebase.firestore();
 
+// ---------------------------------------------------------------------
+// OFFLINE CACHE
+//
+// Firestore keeps documents in IndexedDB and re-attaches listeners with
+// a resume token, so a repeat visit is served from disk and only
+// CHANGED documents come down the wire. Two effects, both good:
+//
+//   - a billed read per document becomes a billed read per document
+//     that actually changed since you last looked
+//   - the feed paints from disk before the network answers, so the app
+//     opens instantly on bad campus wifi instead of showing skeletons
+//
+// synchronizeTabs keeps it working when someone has the app open twice.
+// It can legitimately fail — a browser that doesn't support IndexedDB,
+// or Safari private mode — and the app is fully functional without it,
+// so a failure is a warning, never an error.
+//
+// Must run before any other Firestore call; nothing else touches the
+// database until auth resolves, which is later.
+// ---------------------------------------------------------------------
+db.enablePersistence({ synchronizeTabs: true }).catch((err) => {
+  const reason = err && err.code === "failed-precondition"
+    ? "another tab already owns the cache"
+    : err && err.code === "unimplemented"
+      ? "this browser doesn't support it"
+      : err && err.message;
+  console.warn("Offline cache off (" + reason + ") — the app still works, just does more network reads.");
+});
+
 // Shorthands for Firestore sentinels, so services don't reach for the
 // global `firebase` object everywhere.
 export const FieldValue = firebase.firestore.FieldValue;
