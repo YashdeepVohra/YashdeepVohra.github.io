@@ -47,20 +47,28 @@ export function switchScreen(screenId) {
 }
 
 /** Highlight a tab in both the mobile bottom nav and the desktop sidebar. */
+const TAB_PANELS = { events: "eventsTab", recap: "recapTab", chats: "chatsTab" };
+
+/**
+ * Show one tab and highlight its control in BOTH navs.
+ *
+ * Matching is by data-tab, never by position. It used to compare
+ * indexes, which meant adding the Search button to the top of the
+ * sidebar shifted every highlight down one — Live Now lit up Search,
+ * Recap lit up Live Now. Any control without a data-tab (Search, New
+ * Event) is simply never highlighted, and new ones can be added
+ * anywhere without breaking this.
+ */
 export function showTab(tab) {
-  ["eventsTab", "recapTab", "chatsTab"].forEach((id) =>
+  const active = TAB_PANELS[tab] ? tab : "events";
+
+  Object.values(TAB_PANELS).forEach((id) =>
     document.getElementById(id)?.classList.add("hidden")
   );
+  document.getElementById(TAB_PANELS[active])?.classList.remove("hidden");
 
-  const order = ["events", "recap", "chats"];
-  const index = Math.max(0, order.indexOf(tab));
-  const tabId = ["eventsTab", "recapTab", "chatsTab"][index];
-
-  document.getElementById(tabId)?.classList.remove("hidden");
-
-  [".nav-item", ".side-item"].forEach((selector) => {
-    const items = document.querySelectorAll(selector);
-    items.forEach((el, i) => el.classList.toggle("active", i === index));
+  document.querySelectorAll(".nav-item, .side-item").forEach((el) => {
+    el.classList.toggle("active", el.dataset.tab === active);
   });
 }
 
