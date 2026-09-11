@@ -147,12 +147,35 @@ message counter on the chat doc or a Cloud Function.
 Firestore rules can't do time-window limits. If this becomes a problem,
 a Cloud Function with a per-user counter is the usual fix.
 
-**No reporting or blocking.** For a campus social app this matters more
-than most technical hardening — you will want a way for a student to
-block someone and a way for you to remove content. `banned` exists on
-the profile but nothing enforces it yet; the quickest real ban today is
-Firebase console → Authentication → disable the account, which
-invalidates their token everywhere.
+**Blocking and reporting now exist.** A block is one document per pair
+at `blocks/{uidA_uidB}`, uids sorted — not a row per direction, so the
+two halves can never disagree. It is total: their events disappear from
+your feed, they are scrubbed from attendee lists, the conversation
+leaves your inbox, and neither of you can message or join the other.
+Contact and join denial are enforced in the rules, not just the UI.
+Because a direct chat's id IS the block key, a blocked message is
+rejected by one existence check.
+
+Searching a blocked handle returns the same "does not exist" message as
+an unknown handle. That is deliberate — a different message confirms
+the block, and on a small campus that is how a block becomes a
+confrontation.
+
+Reports go to a write-only `reports` collection: students can file,
+nobody can read from the client. **Read them in the Firebase console —
+nothing notifies you**, so check it during your first weeks.
+
+Known limitation, accepted deliberately: both sides can read the block
+document, so a technically capable person could infer they were blocked
+from their own data. Hiding that needs server-side filtering (a Cloud
+Function on the Blaze plan). The alternative — keeping the block
+private to the blocker — would mean the blocked person still sees your
+events and therefore your location, which is the worse risk of the two.
+Every major platform lets a blocked user work it out.
+
+**Banning is still manual.** `banned` exists on the profile but nothing
+enforces it; the quickest real ban is Firebase console → Authentication
+→ disable the account, which invalidates their token everywhere.
 
 **No content moderation.** Worth at least a plan before launch day.
 
