@@ -64,6 +64,7 @@ import {
 } from './services/profileService.js';
 
 import { initSwipeListeners } from './interactions/swipeReply.js';
+import { initViewportFit } from './utils/viewport.js';
 
 // ==========================================
 // EXPOSE TO WINDOW FOR INLINE HTML HANDLERS
@@ -145,6 +146,7 @@ function boot() {
   checkRedirectLock();
   initAuthListener();
   initSwipeListeners();
+  initViewportFit();
 
   document.getElementById("login-btn")?.addEventListener("click", () => loginWithGoogle());
 

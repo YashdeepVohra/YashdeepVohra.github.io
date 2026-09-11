@@ -74,6 +74,9 @@
   --glow:   0 0 0 4px rgba(171, 159, 242, 0.22);
 
   /* ---- Motion ---- */
+  /* Height the phone keyboard is covering; set by utils/viewport.js */
+  --kb: 0px;
+
   --ease: cubic-bezier(0.4, 0, 0.2, 1);
   --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   --fast: 0.16s;
@@ -672,7 +675,7 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 }
 .chat-name { font-size: 15px; font-weight: 600; color: var(--obsidian); }
 
-#chatScreen { position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column; background: var(--canvas); animation: slideInR 0.26s var(--ease); }
+#chatScreen { position: fixed; inset: 0; bottom: var(--kb); z-index: 60; display: flex; flex-direction: column; background: var(--canvas); animation: slideInR 0.26s var(--ease); }
 .chat-header {
   display: flex; align-items: center; gap: var(--s-12);
   padding: var(--s-12) var(--s-16);
@@ -776,7 +779,7 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
    PROFILE
    ===================================================================== */
 
-.profile-screen-wrapper { position: fixed; inset: 0; z-index: 44; display: flex; flex-direction: column; background: var(--canvas); animation: rise 0.28s var(--ease); }
+.profile-screen-wrapper { position: fixed; inset: 0; bottom: var(--kb); z-index: 44; display: flex; flex-direction: column; background: var(--canvas); animation: rise 0.28s var(--ease); }
 .profile-header-layout { display: flex; align-items: center; justify-content: space-between; width: 100%; }
 .header-left { display: flex; align-items: center; gap: var(--s-4); }
 .settings-gear-btn { width: 38px; height: 38px; padding: 0; font-size: 20px; background: var(--bone); color: var(--aubergine); border-radius: 50%; box-shadow: none; }
@@ -848,7 +851,7 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 .avatar-option:hover { transform: scale(1.08); background: var(--ash); }
 .avatar-option.selected { background: var(--lavender); border-color: var(--violet); transform: scale(1.04); }
 
-.full-screen-view { position: fixed; inset: 0; z-index: 1500; display: flex; flex-direction: column; background: var(--canvas); overflow: hidden; animation: rise 0.28s var(--ease); }
+.full-screen-view { position: fixed; inset: 0; bottom: var(--kb); z-index: 1500; display: flex; flex-direction: column; background: var(--canvas); overflow: hidden; animation: rise 0.28s var(--ease); }
 .screen-header { display: flex; align-items: center; justify-content: space-between; gap: var(--s-12); padding: var(--s-12) var(--s-16); background: var(--paper); border-bottom: 1px solid var(--ash); flex-shrink: 0; }
 .screen-body {
   flex: 1;
@@ -1150,3 +1153,31 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 
 /* Rail decoration */
 .rail-art { width: 100%; height: 64px; opacity: 0.5; margin-top: var(--s-4); }
+
+
+/* =====================================================================
+   KEYBOARD-OPEN STATE
+   ===================================================================== */
+
+/* Floating chrome has no business sharing the screen with a keyboard —
+   it either covers the field or sits stranded above the keyboard. */
+html.kb-open .bottom-nav,
+html.kb-open .fab { display: none !important; }
+
+/* Leave room above a field when it is scrolled into view, so it never
+   lands flush against the header. */
+input, textarea, select { scroll-margin-block: 96px 120px; }
+
+/* The composer must clear the keyboard AND the home-indicator inset,
+   but not double-count them when the keyboard is up. */
+.chat-footer {
+  padding-bottom: var(--s-12);
+}
+html:not(.kb-open) .chat-footer {
+  padding-bottom: calc(var(--s-12) + env(safe-area-inset-bottom, 0px));
+}
+
+/* Desktop is unaffected: these panels are not fixed there. */
+@media (min-width: 1100px) {
+  #chatScreen, .profile-screen-wrapper { bottom: auto; }
+}

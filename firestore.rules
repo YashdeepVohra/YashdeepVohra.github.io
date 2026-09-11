@@ -254,21 +254,33 @@ service cloud.firestore {
     // ---------------------------------------------------------------
     match /chats/{chatId} {
 
-      // A chat id IS the membership proof: it is the two uids, sorted
-      // and joined by "_", and the create rule below refuses any id
-      // that doesn't match its own userUids. So we can authorise from
-      // the id alone.
+      // TWO membership checks, because get and list are evaluated in
+      // completely different ways and each needs the one it can verify.
       //
-      // This matters for more than tidiness. Reading resource.data on a
-      // chat that does not exist yet evaluates against a null resource,
-      // which errors and denies — meaning the FIRST message to someone
-      // new could never be sent. Checking the id works whether or not
-      // the document exists, and costs no lookup.
+      // A chat id IS membership proof: it is the two uids, sorted and
+      // joined by "_", and the create rule below refuses any id that
+      // disagrees with its own userUids.
       function inThisChat() {
         return signedIn() && uid() in chatId.split('_');
       }
+      function isMemberByData() {
+        return signedIn() && uid() in resource.data.userUids;
+      }
 
-      allow read: if inThisChat();
+      // GET is evaluated against one known document path. Checking the
+      // id works even when the document does not exist yet — reading
+      // resource.data there evaluates against null, errors, and denies,
+      // which is why the FIRST message to someone new used to fail.
+      allow get: if inThisChat();
+
+      // LIST is evaluated against the QUERY, before any document is
+      // read: Firestore must prove upfront that the query can only
+      // return rows you may see. It cannot derive that from a document
+      // id, so an id-based rule rejects the whole inbox query — which
+      // is why chats sent fine but never appeared in the list. This
+      // check mirrors the query's own constraint
+      // (where userUids array-contains uid), so Firestore can verify it.
+      allow list: if isMemberByData();
 
       allow create: if inThisChat()
         && uid() in request.resource.data.userUids
