@@ -66,7 +66,8 @@ import {
   openReport,
   closeReport,
   pickReason,
-  sendReport
+  sendReport,
+  messageFromProfile
 } from './services/profileService.js';
 
 import { initSwipeListeners } from './interactions/swipeReply.js';
@@ -149,7 +150,8 @@ Object.assign(window, {
   openReport,
   closeReport,
   pickReason,
-  sendReport
+  sendReport,
+  messageFromProfile
 });
 
 // ==========================================

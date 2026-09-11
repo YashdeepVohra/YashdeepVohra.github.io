@@ -1215,3 +1215,14 @@ html:not(.kb-open) .chat-footer {
 }
 .blocked-row:last-child { border-bottom: none; }
 .blocked-name { font-size: 14.5px; font-weight: 600; color: var(--obsidian); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Anything that opens a profile should look like it does */
+.tappable { cursor: pointer; }
+.who-name.tappable:hover { text-decoration: underline; }
+.av-ring.tappable:hover, .mini.tappable:hover { transform: translateY(-2px); }
+.av-ring, .mini { transition: transform var(--fast) var(--ease); }
+
+.profile-safety button { margin-bottom: var(--s-8); }
+.profile-safety .safety-row button { margin-bottom: 0; }
+.danger-text { color: var(--rose); }
+.danger-text:hover { background: var(--blush); color: #9b2c3e; }

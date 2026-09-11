@@ -244,7 +244,11 @@ function avatarStack(uids) {
   const shown = uids.slice(0, 4);
   const rest = uids.length - shown.length;
   const chips = shown
-    .map((uid) => `<div class="mini">${renderAvatar(avatarFor(uid))}</div>`)
+    .map((uid) => {
+      const id = safeId(uid);
+      const tap = id ? `class="mini tappable" onclick="event.stopPropagation(); window.openProfileScreen('${id}')"` : `class="mini"`;
+      return `<div ${tap}>${renderAvatar(avatarFor(uid))}</div>`;
+    })
     .join("");
   const more = rest > 0 ? `<div class="mini more">+${rest}</div>` : "";
   return `<div class="av-stack">${chips}${more}</div>`;
@@ -255,7 +259,9 @@ function goingText(uids) {
   const names = uids.slice(0, 2).map((uid) => {
     const id = safeId(uid);
     const name = escapeHtml(displayNameFor(uid));
-    return id ? `<b onclick="event.stopPropagation(); window.startChatWithUid('${id}')">${name}</b>` : name;
+    // Profile first: messaging someone is one of several things you
+    // might want to do with them, and the others live on the profile.
+    return id ? `<b onclick="event.stopPropagation(); window.openProfileScreen('${id}')">${name}</b>` : name;
   });
   const rest = uids.length - names.length;
   return names.join(", ") + (rest > 0 ? ` and ${rest} more going` : " going");
@@ -361,14 +367,20 @@ export function renderEvents() {
     const isFull = e.maxCapacity && attendees >= e.maxCapacity;
     const vibe = vibeColor(e.tag);
 
+    // Tapping the author opens their profile — the hub where you can
+    // message, report or block. Without this there was no route to a
+    // profile from the feed at all.
+    const hostId = safeId(e.hostUid);
+    const openHost = hostId ? `onclick="event.stopPropagation(); window.openProfileScreen('${hostId}')"` : "";
+
     const header = `
       <div class="card-top">
-        <div class="av-ring ${isLive ? "live" : ""}">
+        <div class="av-ring ${isLive ? "live" : ""} tappable" ${openHost}>
           <div class="av-inner">${renderAvatar(avatarFor(e.hostUid))}</div>
         </div>
         <div class="card-who">
           <div class="who-line">
-            <span class="who-name">${escapeHtml(displayNameFor(e.hostUid))}</span>
+            <span class="who-name tappable" ${openHost}>${escapeHtml(displayNameFor(e.hostUid))}</span>
             <span class="who-meta">@${escapeHtml(usernameFor(e.hostUid))} · ${escapeHtml(relTime(e.startTime, now))}</span>
           </div>
           <div class="who-place"><i class='bx bx-map-pin'></i> ${escapeHtml(e.place)}</div>

@@ -10,7 +10,7 @@ import { auth, db } from '../config/firebase.js';
 import { state } from '../state/store.js';
 import { renderAvatar, escapeHtml, safeId } from '../utils/formatters.js';
 import { switchScreen } from '../utils/ui.js';
-import { closeChat } from './chatService.js';
+import { closeChat, startChatWithUid } from './chatService.js';
 import { fetchUser, displayNameFor, usernameFor, avatarFor } from './userService.js';
 import { isBlocked, blockUser, unblockUser, submitReport, myBlockList } from './blockService.js';
 
@@ -270,10 +270,12 @@ function renderSafetyActions(targetUid, isSelf) {
   const id = safeId(targetUid);
 
   host.innerHTML = blocked
-    ? `<button class="btn-ghost" onclick="window.confirmUnblock('${id}')"><i class='bx bx-user-check'></i> Unblock</button>`
-    : `<div class="safety-row">
+    ? `<p class="settings-hint">You've blocked this person. You won't see each other anywhere.</p>
+       <button class="btn-ghost" onclick="window.confirmUnblock('${id}')"><i class='bx bx-user-check'></i> Unblock</button>`
+    : `<button onclick="window.messageFromProfile('${id}')"><i class='bx bx-message-rounded-dots'></i> Message</button>
+       <div class="safety-row">
          <button class="btn-ghost" onclick="window.openReport('${id}')"><i class='bx bx-flag'></i> Report</button>
-         <button class="delete-btn" onclick="window.confirmBlock('${id}')"><i class='bx bx-block'></i> Block</button>
+         <button class="btn-ghost danger-text" onclick="window.confirmBlock('${id}')"><i class='bx bx-block'></i> Block</button>
        </div>`;
 }
 
@@ -391,4 +393,13 @@ export async function refreshBlockedList() {
         <button class="btn-ghost" style="width:auto;padding:7px 14px;font-size:13px;" onclick="window.confirmUnblock('${id}')">Unblock</button>
       </div>`;
   }).join("");
+}
+
+
+/** Message someone from their profile. */
+export function messageFromProfile(targetUid) {
+  const uid = safeId(targetUid);
+  if (!uid) return;
+  closeProfileScreen();
+  startChatWithUid(uid);
 }
