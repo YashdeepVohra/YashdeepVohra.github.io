@@ -357,7 +357,16 @@
     </div>
 
     <input type="number" id="maxCapacity" placeholder="Max capacity (e.g. 5)" min="2">
-    <p style="font-size:13px; font-weight:500;">Leave blank for unlimited attendees.</p>
+    <p class="settings-hint">Leave blank for unlimited attendees.</p>
+
+    <label class="switch-row" for="requiresApproval">
+      <span class="switch-text">
+        <span class="switch-title">Approve people before they join</span>
+        <span class="switch-sub">You'll see each request and decide. Good for smaller plans.</span>
+      </span>
+      <input type="checkbox" id="requiresApproval">
+      <span class="switch-track"><span class="switch-thumb"></span></span>
+    </label>
   </div>
 </div>
 
@@ -401,6 +410,15 @@
     </div>
   </div>
   <div class="screen-body" id="searchResults"></div>
+</div>
+
+<div id="requestsModal" class="modal-overlay hidden">
+  <div class="modal-content" style="text-align:left;">
+    <h3 style="text-align:center;">Requests to join</h3>
+    <p style="text-align:center;">Approve anyone you're happy to have along.</p>
+    <div id="requestsList"></div>
+    <button class="btn-ghost" style="margin-top:16px;" onclick="closeRequests()">Done</button>
+  </div>
 </div>
 
 <div id="reportModal" class="modal-overlay hidden">

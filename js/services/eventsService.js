@@ -75,6 +75,9 @@ export function openCreateScreen() {
   const endEl = document.getElementById("endTime");
   if (startEl) startEl.value = forInput(now);
   if (endEl) endEl.value = forInput(inTwoHours);
+
+  const approval = document.getElementById("requiresApproval");
+  if (approval) approval.checked = false;
 }
 
 export function closeCreateScreen() {
@@ -127,7 +130,9 @@ export async function addEvent(e) {
       expiresAt,
       participantUids: [state.uid],
       hypedUids: [],
+      pendingUids: [],
       typingUids: [],
+      requiresApproval: !!document.getElementById("requiresApproval")?.checked,
       maxCapacity: Number.isFinite(maxCapacity) && maxCapacity > 1 ? maxCapacity : null,
       createdAt: Date.now()
     });
@@ -409,11 +414,26 @@ export function renderEvents() {
     const hypeBtn = `<button class="act ${hasHyped ? "hyped" : ""}" onclick="window.toggleHype('${id}', ${hasHyped})"><i class='bx ${hasHyped ? "bxs-hot" : "bx-hot"}'></i> ${hypeCount || "Hype"}</button>`;
     const chatBtn = `<button class="act" onclick="window.openEventChat('${id}')"><i class='bx bx-message-rounded-dots'></i> Chat</button>`;
 
+    const pending = e.pendingUids || [];
+    const hasRequested = pending.includes(state.uid);
+    const needsApproval = e.requiresApproval === true;
+
     let primary;
-    if (isHost) primary = `<button class="act joined" onclick="window.openDeleteModal('${id}')"><i class='bx bx-slider-alt'></i> Manage</button>`;
-    else if (hasJoined) primary = `<button class="act joined" onclick="window.leaveEvent('${id}')"><i class='bx bx-check'></i> Going</button>`;
-    else if (isFull) primary = `<button class="act full" disabled>Full</button>`;
-    else primary = `<button class="act primary" onclick="window.joinEvent('${id}')">Join</button>`;
+    if (isHost) {
+      primary = pending.length
+        ? `<button class="act primary" onclick="window.openRequests('${id}')"><i class='bx bx-user-plus'></i> ${pending.length} request${pending.length > 1 ? "s" : ""}</button>`
+        : `<button class="act joined" onclick="window.openDeleteModal('${id}')"><i class='bx bx-slider-alt'></i> Manage</button>`;
+    } else if (hasJoined) {
+      primary = `<button class="act joined" onclick="window.leaveEvent('${id}')"><i class='bx bx-check'></i> Going</button>`;
+    } else if (hasRequested) {
+      primary = `<button class="act requested" onclick="window.cancelRequest('${id}')"><i class='bx bx-time-five'></i> Requested</button>`;
+    } else if (isFull) {
+      primary = `<button class="act full" disabled>Full</button>`;
+    } else if (needsApproval) {
+      primary = `<button class="act primary" onclick="window.requestJoin('${id}')"><i class='bx bx-user-plus'></i> Request</button>`;
+    } else {
+      primary = `<button class="act primary" onclick="window.joinEvent('${id}')">Join</button>`;
+    }
 
     const actions = `
       <div class="card-actions">
@@ -427,6 +447,7 @@ export function renderEvents() {
       <div class="event-title">${escapeHtml(e.title)}</div>
       ${desc}
       ${e.tag ? `<div class="vibe-chip">${escapeHtml(e.tag)}</div>` : ""}
+      ${needsApproval && !isHost && !hasJoined ? `<div class="approval-note"><i class='bx bx-lock-alt'></i> The host approves who joins</div>` : ""}
       <div class="going-row">
         ${avatarStack(withoutBlocked(participants))}
         <span class="going-text">${goingText(withoutBlocked(participants))}</span>
@@ -473,6 +494,12 @@ export function renderEvents() {
     : `<div class="empty-state">${EMPTY_ART}<h4>Nothing here yet</h4><p>No history for this filter.</p></div>`;
 
   updateRail(order, now);
+
+  // If the host is looking at the requests sheet, keep it current —
+  // someone may have cancelled while it was open.
+  if (state.eventIdToManage && !document.getElementById("requestsModal")?.classList.contains("hidden")) {
+    renderRequests();
+  }
 }
 
 // ---------- Membership ----------
@@ -484,6 +511,97 @@ export function joinEvent(id) {
   db.collection("events").doc(id)
     .update({ participantUids: FieldValue.arrayUnion(state.uid) })
     .catch((err) => console.error("Join failed:", err.code || err.message));
+}
+
+export function requestJoin(id) {
+  db.collection("events").doc(id)
+    .update({ pendingUids: FieldValue.arrayUnion(state.uid) })
+    .catch((err) => {
+      console.error("Request failed:", err.code || err.message);
+      alert("Couldn't send the request. Try again.");
+    });
+}
+
+export function cancelRequest(id) {
+  db.collection("events").doc(id)
+    .update({ pendingUids: FieldValue.arrayRemove(state.uid) })
+    .catch((err) => console.error("Cancel failed:", err.code || err.message));
+}
+
+/* ---------------------------------------------------------------------
+   Host: working through the requests
+   ------------------------------------------------------------------- */
+
+export function openRequests(eventId) {
+  state.eventIdToManage = eventId;
+  openOverlay("requestsModal", { onClose: () => { state.eventIdToManage = null; } });
+  renderRequests();
+}
+
+export function closeRequests() {
+  closeOverlay("requestsModal");
+}
+
+export async function renderRequests() {
+  const box = document.getElementById("requestsList");
+  const id = state.eventIdToManage;
+  if (!box || !id) return;
+
+  const e = state.eventCache[id];
+  const pending = (e && e.pendingUids) || [];
+
+  if (!pending.length) {
+    box.innerHTML = `<div class="search-hint"><i class='bx bx-check-circle'></i><p>No requests waiting.</p></div>`;
+    return;
+  }
+
+  await primeUsers(pending);
+
+  box.innerHTML = pending.map((uid) => {
+    const u = safeId(uid);
+    if (!u) return "";
+    return `
+      <div class="request-row">
+        <div class="chat-avatar" style="width:40px;height:40px;font-size:18px;">${renderAvatar(avatarFor(uid))}</div>
+        <div class="result-text">
+          <div class="result-title">${escapeHtml(displayNameFor(uid))}</div>
+          <div class="result-sub">@${escapeHtml(usernameFor(uid))}</div>
+        </div>
+        <div class="request-actions">
+          <button class="btn-ghost" onclick="window.declineRequest('${u}')" aria-label="Decline"><i class='bx bx-x'></i></button>
+          <button onclick="window.approveRequest('${u}')" aria-label="Approve"><i class='bx bx-check'></i></button>
+        </div>
+      </div>`;
+  }).join("");
+}
+
+/** Approve: move them from pending to going, in ONE atomic write. */
+export function approveRequest(uid) {
+  const id = state.eventIdToManage;
+  if (!id) return;
+
+  const e = state.eventCache[id];
+  if (e && e.maxCapacity && (e.participantUids || []).length >= e.maxCapacity) {
+    return alert("This event is already full. Remove someone first, or raise the capacity.");
+  }
+
+  db.collection("events").doc(id).update({
+    participantUids: FieldValue.arrayUnion(uid),
+    pendingUids: FieldValue.arrayRemove(uid)
+  }).then(renderRequests)
+    .catch((err) => {
+      console.error("Approve failed:", err.code || err.message);
+      alert("Couldn't approve right now.");
+    });
+}
+
+export function declineRequest(uid) {
+  const id = state.eventIdToManage;
+  if (!id) return;
+  db.collection("events").doc(id)
+    .update({ pendingUids: FieldValue.arrayRemove(uid) })
+    .then(renderRequests)
+    .catch((err) => console.error("Decline failed:", err.code || err.message));
 }
 
 export function leaveEvent(id) {

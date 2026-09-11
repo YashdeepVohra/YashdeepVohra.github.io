@@ -1312,3 +1312,64 @@ html:not(.kb-open) .chat-footer {
 @media (min-width: 1100px) {
   .side-search { margin-bottom: var(--s-8); }
 }
+
+/* =====================================================================
+   REQUEST TO JOIN
+   ===================================================================== */
+
+.act.requested { background: var(--buttercream); color: #7a5c00; }
+.act.requested:hover { background: #fff6a8; color: #7a5c00; }
+
+.approval-note {
+  display: flex; align-items: center; gap: 6px;
+  margin-top: var(--s-12);
+  padding: 8px 12px;
+  background: var(--bone);
+  border-radius: var(--r-sm);
+  font-size: 13px;
+  color: var(--fog);
+}
+.approval-note i { font-size: 15px; }
+
+.request-row {
+  display: flex; align-items: center; gap: var(--s-12);
+  padding: var(--s-12) 0;
+  border-bottom: 1px solid var(--ash);
+}
+.request-row:last-child { border-bottom: none; }
+.request-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.request-actions button { width: 38px; height: 38px; padding: 0; font-size: 20px; border-radius: 50%; }
+
+/* ---- Switch ---- */
+.switch-row {
+  display: flex; align-items: center; gap: var(--s-16);
+  margin-top: var(--s-20);
+  padding: var(--s-16);
+  background: var(--paper);
+  border-radius: var(--r-card);
+  box-shadow: var(--lift-1);
+  cursor: pointer;
+}
+.switch-text { flex: 1; min-width: 0; }
+.switch-title { display: block; font-size: 15px; font-weight: 600; color: var(--obsidian); }
+.switch-sub { display: block; font-size: 13px; color: var(--fog); margin-top: 2px; line-height: 1.4; }
+.switch-row input { position: absolute; opacity: 0; width: 0; height: 0; margin: 0; }
+.switch-track {
+  flex-shrink: 0;
+  width: 48px; height: 28px;
+  border-radius: var(--r-pill);
+  background: var(--ash);
+  position: relative;
+  transition: background var(--fast) var(--ease);
+}
+.switch-thumb {
+  position: absolute; top: 3px; left: 3px;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  background: var(--paper);
+  box-shadow: var(--lift-1);
+  transition: transform var(--base) var(--spring);
+}
+.switch-row input:checked ~ .switch-track { background: var(--violet); }
+.switch-row input:checked ~ .switch-track .switch-thumb { transform: translateX(20px); }
+.switch-row input:focus-visible ~ .switch-track { box-shadow: var(--glow); }

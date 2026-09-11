@@ -186,6 +186,15 @@ service cloud.firestore {
             || request.resource.data.participantUids.size() <= request.resource.data.maxCapacity;
       }
 
+      function needsApproval() {
+        return resource.data.get('requiresApproval', false) == true;
+      }
+
+      function pendingBefore() { return resource.data.get('pendingUids', []).toSet(); }
+      function pendingAfter()  { return request.resource.data.get('pendingUids', []).toSet(); }
+      function goingBefore()   { return resource.data.participantUids.toSet(); }
+      function goingAfter()    { return request.resource.data.participantUids.toSet(); }
+
       allow read: if signedIn();
 
       allow create: if signedIn()
@@ -201,6 +210,8 @@ service cloud.firestore {
         // A host cannot open with a pre-filled guest list or fake hype.
         && request.resource.data.participantUids == [uid()]
         && request.resource.data.hypedUids == []
+        && request.resource.data.get('pendingUids', []) == []
+        && request.resource.data.get('requiresApproval', false) is bool
         && (request.resource.data.maxCapacity == null
             || (request.resource.data.maxCapacity is int && request.resource.data.maxCapacity > 1));
 
@@ -215,25 +226,43 @@ service cloud.firestore {
           // everyone else.
           && request.resource.data.participantUids == resource.data.participantUids
           && request.resource.data.get('hypedUids', []) == resource.data.get('hypedUids', [])
+          && request.resource.data.get('pendingUids', []) == resource.data.get('pendingUids', [])
           && isString(request.resource.data.title, 80)
           && isString(request.resource.data.place, 80)
           && request.resource.data.description.size() <= 500
           && withinCapacity()
         )
         ||
-        // (b) Anyone else joining, leaving, hyping or typing — and the
-        // ONLY thing they may change is their own membership.
+        // (b) The host working through the guest list: approving or
+        // declining requests. They may only ever REMOVE from pending,
+        // and may only ADD people who were actually pending — so a host
+        // cannot quietly add someone who never asked.
+        (
+          isHost()
+          && changedKeys().hasOnly(['participantUids', 'pendingUids'])
+          && pendingAfter().difference(pendingBefore()).size() == 0
+          && goingAfter().difference(goingBefore()).difference(pendingBefore()).size() == 0
+          && goingBefore().difference(goingAfter()).size() == 0
+          && withinCapacity()
+        )
+        ||
+        // (c) Anyone else joining, leaving, requesting, hyping or
+        // typing — and the ONLY thing they may change is their own.
         (
           signedIn()
-          && changedKeys().hasOnly(['participantUids', 'hypedUids', 'typingUids'])
+          && changedKeys().hasOnly(['participantUids', 'hypedUids', 'typingUids', 'pendingUids'])
           && selfToggleOnly(resource.data.participantUids, request.resource.data.participantUids)
           && selfToggleOnly(resource.data.get('hypedUids', []), request.resource.data.get('hypedUids', []))
           && selfToggleOnly(resource.data.get('typingUids', []), request.resource.data.get('typingUids', []))
+          && selfToggleOnly(resource.data.get('pendingUids', []), request.resource.data.get('pendingUids', []))
           // Capacity is now enforced by the database, not just the UI.
           && withinCapacity()
           // Blocking is total: you cannot turn up at their event, and
           // they cannot turn up at yours.
           && !blockedWith(resource.data.hostUid)
+          // On an approval-only event you may leave, but you may not
+          // add yourself — that is the host's call, via branch (b).
+          && (!needsApproval() || goingAfter().difference(goingBefore()).size() == 0)
         );
 
       allow delete: if isHost();
