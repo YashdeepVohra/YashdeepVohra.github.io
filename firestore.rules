@@ -211,6 +211,7 @@ service cloud.firestore {
         && request.resource.data.participantUids == [uid()]
         && request.resource.data.hypedUids == []
         && request.resource.data.get('pendingUids', []) == []
+        && request.resource.data.get('unconfirmedUids', []) == []
         && request.resource.data.get('requiresApproval', false) is bool
         && (request.resource.data.maxCapacity == null
             || (request.resource.data.maxCapacity is int && request.resource.data.maxCapacity > 1));
@@ -225,8 +226,19 @@ service cloud.firestore {
           && changedKeys().hasOnly([
                'title', 'place', 'description', 'tag',
                'startTime', 'expiresAt', 'maxCapacity',
-               'requiresApproval', 'updatedAt'
+               'requiresApproval', 'updatedAt',
+               'unconfirmedUids', 'lastEditSummary'
              ])
+          // A host may flag attendees as needing to re-confirm, but the
+          // flag can only ever name people who are actually going, and
+          // never the host themselves. This is the whole point: after a
+          // material change, "going" must not keep speaking for someone
+          // who agreed to a different plan.
+          && request.resource.data.get('unconfirmedUids', []).toSet()
+               .difference(resource.data.participantUids.toSet()).size() == 0
+          && !(resource.data.hostUid in request.resource.data.get('unconfirmedUids', []))
+          && request.resource.data.get('lastEditSummary', '') is string
+          && request.resource.data.get('lastEditSummary', '').size() <= 140
           && request.resource.data.hostUid == resource.data.hostUid
           && request.resource.data.participantUids == resource.data.participantUids
           && request.resource.data.get('hypedUids', []) == resource.data.get('hypedUids', [])
@@ -255,7 +267,9 @@ service cloud.firestore {
         // unmanageable and undeletable.
         (
           isHost()
-          && changedKeys().hasOnly(['participantUids', 'pendingUids'])
+          && changedKeys().hasOnly(['participantUids', 'pendingUids', 'unconfirmedUids'])
+          && request.resource.data.get('unconfirmedUids', []).toSet()
+               .difference(resource.data.get('unconfirmedUids', []).toSet()).size() == 0
           && pendingAfter().difference(pendingBefore()).size() == 0
           && goingAfter().difference(goingBefore()).difference(pendingBefore()).size() == 0
           && uid() in goingAfter()
@@ -266,11 +280,12 @@ service cloud.firestore {
         // typing — and the ONLY thing they may change is their own.
         (
           signedIn()
-          && changedKeys().hasOnly(['participantUids', 'hypedUids', 'typingUids', 'pendingUids'])
+          && changedKeys().hasOnly(['participantUids', 'hypedUids', 'typingUids', 'pendingUids', 'unconfirmedUids'])
           && selfToggleOnly(resource.data.participantUids, request.resource.data.participantUids)
           && selfToggleOnly(resource.data.get('hypedUids', []), request.resource.data.get('hypedUids', []))
           && selfToggleOnly(resource.data.get('typingUids', []), request.resource.data.get('typingUids', []))
           && selfToggleOnly(resource.data.get('pendingUids', []), request.resource.data.get('pendingUids', []))
+          && selfToggleOnly(resource.data.get('unconfirmedUids', []), request.resource.data.get('unconfirmedUids', []))
           // Capacity is now enforced by the database, not just the UI.
           && withinCapacity()
           // Blocking is total: you cannot turn up at their event, and

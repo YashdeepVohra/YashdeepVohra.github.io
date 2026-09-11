@@ -188,6 +188,7 @@ export async function addEvent(e) {
       participantUids: [state.uid],
       hypedUids: [],
       pendingUids: [],
+      unconfirmedUids: [],
       typingUids: [],
       requiresApproval: !!document.getElementById("requiresApproval")?.checked,
       maxCapacity: Number.isFinite(maxCapacity) && maxCapacity > 1 ? maxCapacity : null,
@@ -320,8 +321,11 @@ function avatarStack(uids) {
   return `<div class="av-stack">${chips}${more}</div>`;
 }
 
-function goingText(uids) {
-  if (!uids.length) return "Nobody yet — be first";
+function goingText(uids, unconfirmedCount = 0) {
+  const tail = unconfirmedCount > 0
+    ? ` <span class="unconfirmed-tag">${unconfirmedCount} not confirmed</span>`
+    : "";
+  if (!uids.length) return "Nobody yet — be first" + tail;
   const names = uids.slice(0, 2).map((uid) => {
     const id = safeId(uid);
     const name = escapeHtml(displayNameFor(uid));
@@ -330,7 +334,7 @@ function goingText(uids) {
     return id ? `<b onclick="event.stopPropagation(); window.openProfileScreen('${id}')">${name}</b>` : name;
   });
   const rest = uids.length - names.length;
-  return names.join(", ") + (rest > 0 ? ` and ${rest} more going` : " going");
+  return names.join(", ") + (rest > 0 ? ` and ${rest} more going` : " going") + tail;
 }
 
 function skeletonFeed(count = 3) {
@@ -475,6 +479,14 @@ export function renderEvents() {
     const hasRequested = pending.includes(state.uid);
     const needsApproval = e.requiresApproval === true;
 
+    const unconfirmed = e.unconfirmedUids || [];
+    const iMustConfirm = unconfirmed.includes(state.uid);
+
+    // The stack and the names show only people who have agreed to the
+    // CURRENT plan. Anyone still to re-confirm is counted separately
+    // rather than silently vouching for a plan they never saw.
+    const confirmedGoing = participants.filter((u) => !unconfirmed.includes(u));
+
     let primary;
     if (isHost) {
       primary = pending.length
@@ -505,9 +517,20 @@ export function renderEvents() {
       ${desc}
       ${e.tag ? `<div class="vibe-chip">${escapeHtml(e.tag)}</div>` : ""}
       ${needsApproval && !isHost && !hasJoined ? `<div class="approval-note"><i class='bx bx-lock-alt'></i> The host approves who joins</div>` : ""}
+      ${iMustConfirm ? `
+        <div class="changed-note">
+          <div class="changed-text">
+            <i class='bx bx-error-circle'></i>
+            <span><b>${escapeHtml(displayNameFor(e.hostUid))}</b> changed this — it ${escapeHtml(e.lastEditSummary || "has moved")}.</span>
+          </div>
+          <div class="changed-actions">
+            <button class="act" onclick="window.leaveEvent('${id}')">Can't make it</button>
+            <button class="act primary" onclick="window.confirmAttendance('${id}')">Still in</button>
+          </div>
+        </div>` : ""}
       <div class="going-row">
-        ${avatarStack(withoutBlocked(participants))}
-        <span class="going-text">${goingText(withoutBlocked(participants))}</span>
+        ${avatarStack(withoutBlocked(confirmedGoing))}
+        <span class="going-text">${goingText(withoutBlocked(confirmedGoing), unconfirmed.length)}</span>
       </div>
       ${capacity}`;
 
@@ -617,6 +640,7 @@ export async function renderPeople() {
 
   const pending = e.pendingUids || [];
   const going = (e.participantUids || []).filter((u) => u !== e.hostUid);
+  const unconfirmed = e.unconfirmedUids || [];
 
   await primeUsers([...pending, ...going]);
 
@@ -654,8 +678,13 @@ export async function renderPeople() {
     </div>`;
 
   if (going.length) {
-    html += going.map((uid) => row(uid, (u) => `
-      <button class="btn-ghost danger-text" onclick="window.removeAttendee('${u}')" aria-label="Remove"><i class='bx bx-user-minus'></i></button>`)).join("");
+    html += going.map((uid) => {
+      const markup = row(uid, (u) => `
+        <button class="btn-ghost danger-text" onclick="window.removeAttendee('${u}')" aria-label="Remove"><i class='bx bx-user-minus'></i></button>`);
+      return unconfirmed.includes(uid)
+        ? markup.replace("</div>\n      </div>", `</div>\n        <span class="unconfirmed-tag">not confirmed</span>\n      </div>`)
+        : markup;
+    }).join("");
   } else if (!pending.length) {
     html += `<p class="settings-hint" style="margin-top:8px;">Nobody else yet.</p>`;
   }
@@ -694,8 +723,21 @@ export function declineRequest(uid) {
 
 export function leaveEvent(id) {
   db.collection("events").doc(id)
-    .update({ participantUids: FieldValue.arrayRemove(state.uid) })
+    .update({
+      participantUids: FieldValue.arrayRemove(state.uid),
+      unconfirmedUids: FieldValue.arrayRemove(state.uid)
+    })
     .catch((err) => console.error("Leave failed:", err.code || err.message));
+}
+
+/** "Still in" — clears your unconfirmed flag after a host's change. */
+export function confirmAttendance(id) {
+  db.collection("events").doc(id)
+    .update({ unconfirmedUids: FieldValue.arrayRemove(state.uid) })
+    .catch((err) => {
+      console.error("Confirm failed:", err.code || err.message);
+      alert("Couldn't confirm right now. Try again.");
+    });
 }
 
 export function toggleHype(id, isHyped) {
@@ -826,6 +868,29 @@ function countTo(el, target) {
 }
 
 
+/**
+ * Which edits change what someone actually agreed to.
+ *
+ * Fixing a typo or adding a note is not a new plan. Moving the time,
+ * the place or the vibe is — and "going" must stop speaking for anyone
+ * who agreed to the old one, because that list is what the rest of the
+ * feed reads.
+ */
+function materialDiff(before, after) {
+  const changes = [];
+  const when = (ms) => new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+
+  if (before.place !== after.place) changes.push(`moved to ${after.place}`);
+  if (before.startTime !== after.startTime) changes.push(`now starts ${when(after.startTime)}`);
+  if (before.expiresAt !== after.expiresAt && before.startTime === after.startTime) {
+    changes.push(`now ends ${when(after.expiresAt)}`);
+  }
+  if (before.tag !== after.tag) changes.push(`is now ${String(after.tag).trim()}`);
+  if (before.title !== after.title) changes.push(`is now "${after.title}"`);
+
+  return changes;
+}
+
 /** Save edits to an existing event, keeping its chat and guest list. */
 async function saveEventEdits(e) {
   const eventId = state.editingEventId;
@@ -850,20 +915,37 @@ async function saveEventEdits(e) {
     return alert(`${going} people are already going — capacity can't be lower than that.`);
   }
 
+  const next = {
+    title: title.slice(0, 80),
+    place: place.slice(0, 80),
+    description: description.slice(0, 500),
+    tag: state.currentSelectedTag,
+    startTime,
+    expiresAt,
+    maxCapacity: Number.isFinite(maxCapacity) && maxCapacity > 1 ? maxCapacity : null,
+    requiresApproval: !!document.getElementById("requiresApproval")?.checked,
+    updatedAt: Date.now()
+  };
+
+  const changes = materialDiff(existing, next);
+  const others = (existing.participantUids || []).filter((u) => u !== existing.hostUid);
+
+  if (changes.length && others.length) {
+    const summary = changes.join(", ");
+    const ok = window.confirm(
+      `This ${summary}.\n\n${others.length} ${others.length === 1 ? "person has" : "people have"} already said they're going. ` +
+      `They'll be asked to confirm they're still in, and will show as unconfirmed until they do.`
+    );
+    if (!ok) return;
+
+    next.unconfirmedUids = others;
+    next.lastEditSummary = summary.slice(0, 140);
+  }
+
   if (btn) { btn.disabled = true; btn.innerHTML = `<i class='bx bx-loader-alt bx-spin'></i>`; }
 
   try {
-    await db.collection("events").doc(eventId).update({
-      title: title.slice(0, 80),
-      place: place.slice(0, 80),
-      description: description.slice(0, 500),
-      tag: state.currentSelectedTag,
-      startTime,
-      expiresAt,
-      maxCapacity: Number.isFinite(maxCapacity) && maxCapacity > 1 ? maxCapacity : null,
-      requiresApproval: !!document.getElementById("requiresApproval")?.checked,
-      updatedAt: Date.now()
-    });
+    await db.collection("events").doc(eventId).update(next);
     closeCreateScreen();
     setTimeout(() => focusEvent(eventId), 300);
   } catch (error) {
@@ -884,7 +966,10 @@ export function removeAttendee(uid) {
   if (!window.confirm(`Remove ${name} from this event? They can ask to join again.`)) return;
 
   db.collection("events").doc(id)
-    .update({ participantUids: FieldValue.arrayRemove(uid) })
+    .update({
+      participantUids: FieldValue.arrayRemove(uid),
+      unconfirmedUids: FieldValue.arrayRemove(uid)
+    })
     .then(renderPeople)
     .catch((err) => {
       console.error("Remove failed:", err.code || err.message);

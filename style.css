@@ -1373,3 +1373,36 @@ html:not(.kb-open) .chat-footer {
 .switch-row input:checked ~ .switch-track { background: var(--violet); }
 .switch-row input:checked ~ .switch-track .switch-thumb { transform: translateX(20px); }
 .switch-row input:focus-visible ~ .switch-track { box-shadow: var(--glow); }
+
+/* =====================================================================
+   "THE HOST CHANGED THIS"
+   Loud on purpose. It is asking someone to re-decide, so it must not
+   look like the rest of the card.
+   ===================================================================== */
+
+.changed-note {
+  margin-top: var(--s-12);
+  padding: var(--s-12) var(--s-16);
+  background: color-mix(in srgb, var(--buttercream) 60%, var(--paper));
+  border: 1.5px solid color-mix(in srgb, var(--buttercream) 90%, var(--obsidian) 8%);
+  border-radius: var(--r-sm);
+  animation: rise 0.3s var(--ease);
+}
+.changed-text { display: flex; gap: 8px; font-size: 14px; line-height: 1.45; color: #6b5200; }
+.changed-text i { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+.changed-text b { font-weight: 700; }
+.changed-actions { display: flex; gap: var(--s-8); margin-top: var(--s-12); }
+.changed-actions .act { flex: 1; justify-content: center; }
+.changed-actions .act:not(.primary) { background: var(--paper); color: var(--obsidian); }
+
+.unconfirmed-tag {
+  display: inline-block;
+  flex-shrink: 0;
+  padding: 3px 9px;
+  border-radius: var(--r-pill);
+  background: var(--buttercream);
+  color: #6b5200;
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
