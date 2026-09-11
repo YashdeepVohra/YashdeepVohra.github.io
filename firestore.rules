@@ -220,29 +220,45 @@ service cloud.firestore {
         // (a) The host editing their own event. Ownership is frozen.
         (
           isHost()
+          // Details only. People are frozen here; the guest list moves
+          // through branch (b) and self-service through branch (c).
+          && changedKeys().hasOnly([
+               'title', 'place', 'description', 'tag',
+               'startTime', 'expiresAt', 'maxCapacity',
+               'requiresApproval', 'updatedAt'
+             ])
           && request.resource.data.hostUid == resource.data.hostUid
-          // A host edits details, not people. Joining, leaving and
-          // hyping their own event goes through branch (b) like
-          // everyone else.
           && request.resource.data.participantUids == resource.data.participantUids
           && request.resource.data.get('hypedUids', []) == resource.data.get('hypedUids', [])
           && request.resource.data.get('pendingUids', []) == resource.data.get('pendingUids', [])
           && isString(request.resource.data.title, 80)
           && isString(request.resource.data.place, 80)
+          && request.resource.data.description is string
           && request.resource.data.description.size() <= 500
-          && withinCapacity()
+          && request.resource.data.startTime is number
+          && request.resource.data.expiresAt is number
+          && request.resource.data.expiresAt > request.resource.data.startTime
+          // Capacity cannot be cut below the people already going —
+          // that would silently put the event over its own limit.
+          && (request.resource.data.maxCapacity == null
+              || (request.resource.data.maxCapacity is int
+                  && request.resource.data.maxCapacity >= resource.data.participantUids.size()))
         )
         ||
         // (b) The host working through the guest list: approving or
-        // declining requests. They may only ever REMOVE from pending,
-        // and may only ADD people who were actually pending — so a host
-        // cannot quietly add someone who never asked.
+        // declining requests, and removing someone already going.
+        //
+        // They may only ever REMOVE from pending, and may only ADD
+        // someone who was actually pending — so a host cannot quietly
+        // add a person who never asked. Removals are allowed, but the
+        // host cannot remove themselves: an event with no host is
+        // unmanageable and undeletable.
         (
           isHost()
           && changedKeys().hasOnly(['participantUids', 'pendingUids'])
           && pendingAfter().difference(pendingBefore()).size() == 0
           && goingAfter().difference(goingBefore()).difference(pendingBefore()).size() == 0
-          && goingBefore().difference(goingAfter()).size() == 0
+          && uid() in goingAfter()
           && withinCapacity()
         )
         ||

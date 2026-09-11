@@ -325,8 +325,8 @@
 <div id="createScreen" class="full-screen-view hidden">
   <div class="screen-header">
     <button class="back-btn" onclick="closeCreateScreen()"><i class='bx bx-x'></i></button>
-    <div class="header-title">New Broadcast</div>
-    <button class="text-action-btn" onclick="addEvent(event)">Publish</button>
+    <div class="header-title" id="createHeading">New Broadcast</div>
+    <button class="text-action-btn" id="createSubmit" onclick="addEvent(event)">Publish</button>
   </div>
 
   <div class="screen-body">
@@ -373,10 +373,12 @@
 <div id="deleteModal" class="modal-overlay hidden">
   <div class="modal-content">
     <div style="font-size:40px; margin-bottom:8px;">🎛️</div>
-    <h3 style="font-size:22px;">Manage live event</h3>
-    <p style="font-size:14px; margin-bottom:24px;">Wrapping up early, or erasing this broadcast completely?</p>
-    <button onclick="confirmMoveToRecap()">Send to Campus Recap</button>
-    <button class="delete-btn" onclick="confirmDeletePermanently()">Delete Completely</button>
+    <h3 style="font-size:22px;">Manage event</h3>
+    <p style="font-size:14px; margin-bottom:24px;">Change the details, sort out who's coming, or wrap it up.</p>
+    <button onclick="editManagedEvent()"><i class='bx bx-edit-alt'></i> Edit details</button>
+    <button class="btn-ghost" onclick="peopleForManagedEvent()"><i class='bx bx-group'></i> Manage people</button>
+    <button class="btn-ghost" onclick="confirmMoveToRecap()"><i class='bx bx-time-five'></i> End it now</button>
+    <button class="delete-btn" onclick="confirmDeletePermanently()"><i class='bx bx-trash'></i> Delete completely</button>
     <button class="btn-ghost" onclick="closeDeleteModal()">Cancel</button>
   </div>
 </div>
@@ -412,12 +414,12 @@
   <div class="screen-body" id="searchResults"></div>
 </div>
 
-<div id="requestsModal" class="modal-overlay hidden">
+<div id="peopleModal" class="modal-overlay hidden">
   <div class="modal-content" style="text-align:left;">
-    <h3 style="text-align:center;">Requests to join</h3>
-    <p style="text-align:center;">Approve anyone you're happy to have along.</p>
-    <div id="requestsList"></div>
-    <button class="btn-ghost" style="margin-top:16px;" onclick="closeRequests()">Done</button>
+    <h3 style="text-align:center;">People</h3>
+    <p style="text-align:center;">Approve who's waiting, or remove someone who's in.</p>
+    <div id="peopleList"></div>
+    <button class="btn-ghost" style="margin-top:16px;" onclick="closePeople()">Done</button>
   </div>
 </div>
 

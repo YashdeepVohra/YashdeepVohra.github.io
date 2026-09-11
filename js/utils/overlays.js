@@ -16,6 +16,14 @@
 
 const stack = [];
 
+// history.back() fires popstate asynchronously. If we waited for it to
+// hide the layer, any code that closes one overlay and opens another in
+// the same tick would have its NEW layer torn down by the late back
+// press. So a programmatic close hides immediately and records that one
+// history entry is still owed; popOverlay() spends those credits before
+// touching the real stack.
+let pendingPops = 0;
+
 export function isOverlayOpen(id) {
   return stack.some((entry) => entry.id === id);
 }
@@ -33,25 +41,20 @@ export function openOverlay(id, { onClose } = {}) {
   history.pushState({ overlay: id, depth: stack.length }, "", window.location.href);
 }
 
-/** Ask to close the top layer. Buttons should call this. */
+/** Ask to close a layer. Buttons should call this. */
 export function closeOverlay(id) {
   if (!stack.length) return;
-  // Only the top layer can be dismissed; anything else would desync
-  // the history stack.
-  if (id && stack[stack.length - 1].id !== id) {
-    hideOverlay(id);
-    return;
-  }
-  history.back();
-}
 
-/** Hide a layer that is NOT on top, without touching history. */
-function hideOverlay(id) {
-  const index = stack.findIndex((entry) => entry.id === id);
+  const index = id ? stack.findIndex((entry) => entry.id === id) : stack.length - 1;
   if (index === -1) return;
+
   const [entry] = stack.splice(index, 1);
   document.getElementById(entry.id)?.classList.add("hidden");
   if (typeof entry.onClose === "function") entry.onClose();
+
+  // Hidden already; now let history catch up.
+  pendingPops++;
+  history.back();
 }
 
 /**
@@ -60,6 +63,12 @@ function hideOverlay(id) {
  * press has been consumed.
  */
 export function popOverlay() {
+  // A back press we asked for ourselves — the layer is already gone.
+  if (pendingPops > 0) {
+    pendingPops--;
+    return true;
+  }
+
   const entry = stack.pop();
   if (!entry) return false;
   document.getElementById(entry.id)?.classList.add("hidden");
@@ -67,8 +76,41 @@ export function popOverlay() {
   return true;
 }
 
+export function isOverlayTop(id) {
+  return stack.length > 0 && stack[stack.length - 1].id === id;
+}
+
+/**
+ * Swap the top layer for another one, reusing its history entry.
+ *
+ * Closing then opening does NOT work here: closeOverlay goes through
+ * history.back(), which fires popstate asynchronously. The new layer is
+ * already open by the time that lands, so the deferred back press
+ * closes the NEW layer and leaves the stack out of step with history.
+ * One entry in, one entry out, no race.
+ */
+export function replaceOverlay(id, { onClose } = {}) {
+  const el = document.getElementById(id);
+  if (!el) return;
+
+  const previous = stack.pop();
+  if (previous) {
+    document.getElementById(previous.id)?.classList.add("hidden");
+    if (typeof previous.onClose === "function") previous.onClose();
+  }
+
+  el.classList.remove("hidden");
+  stack.push({ id, onClose });
+
+  // Only push if there was nothing to inherit an entry from.
+  if (!previous) {
+    history.pushState({ overlay: id, depth: stack.length }, "", window.location.href);
+  }
+}
+
 /** Drop everything, e.g. on sign-out. */
 export function clearOverlays() {
+  pendingPops = 0;
   while (stack.length) {
     const entry = stack.pop();
     document.getElementById(entry.id)?.classList.add("hidden");

@@ -26,10 +26,12 @@ import {
   leaveEvent,
   requestJoin,
   cancelRequest,
-  openRequests,
-  closeRequests,
+  openPeople,
+  closePeople,
   approveRequest,
   declineRequest,
+  removeAttendee,
+  openEditScreen,
   toggleHype,
   selectTag,
   setLiveFilter,
@@ -90,6 +92,16 @@ import { openSearch, closeSearch, onSearchInput, searchOpenProfile, searchOpenEv
 // Only these functions are reachable from markup. Every one of them
 // takes either no argument or an id (uid / document id) — never a piece
 // of user-typed text.
+/** The manage sheet acts on whichever event opened it. */
+function editManagedEvent() {
+  const id = state.eventIdToManage;
+  if (id) openEditScreen(id);
+}
+function peopleForManagedEvent() {
+  const id = state.eventIdToManage;
+  if (id) openPeople(id);
+}
+
 /**
  * Tapping a tab is an escape hatch: it must work from anywhere. Chat
  * and profile are full-screen layers, so they have to be dismissed
@@ -129,13 +141,17 @@ Object.assign(window, {
   leaveEvent,
   requestJoin,
   cancelRequest,
-  openRequests,
-  closeRequests,
+  openPeople,
+  closePeople,
   approveRequest,
   declineRequest,
+  removeAttendee,
+  openEditScreen,
   toggleHype,
   openDeleteModal,
   closeDeleteModal,
+  editManagedEvent,
+  peopleForManagedEvent,
   confirmMoveToRecap,
   confirmDeletePermanently,
 

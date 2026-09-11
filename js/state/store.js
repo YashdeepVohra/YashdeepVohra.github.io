@@ -46,6 +46,7 @@ export const state = {
   currentProfileUid: "",
   pendingSettingsAvatar: null,
   eventIdToManage: null,
+  editingEventId: null,
 
   // ---- Listeners & timers ----
   messagesUnsubscribe: null,

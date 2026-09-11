@@ -16,7 +16,7 @@ import { auth, db, FieldValue } from '../config/firebase.js';
 import { state } from '../state/store.js';
 import { renderAvatar, escapeHtml, safeId } from '../utils/formatters.js';
 import { showTab } from '../utils/ui.js';
-import { openOverlay, closeOverlay } from '../utils/overlays.js';
+import { openOverlay, closeOverlay, replaceOverlay, isOverlayTop } from '../utils/overlays.js';
 import { primeUsers, displayNameFor, usernameFor, avatarFor } from './userService.js';
 import { isBlocked, withoutBlocked } from './blockService.js';
 
@@ -65,8 +65,11 @@ export function toggleEventDesc(eventId) {
   if (btn) btn.innerText = card.classList.contains("expanded") ? "Hide details" : "Read details...";
 }
 
+/** Create mode: blank sheet, "Publish". */
 export function openCreateScreen() {
-  openOverlay("createScreen");
+  state.editingEventId = null;
+  setCreateSheetMode("create");
+  openOverlay("createScreen", { onClose: () => { state.editingEventId = null; } });
   const now = new Date();
   const inTwoHours = new Date(now.getTime() + 2 * 60 * 60 * 1000);
   const forInput = (d) => new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
@@ -78,6 +81,59 @@ export function openCreateScreen() {
 
   const approval = document.getElementById("requiresApproval");
   if (approval) approval.checked = false;
+
+  ["title", "place", "description", "maxCapacity"].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.value = "";
+  });
+}
+
+/** Swap the sheet between creating and editing. */
+function setCreateSheetMode(mode) {
+  const editing = mode === "edit";
+  const heading = document.getElementById("createHeading");
+  const submit = document.getElementById("createSubmit");
+  if (heading) heading.innerText = editing ? "Edit event" : "New Broadcast";
+  if (submit) submit.innerText = editing ? "Save" : "Publish";
+}
+
+/**
+ * Edit mode: same sheet, pre-filled. Editing in place matters because
+ * deleting and reposting destroys the event's group chat and everyone
+ * who already said they were going.
+ */
+export function openEditScreen(eventId) {
+  const e = state.eventCache[eventId];
+  if (!e || e.hostUid !== state.uid) return;
+
+  setCreateSheetMode("edit");
+  const opts = { onClose: () => { state.editingEventId = null; } };
+  if (isOverlayTop("deleteModal")) replaceOverlay("createScreen", opts);
+  else openOverlay("createScreen", opts);
+
+  // After the swap, so the Manage sheet's onClose cannot clear it.
+  state.editingEventId = eventId;
+
+  const forInput = (ms) => {
+    const d = new Date(ms);
+    return new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  };
+
+  const set = (id, value) => { const el = document.getElementById(id); if (el) el.value = value; };
+  set("title", e.title || "");
+  set("place", e.place || "");
+  set("description", e.description || "");
+  set("startTime", forInput(e.startTime));
+  set("endTime", forInput(e.expiresAt));
+  set("maxCapacity", e.maxCapacity || "");
+
+  const approval = document.getElementById("requiresApproval");
+  if (approval) approval.checked = e.requiresApproval === true;
+
+  state.currentSelectedTag = e.tag || state.currentSelectedTag;
+  document.querySelectorAll("#tagSelector .tag").forEach((t) => {
+    t.classList.toggle("active", t.innerText.trim() === (e.tag || "").trim());
+  });
 }
 
 export function closeCreateScreen() {
@@ -86,6 +142,7 @@ export function closeCreateScreen() {
 
 export async function addEvent(e) {
   if (!auth.currentUser) return;
+  if (state.editingEventId) return saveEventEdits(e);
 
   const btn = e?.target?.closest("button") || document.querySelector("#createScreen .text-action-btn");
   const title = document.getElementById("title")?.value.trim();
@@ -421,7 +478,7 @@ export function renderEvents() {
     let primary;
     if (isHost) {
       primary = pending.length
-        ? `<button class="act primary" onclick="window.openRequests('${id}')"><i class='bx bx-user-plus'></i> ${pending.length} request${pending.length > 1 ? "s" : ""}</button>`
+        ? `<button class="act primary" onclick="window.openPeople('${id}')"><i class='bx bx-user-plus'></i> ${pending.length} request${pending.length > 1 ? "s" : ""}</button>`
         : `<button class="act joined" onclick="window.openDeleteModal('${id}')"><i class='bx bx-slider-alt'></i> Manage</button>`;
     } else if (hasJoined) {
       primary = `<button class="act joined" onclick="window.leaveEvent('${id}')"><i class='bx bx-check'></i> Going</button>`;
@@ -497,8 +554,8 @@ export function renderEvents() {
 
   // If the host is looking at the requests sheet, keep it current —
   // someone may have cancelled while it was open.
-  if (state.eventIdToManage && !document.getElementById("requestsModal")?.classList.contains("hidden")) {
-    renderRequests();
+  if (state.eventIdToManage && !document.getElementById("peopleModal")?.classList.contains("hidden")) {
+    renderPeople();
   }
 }
 
@@ -532,32 +589,38 @@ export function cancelRequest(id) {
    Host: working through the requests
    ------------------------------------------------------------------- */
 
-export function openRequests(eventId) {
+export function openPeople(eventId) {
+  const opts = { onClose: () => { state.eventIdToManage = null; } };
+
+  // Reached either from the Manage sheet (swap in place) or straight
+  // from the card's "N requests" button (fresh layer).
+  if (isOverlayTop("deleteModal")) replaceOverlay("peopleModal", opts);
+  else openOverlay("peopleModal", opts);
+
+  // After the swap — the Manage sheet's onClose clears this on its way out.
   state.eventIdToManage = eventId;
-  openOverlay("requestsModal", { onClose: () => { state.eventIdToManage = null; } });
-  renderRequests();
+  renderPeople();
 }
 
-export function closeRequests() {
-  closeOverlay("requestsModal");
+export function closePeople() {
+  closeOverlay("peopleModal");
 }
 
-export async function renderRequests() {
-  const box = document.getElementById("requestsList");
+/** One sheet, two jobs: who's waiting, and who's in. */
+export async function renderPeople() {
+  const box = document.getElementById("peopleList");
   const id = state.eventIdToManage;
   if (!box || !id) return;
 
   const e = state.eventCache[id];
-  const pending = (e && e.pendingUids) || [];
+  if (!e) return;
 
-  if (!pending.length) {
-    box.innerHTML = `<div class="search-hint"><i class='bx bx-check-circle'></i><p>No requests waiting.</p></div>`;
-    return;
-  }
+  const pending = e.pendingUids || [];
+  const going = (e.participantUids || []).filter((u) => u !== e.hostUid);
 
-  await primeUsers(pending);
+  await primeUsers([...pending, ...going]);
 
-  box.innerHTML = pending.map((uid) => {
+  const row = (uid, actions) => {
     const u = safeId(uid);
     if (!u) return "";
     return `
@@ -567,12 +630,37 @@ export async function renderRequests() {
           <div class="result-title">${escapeHtml(displayNameFor(uid))}</div>
           <div class="result-sub">@${escapeHtml(usernameFor(uid))}</div>
         </div>
-        <div class="request-actions">
-          <button class="btn-ghost" onclick="window.declineRequest('${u}')" aria-label="Decline"><i class='bx bx-x'></i></button>
-          <button onclick="window.approveRequest('${u}')" aria-label="Approve"><i class='bx bx-check'></i></button>
-        </div>
+        <div class="request-actions">${actions(u)}</div>
       </div>`;
-  }).join("");
+  };
+
+  let html = "";
+
+  if (pending.length) {
+    html += `<div class="result-group">Waiting for you (${pending.length})</div>`;
+    html += pending.map((uid) => row(uid, (u) => `
+      <button class="btn-ghost" onclick="window.declineRequest('${u}')" aria-label="Decline"><i class='bx bx-x'></i></button>
+      <button onclick="window.approveRequest('${u}')" aria-label="Approve"><i class='bx bx-check'></i></button>`)).join("");
+  }
+
+  html += `<div class="result-group">Going (${going.length + 1})</div>`;
+  html += `
+    <div class="request-row">
+      <div class="chat-avatar" style="width:40px;height:40px;font-size:18px;">${renderAvatar(avatarFor(e.hostUid))}</div>
+      <div class="result-text">
+        <div class="result-title">${escapeHtml(displayNameFor(e.hostUid))}</div>
+        <div class="result-sub">Host</div>
+      </div>
+    </div>`;
+
+  if (going.length) {
+    html += going.map((uid) => row(uid, (u) => `
+      <button class="btn-ghost danger-text" onclick="window.removeAttendee('${u}')" aria-label="Remove"><i class='bx bx-user-minus'></i></button>`)).join("");
+  } else if (!pending.length) {
+    html += `<p class="settings-hint" style="margin-top:8px;">Nobody else yet.</p>`;
+  }
+
+  box.innerHTML = html;
 }
 
 /** Approve: move them from pending to going, in ONE atomic write. */
@@ -588,7 +676,7 @@ export function approveRequest(uid) {
   db.collection("events").doc(id).update({
     participantUids: FieldValue.arrayUnion(uid),
     pendingUids: FieldValue.arrayRemove(uid)
-  }).then(renderRequests)
+  }).then(renderPeople)
     .catch((err) => {
       console.error("Approve failed:", err.code || err.message);
       alert("Couldn't approve right now.");
@@ -600,7 +688,7 @@ export function declineRequest(uid) {
   if (!id) return;
   db.collection("events").doc(id)
     .update({ pendingUids: FieldValue.arrayRemove(uid) })
-    .then(renderRequests)
+    .then(renderPeople)
     .catch((err) => console.error("Decline failed:", err.code || err.message));
 }
 
@@ -735,4 +823,71 @@ function countTo(el, target) {
     if (i < steps) requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
+}
+
+
+/** Save edits to an existing event, keeping its chat and guest list. */
+async function saveEventEdits(e) {
+  const eventId = state.editingEventId;
+  const existing = state.eventCache[eventId];
+  if (!eventId || !existing) return;
+
+  const btn = e?.target?.closest("button") || document.getElementById("createSubmit");
+  const title = document.getElementById("title")?.value.trim();
+  const place = document.getElementById("place")?.value.trim();
+  const description = document.getElementById("description")?.value.trim() || "";
+  const startTime = new Date(document.getElementById("startTime")?.value).getTime();
+  const expiresAt = new Date(document.getElementById("endTime")?.value).getTime();
+  const capacityRaw = document.getElementById("maxCapacity")?.value;
+  const maxCapacity = capacityRaw ? parseInt(capacityRaw, 10) : null;
+
+  if (!title || !place) return alert("Title and location can't be empty.");
+  if (!Number.isFinite(startTime) || !Number.isFinite(expiresAt)) return alert("Those dates don't look right.");
+  if (expiresAt <= startTime) return alert("The end time must be after the start time.");
+
+  const going = (existing.participantUids || []).length;
+  if (maxCapacity !== null && maxCapacity < going) {
+    return alert(`${going} people are already going — capacity can't be lower than that.`);
+  }
+
+  if (btn) { btn.disabled = true; btn.innerHTML = `<i class='bx bx-loader-alt bx-spin'></i>`; }
+
+  try {
+    await db.collection("events").doc(eventId).update({
+      title: title.slice(0, 80),
+      place: place.slice(0, 80),
+      description: description.slice(0, 500),
+      tag: state.currentSelectedTag,
+      startTime,
+      expiresAt,
+      maxCapacity: Number.isFinite(maxCapacity) && maxCapacity > 1 ? maxCapacity : null,
+      requiresApproval: !!document.getElementById("requiresApproval")?.checked,
+      updatedAt: Date.now()
+    });
+    closeCreateScreen();
+    setTimeout(() => focusEvent(eventId), 300);
+  } catch (error) {
+    console.error("Edit failed:", error.code || error.message);
+    alert("Couldn't save those changes. Try again.");
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = "Save"; }
+  }
+}
+
+/** Host removes someone already going. */
+export function removeAttendee(uid) {
+  const id = state.eventIdToManage;
+  if (!id || !safeId(uid)) return;
+  if (uid === state.uid) return;
+
+  const name = displayNameFor(uid);
+  if (!window.confirm(`Remove ${name} from this event? They can ask to join again.`)) return;
+
+  db.collection("events").doc(id)
+    .update({ participantUids: FieldValue.arrayRemove(uid) })
+    .then(renderPeople)
+    .catch((err) => {
+      console.error("Remove failed:", err.code || err.message);
+      alert("Couldn't remove them right now.");
+    });
 }
