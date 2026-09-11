@@ -267,7 +267,6 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
     radial-gradient(420px 380px at 88% 96%, rgba(255, 214, 232, 0.5), transparent 66%),
     radial-gradient(360px 340px at 8% 78%,  rgba(207, 230, 255, 0.42), transparent 68%);
 }
-.login-aura.a2, .login-aura.a3 { display: none; }
 
 .login-card {
   position: relative;
@@ -1031,7 +1030,6 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 }
 /* Baked soft-edged gradients instead of blurred boxes: identical look,
    no blur pass, nothing animating. */
-.ambient .blob { display: none; }
 .ambient::before {
   content: "";
   position: absolute;
@@ -1181,3 +1179,39 @@ html:not(.kb-open) .chat-footer {
 @media (min-width: 1100px) {
   #chatScreen, .profile-screen-wrapper { bottom: auto; }
 }
+
+/* =====================================================================
+   SAFETY — block & report
+   Deliberately quiet: these live at the bottom of a profile, styled as
+   secondary actions. Someone looking for them finds them; nobody taps
+   Block by accident.
+   ===================================================================== */
+
+.profile-safety { margin-top: var(--s-32); padding-top: var(--s-20); border-top: 1px solid var(--ash); }
+.safety-row { display: flex; gap: var(--s-8); }
+.safety-row button { flex: 1; }
+.profile-safety button { font-size: 14px; padding: 11px 18px; }
+
+.reason-grid { display: flex; flex-wrap: wrap; gap: var(--s-8); margin-bottom: var(--s-8); }
+.reason-pill {
+  width: auto;
+  padding: 9px 15px;
+  background: var(--bone);
+  color: var(--fog);
+  border: 1.5px solid transparent;
+  border-radius: var(--r-pill);
+  font-size: 13.5px; font-weight: 600;
+  box-shadow: none;
+}
+.reason-pill:hover { background: var(--ash); color: var(--aubergine); filter: none; transform: none; }
+.reason-pill.selected { background: var(--lavender); border-color: var(--violet); color: var(--aubergine); }
+
+.settings-hint { font-size: 13px; color: var(--fog); margin: 0 0 var(--s-12); line-height: 1.45; }
+
+.blocked-row {
+  display: flex; align-items: center; gap: var(--s-12);
+  padding: var(--s-8) 0;
+  border-bottom: 1px solid var(--ash);
+}
+.blocked-row:last-child { border-bottom: none; }
+.blocked-name { font-size: 14.5px; font-weight: 600; color: var(--obsidian); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

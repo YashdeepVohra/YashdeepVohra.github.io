@@ -60,7 +60,13 @@ import {
   openSettingsScreen,
   closeSettingsScreen,
   selectSettingsAvatar,
-  saveProfileData
+  saveProfileData,
+  confirmBlock,
+  confirmUnblock,
+  openReport,
+  closeReport,
+  pickReason,
+  sendReport
 } from './services/profileService.js';
 
 import { initSwipeListeners } from './interactions/swipeReply.js';
@@ -135,7 +141,15 @@ Object.assign(window, {
   openSettingsScreen,
   closeSettingsScreen,
   selectSettingsAvatar,
-  saveProfileData
+  saveProfileData,
+
+  // Safety
+  confirmBlock,
+  confirmUnblock,
+  openReport,
+  closeReport,
+  pickReason,
+  sendReport
 });
 
 // ==========================================

@@ -17,6 +17,7 @@ import { state } from '../state/store.js';
 import { renderAvatar, escapeHtml, safeId } from '../utils/formatters.js';
 import { showTab } from '../utils/ui.js';
 import { primeUsers, displayNameFor, usernameFor, avatarFor } from './userService.js';
+import { isBlocked, withoutBlocked } from './blockService.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -289,7 +290,7 @@ function renderLiveRail(order, now) {
 
   const items = order
     .map((id) => state.eventCache[id])
-    .filter((e) => e && e.expiresAt > now)
+    .filter((e) => e && e.expiresAt > now && !isBlocked(e.hostUid))
     .sort((a, b) => a.startTime - b.startTime)
     .slice(0, 12);
 
@@ -346,6 +347,9 @@ export function renderEvents() {
     if (!e) return;
     const id = safeId(eventId);
     if (!id) return;
+
+    // Blocking is total: their events do not exist for you.
+    if (isBlocked(e.hostUid)) return;
 
     const participants = e.participantUids || [];
     const attendees = participants.length || 1;
@@ -408,8 +412,8 @@ export function renderEvents() {
       ${desc}
       ${e.tag ? `<div class="vibe-chip">${escapeHtml(e.tag)}</div>` : ""}
       <div class="going-row">
-        ${avatarStack(participants)}
-        <span class="going-text">${goingText(participants)}</span>
+        ${avatarStack(withoutBlocked(participants))}
+        <span class="going-text">${goingText(withoutBlocked(participants))}</span>
       </div>
       ${capacity}`;
 

@@ -17,7 +17,8 @@ import { state, resetState } from '../state/store.js';
 import { switchScreen, setLoading } from '../utils/ui.js';
 import { renderAvatar } from '../utils/formatters.js';
 import { normalizeUsername } from './userService.js';
-import { loadEvents } from './eventsService.js';
+import { loadEvents, renderEvents } from './eventsService.js';
+import { loadBlocks } from './blockService.js';
 import { loadChatList } from './chatService.js';
 
 const REDIRECT_KEY = "isRedirecting";
@@ -258,6 +259,14 @@ export function initializeUserApp(userData) {
 
   history.pushState({ screen: "home" }, "", window.location.pathname);
   switchScreen("home");
+
+  // Blocks first: everything else filters against this list, and a
+  // block must take effect the moment it changes, not on next load.
+  loadBlocks(() => {
+    renderEvents();
+    loadChatList();
+  });
+
   loadChatList();
   loadEvents();
   setLoading(false);

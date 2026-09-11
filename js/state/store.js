@@ -24,6 +24,7 @@ export const state = {
 
   // ---- Caches ----
   userCache: {},           // uid -> { username, displayName, avatar }
+  blockedUids: [],         // blocked in EITHER direction — always hidden
   eventCache: {},          // eventId -> event data (avoids passing text through inline HTML)
   eventOrder: [],          // eventIds, newest first
 
@@ -50,6 +51,7 @@ export const state = {
   messagesUnsubscribe: null,
   chatDocUnsubscribe: null,
   chatListUnsubscribe: null,
+  blocksUnsubscribe: null,
   eventsUnsubscribe: null,
   profileEventsUnsubscribe: null,
   typingTimer: null,
@@ -64,6 +66,7 @@ export function resetState() {
     state.messagesUnsubscribe,
     state.chatDocUnsubscribe,
     state.chatListUnsubscribe,
+    state.blocksUnsubscribe,
     state.eventsUnsubscribe,
     state.profileEventsUnsubscribe
   ].forEach((unsub) => { if (typeof unsub === "function") unsub(); });
@@ -75,6 +78,7 @@ export function resetState() {
   state.userAvatar = "\u{1F464}";
   state.googlePfp = "";
   state.userCache = {};
+  state.blockedUids = [];
   state.eventCache = {};
   state.eventOrder = [];
   state.currentChat = null;
@@ -85,6 +89,7 @@ export function resetState() {
   state.messagesUnsubscribe = null;
   state.chatDocUnsubscribe = null;
   state.chatListUnsubscribe = null;
+  state.blocksUnsubscribe = null;
   state.eventsUnsubscribe = null;
   state.profileEventsUnsubscribe = null;
 }

@@ -67,6 +67,17 @@ service cloud.firestore {
       return value is string && value.size() > 0 && value.size() <= maxLen;
     }
 
+    // A block is stored once, under the two uids sorted and joined —
+    // the same shape as a chat id, so for a direct chat the block doc
+    // and the chat share a key.
+    function pairKey(a, b) {
+      return a < b ? a + '_' + b : b + '_' + a;
+    }
+
+    function blockedWith(otherUid) {
+      return exists(/databases/$(database)/documents/blocks/$(pairKey(uid(), otherUid)));
+    }
+
     function eventData(eventId) {
       return get(/databases/$(database)/documents/events/$(eventId)).data;
     }
@@ -220,6 +231,9 @@ service cloud.firestore {
           && selfToggleOnly(resource.data.get('typingUids', []), request.resource.data.get('typingUids', []))
           // Capacity is now enforced by the database, not just the UI.
           && withinCapacity()
+          // Blocking is total: you cannot turn up at their event, and
+          // they cannot turn up at yours.
+          && !blockedWith(resource.data.hostUid)
         );
 
       allow delete: if isHost();
@@ -283,6 +297,7 @@ service cloud.firestore {
       allow list: if isMemberByData();
 
       allow create: if inThisChat()
+        && !exists(/databases/$(database)/documents/blocks/$(chatId))
         && uid() in request.resource.data.userUids
         && request.resource.data.userUids.size() == 2
         && request.resource.data.userUids[0] < request.resource.data.userUids[1]
@@ -310,7 +325,10 @@ service cloud.firestore {
 
         allow read: if inThisChat();
 
+        // The chat id IS the block key for a direct chat, so this is a
+        // single cheap existence check.
         allow create: if inThisChat()
+          && !exists(/databases/$(database)/documents/blocks/$(chatId))
           && request.resource.data.senderUid == uid()
           && isString(request.resource.data.text, 2000)
           && request.resource.data.time is number;
@@ -318,6 +336,61 @@ service cloud.firestore {
         allow update: if false;
         allow delete: if signedIn() && resource.data.senderUid == uid();
       }
+    }
+
+    // ---------------------------------------------------------------
+    // BLOCKS  —  blocks/{uidA_uidB}
+    //
+    // One document per pair, regardless of who blocked whom, so a block
+    // is symmetrical by construction: neither side can reach the other
+    // and neither can be "half unblocked". Only the person who created
+    // it can lift it.
+    // ---------------------------------------------------------------
+    match /blocks/{pairId} {
+
+      function inPair() {
+        return signedIn() && uid() in pairId.split('_');
+      }
+
+      // get by id (works before it exists); list mirrors the client's
+      // own query, `where pair array-contains uid`, so Firestore can
+      // verify it upfront.
+      allow get: if inPair();
+      allow list: if signedIn() && uid() in resource.data.pair;
+
+      allow create: if inPair()
+        && request.resource.data.pair.size() == 2
+        && uid() in request.resource.data.pair
+        && request.resource.data.pair[0] < request.resource.data.pair[1]
+        && pairId == request.resource.data.pair[0] + '_' + request.resource.data.pair[1]
+        && request.resource.data.blockerUid == uid();
+
+      // A block is not editable — lift it and make a new one.
+      allow update: if false;
+
+      // Only the blocker can unblock. The blocked person must not be
+      // able to clear it themselves.
+      allow delete: if signedIn() && resource.data.blockerUid == uid();
+    }
+
+    // ---------------------------------------------------------------
+    // REPORTS  —  write-only drop box
+    //
+    // Students can file; nobody can read, edit or delete from the
+    // client. Read them in the Firebase console.
+    // ---------------------------------------------------------------
+    match /reports/{reportId} {
+      allow create: if signedIn()
+        && request.resource.data.reporterUid == uid()
+        && request.resource.data.targetUid is string
+        && request.resource.data.targetUid.size() > 0
+        && request.resource.data.reason is string
+        && request.resource.data.reason.size() <= 60
+        && request.resource.data.note is string
+        && request.resource.data.note.size() <= 500
+        && request.resource.data.createdAt is number;
+
+      allow read, update, delete: if false;
     }
 
     // ---------------------------------------------------------------

@@ -25,9 +25,7 @@
      ===================================================================== -->
 <div id="login" class="hidden">
   <div class="login-aura a1"></div>
-  <div class="login-aura a2"></div>
-  <div class="login-aura a3"></div>
-
+  
   <div class="login-card">
     <div class="login-mark"><i class='bx bxs-bolt'></i></div>
     <h1 class="login-title">livesociya</h1>
@@ -54,9 +52,6 @@
 
   <!-- Ambient colour behind everything. Decorative only. -->
   <div class="ambient" aria-hidden="true">
-    <div class="blob b1"></div>
-    <div class="blob b2"></div>
-    <div class="blob b3"></div>
     <div class="grid"></div>
   </div>
 
@@ -218,7 +213,7 @@
         <div class="profile-card-header">
           <div class="profile-avatar-pro" id="profileAvatarDisplay">👤</div>
           <div class="profile-name-group">
-            <div id="profileDisplayNameDisplay" class="profile-name-pro read-only-name">Display Name</div>
+            <div id="profileDisplayNameDisplay" class="profile-name-pro">Display Name</div>
             <div class="profile-handle-pro" id="profileUsernameDisplay">@username</div>
           </div>
         </div>
@@ -236,6 +231,8 @@
 
       <h3 class="hosted-events-title">Hosted Events</h3>
       <div id="myProfileEvents" class="profile-events-scroll"></div>
+
+      <div id="profileSafety" class="profile-safety hidden"></div>
     </div>
   </div>
 
@@ -381,6 +378,22 @@
     </div>
     <button class="btn-ghost" onclick="selectAvatar(this, 'google')" style="margin-bottom:12px;"><i class='bx bxl-google'></i> Use Google Photo</button>
     <button class="btn-ghost" onclick="closeProfileModal()">Cancel</button>
+  </div>
+</div>
+
+<div id="reportModal" class="modal-overlay hidden">
+  <div class="modal-content" style="text-align:left;">
+    <h3 style="text-align:center;">Report <span id="reportWho">@user</span></h3>
+    <p style="text-align:center;">This goes to the livesociya admin. They won't know who reported them.</p>
+
+    <label class="settings-label">What's happening?</label>
+    <div id="reportReasons" class="reason-grid"></div>
+
+    <label class="settings-label">Anything else? (optional)</label>
+    <textarea id="reportNote" rows="3" maxlength="500" placeholder="Add any detail that helps..."></textarea>
+
+    <button id="reportSubmit" onclick="sendReport()">Send report</button>
+    <button class="btn-ghost" onclick="closeReport()">Cancel</button>
   </div>
 </div>
 

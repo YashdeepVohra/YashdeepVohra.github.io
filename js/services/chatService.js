@@ -20,6 +20,7 @@ import { state } from '../state/store.js';
 import { renderAvatar, formatTime, formatMessage, escapeHtml, safeId } from '../utils/formatters.js';
 import { switchScreen, showNotification, toggleTime } from '../utils/ui.js';
 import { openProfileScreen } from './profileService.js';
+import { isBlocked } from './blockService.js';
 import {
   primeUsers, fetchUser, displayNameFor, avatarFor,
   resolveUsernameToUid, directChatId, normalizeUsername
@@ -63,6 +64,9 @@ export async function startChat(rawUsername = null) {
 
   const otherUid = await resolveUsernameToUid(handle);
   if (!otherUid) return alert(`User "@${handle}" does not exist on campus.`);
+  // Deliberately the same message as "no such user" — confirming a
+  // block would tell the blocked person exactly what happened.
+  if (isBlocked(otherUid)) return alert(`User "@${handle}" does not exist on campus.`);
 
   const input = document.getElementById("chatUser");
   if (input && !rawUsername) input.value = "";
@@ -72,6 +76,7 @@ export async function startChat(rawUsername = null) {
 
 export function startChatWithUid(otherUid) {
   if (!safeId(otherUid) || otherUid === state.uid) return;
+  if (isBlocked(otherUid)) return;
   openChat(directChatId(state.uid, otherUid), otherUid);
 }
 
@@ -442,6 +447,17 @@ export function updateChatFooterUI() {
   const previewContainer = document.getElementById("replyPreviewContainer");
   if (!icebreakerMsg || !inputWrapper || !previewContainer) return;
 
+  // A blocked thread is read-only. The rules refuse the write anyway;
+  // this is so the person isn't left typing into a dead box.
+  if (state.currentChatType === "direct" && isBlocked(state.currentOtherUid)) {
+    icebreakerMsg.innerHTML = `<i class='bx bx-block'></i> You can't message this person.`;
+    icebreakerMsg.classList.remove("hidden");
+    inputWrapper.classList.add("hidden");
+    previewContainer.classList.add("hidden");
+    return;
+  }
+  icebreakerMsg.innerHTML = `<i class='bx bxs-lock-alt'></i> Icebreaker sent — waiting for a reply`;
+
   const lockedOut =
     state.currentChatType === "direct" &&
     state.currentChatStatus === "icebreaker" &&
@@ -649,12 +665,17 @@ export function loadChatList() {
           const data = change.doc.data();
           if (data.unreadByUid === state.uid && state.currentChat !== change.doc.id) {
             const senderUid = (data.userUids || []).find((u) => u !== state.uid);
-            if (senderUid) showNotification(senderUid, change.doc.id, openChat);
+            if (senderUid && !isBlocked(senderUid)) showNotification(senderUid, change.doc.id, openChat);
           }
         });
 
         const chats = [];
-        snapshot.forEach((doc) => chats.push({ id: doc.id, ...doc.data() }));
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          const other = (data.userUids || []).find((u) => u !== state.uid);
+          if (isBlocked(other)) return;   // blocked conversations disappear
+          chats.push({ id: doc.id, ...data });
+        });
         chats.sort((a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0));
 
         // Never let a profile lookup failure stop the inbox rendering.

@@ -12,6 +12,7 @@ import { renderAvatar, escapeHtml, safeId } from '../utils/formatters.js';
 import { switchScreen } from '../utils/ui.js';
 import { closeChat } from './chatService.js';
 import { fetchUser, displayNameFor, usernameFor, avatarFor } from './userService.js';
+import { isBlocked, blockUser, unblockUser, submitReport, myBlockList } from './blockService.js';
 
 // The avatar picker only ever writes one of these, or the Google photo.
 const ALLOWED_AVATARS = ["\u{1F98A}", "\u{1F43C}", "\u{1F42F}", "\u{1F438}", "\u{1F436}", "\u{1F431}", "\u{1F984}", "\u{1F47D}", "\u{1F47B}"];
@@ -121,6 +122,7 @@ export async function loadProfileUI(targetUid) {
 
   const isSelf = targetUid === state.uid;
   settingsGear?.classList.toggle("hidden", !isSelf);
+  renderSafetyActions(targetUid, isSelf);
 
   try {
     await fetchUser(targetUid, { force: true });
@@ -154,6 +156,7 @@ export async function loadProfileUI(targetUid) {
 // ---------- Settings ----------
 export function openSettingsScreen() {
   document.getElementById("settingsScreen")?.classList.remove("hidden");
+  refreshBlockedList();
 
   const nameInput = document.getElementById("editDisplayNameInput");
   if (nameInput) nameInput.value = state.userDisplayName || displayNameFor(state.uid);
@@ -244,4 +247,148 @@ export async function saveProfileData() {
       btn.disabled = false;
     }
   }
+}
+
+
+/* ---------------------------------------------------------------------
+   Safety actions
+   ------------------------------------------------------------------- */
+
+/** Block / report controls, shown only on someone else's profile. */
+function renderSafetyActions(targetUid, isSelf) {
+  const host = document.getElementById("profileSafety");
+  if (!host) return;
+
+  if (isSelf) {
+    host.innerHTML = "";
+    host.classList.add("hidden");
+    return;
+  }
+
+  host.classList.remove("hidden");
+  const blocked = isBlocked(targetUid);
+  const id = safeId(targetUid);
+
+  host.innerHTML = blocked
+    ? `<button class="btn-ghost" onclick="window.confirmUnblock('${id}')"><i class='bx bx-user-check'></i> Unblock</button>`
+    : `<div class="safety-row">
+         <button class="btn-ghost" onclick="window.openReport('${id}')"><i class='bx bx-flag'></i> Report</button>
+         <button class="delete-btn" onclick="window.confirmBlock('${id}')"><i class='bx bx-block'></i> Block</button>
+       </div>`;
+}
+
+export function confirmBlock(targetUid) {
+  const name = displayNameFor(targetUid);
+  if (!window.confirm(`Block ${name}?\n\nYou won't see each other anywhere — not in the feed, not in messages, and neither of you can join the other's events. They are not told.`)) return;
+
+  blockUser(targetUid).then((ok) => {
+    if (!ok) return alert("Couldn't block right now. Check your connection.");
+    // The blocks listener re-renders everything; just leave the profile.
+    closeProfileScreen();
+  });
+}
+
+export function confirmUnblock(targetUid) {
+  const name = displayNameFor(targetUid);
+  if (!window.confirm(`Unblock ${name}? You'll both be able to see and message each other again.`)) return;
+  unblockUser(targetUid).then((ok) => {
+    if (!ok) return alert("Couldn't unblock right now.");
+    renderSafetyActions(targetUid, false);
+  });
+}
+
+/* ---------------------------------------------------------------------
+   Reporting
+   ------------------------------------------------------------------- */
+
+const REPORT_REASONS = [
+  "Harassment or bullying",
+  "Threats or violence",
+  "Sexual or explicit content",
+  "Impersonation",
+  "Spam or scam",
+  "Something else"
+];
+
+export function openReport(targetUid) {
+  const modal = document.getElementById("reportModal");
+  if (!modal) return;
+
+  modal.dataset.target = safeId(targetUid);
+  const who = document.getElementById("reportWho");
+  if (who) who.innerText = `@${usernameFor(targetUid)}`;
+
+  const list = document.getElementById("reportReasons");
+  if (list) {
+    list.innerHTML = REPORT_REASONS.map((r, i) =>
+      `<button class="reason-pill${i === 0 ? " selected" : ""}" onclick="window.pickReason(this)">${escapeHtml(r)}</button>`
+    ).join("");
+  }
+
+  const note = document.getElementById("reportNote");
+  if (note) note.value = "";
+  modal.classList.remove("hidden");
+}
+
+export function closeReport() {
+  document.getElementById("reportModal")?.classList.add("hidden");
+}
+
+export function pickReason(el) {
+  document.querySelectorAll("#reportReasons .reason-pill").forEach((p) => p.classList.remove("selected"));
+  el.classList.add("selected");
+}
+
+export async function sendReport() {
+  const modal = document.getElementById("reportModal");
+  const btn = document.getElementById("reportSubmit");
+  if (!modal) return;
+
+  const targetUid = modal.dataset.target;
+  const reason = document.querySelector("#reportReasons .reason-pill.selected")?.innerText || REPORT_REASONS[0];
+  const note = document.getElementById("reportNote")?.value || "";
+
+  if (btn) { btn.disabled = true; btn.innerHTML = "Sending..."; }
+
+  const ok = await submitReport({ targetUid, reason, note });
+
+  if (btn) { btn.disabled = false; btn.innerHTML = "Send report"; }
+  closeReport();
+
+  if (!ok) return alert("Couldn't send the report. Check your connection.");
+
+  if (window.confirm("Report sent — thank you. Do you also want to block this person?")) {
+    confirmBlock(targetUid);
+  }
+}
+
+/* ---------------------------------------------------------------------
+   Blocked list, in Settings, so a block can always be undone
+   ------------------------------------------------------------------- */
+
+export async function refreshBlockedList() {
+  const box = document.getElementById("blockedList");
+  if (!box) return;
+
+  box.innerHTML = `<p class="settings-hint">Loading...</p>`;
+  const uids = await myBlockList();
+
+  if (!uids.length) {
+    box.innerHTML = `<p class="settings-hint">You haven't blocked anyone.</p>`;
+    return;
+  }
+
+  await Promise.all(uids.map((u) => fetchUser(u)));
+  box.innerHTML = uids.map((uid) => {
+    const id = safeId(uid);
+    return `
+      <div class="blocked-row">
+        <div class="chat-avatar" style="width:34px;height:34px;font-size:16px;">${renderAvatar(avatarFor(uid))}</div>
+        <div style="flex:1;min-width:0;">
+          <div class="blocked-name">${escapeHtml(displayNameFor(uid))}</div>
+          <div class="settings-hint" style="margin:0;">@${escapeHtml(usernameFor(uid))}</div>
+        </div>
+        <button class="btn-ghost" style="width:auto;padding:7px 14px;font-size:13px;" onclick="window.confirmUnblock('${id}')">Unblock</button>
+      </div>`;
+  }).join("");
 }
