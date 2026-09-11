@@ -48,7 +48,9 @@ import {
   sendMessage,
   handleTyping,
   cancelReply,
-  handleMessageTap
+  handleMessageTap,
+  onInboxSearch,
+  clearInboxSearch
 } from './services/chatService.js';
 
 import {
@@ -67,11 +69,14 @@ import {
   closeReport,
   pickReason,
   sendReport,
-  messageFromProfile
+  messageFromProfile,
+  jumpToEvent
 } from './services/profileService.js';
 
 import { initSwipeListeners } from './interactions/swipeReply.js';
 import { initViewportFit } from './utils/viewport.js';
+import { popOverlay, anyOverlayOpen, clearOverlays } from './utils/overlays.js';
+import { openSearch, closeSearch, onSearchInput, searchOpenProfile, searchOpenEvent } from './interactions/searchUI.js';
 
 // ==========================================
 // EXPOSE TO WINDOW FOR INLINE HTML HANDLERS
@@ -85,6 +90,7 @@ import { initViewportFit } from './utils/viewport.js';
  * first or the tab switches invisibly behind them.
  */
 function goToTab(tab) {
+  clearOverlays();
   if (state.currentChat) closeChat({ silent: true });
   if (state.currentProfileUid) closeProfileScreen();
   switchScreen("home");
@@ -132,6 +138,15 @@ Object.assign(window, {
   cancelReply,
   handleMessageTap,
   toggleTime,
+  onInboxSearch,
+  clearInboxSearch,
+
+  // Search
+  openSearch,
+  closeSearch,
+  onSearchInput,
+  searchOpenProfile,
+  searchOpenEvent,
 
   // Profile
   openProfileScreen,
@@ -151,7 +166,8 @@ Object.assign(window, {
   closeReport,
   pickReason,
   sendReport,
-  messageFromProfile
+  messageFromProfile,
+  jumpToEvent
 });
 
 // ==========================================
@@ -206,7 +222,12 @@ document.addEventListener("click", () => {
 }, { once: true });
 
 // Native back button: close chat, then profile, then trap at home.
+// Back unwinds one layer at a time: overlays (create, settings, search,
+// modals) first, then chat, then profile, and finally traps at the feed
+// so back never drops a signed-in student out of the app.
 window.addEventListener("popstate", () => {
+  if (popOverlay()) return;
+
   if (state.currentChat) {
     closeChat();
   } else if (state.currentProfileUid) {
@@ -214,4 +235,10 @@ window.addEventListener("popstate", () => {
   } else if (auth.currentUser) {
     history.pushState(null, "", window.location.href);
   }
+});
+
+// Escape closes the top layer on desktop.
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  if (anyOverlayOpen()) history.back();
 });

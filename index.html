@@ -61,6 +61,7 @@
       <div class="brand-dot"><i class='bx bxs-bolt'></i></div>
       <div class="title">livesociya</div>
     </div>
+    <button class="side-item side-search" onclick="openSearch()"><i class='bx bx-search'></i> Search</button>
     <button class="side-item active" onclick="showTab('events')"><i class='bx bx-bolt-circle'></i> Live Now</button>
     <button class="side-item" onclick="showTab('recap')"><i class='bx bx-history'></i> Recap</button>
     <button class="side-item" onclick="showTab('chats')">
@@ -82,7 +83,10 @@
       <div class="brand-dot"><i class='bx bxs-bolt'></i></div>
       <div class="title">livesociya</div>
     </div>
-    <button class="profileBtn hidden" onclick="window.openProfileScreen()" id="topAvatar">👤</button>
+    <div class="topbar-actions">
+      <button class="icon-btn" onclick="openSearch()" aria-label="Search"><i class='bx bx-search'></i></button>
+      <button class="profileBtn hidden" onclick="window.openProfileScreen()" id="topAvatar">👤</button>
+    </div>
   </header>
 
   <div class="container hidden" id="home">
@@ -126,9 +130,10 @@
 
     <div id="chatsTab" class="hidden">
       <div class="section-head"><h3>Messages</h3></div>
-      <div style="display:flex; gap:10px; margin-bottom:24px;">
-        <input id="chatUser" placeholder="Search exact username..." style="margin-bottom:0;" onkeydown="if(event.key === 'Enter') startChat()" autocomplete="off" spellcheck="false" />
-        <button onclick="startChat()" style="width:auto; white-space:nowrap; padding-inline:22px;">Start</button>
+      <div class="inbox-search">
+        <i class='bx bx-search'></i>
+        <input id="chatUser" placeholder="Find someone by handle..." oninput="onInboxSearch(this.value)" onkeydown="if(event.key === 'Enter') startChat()" autocomplete="off" autocapitalize="none" spellcheck="false" />
+        <button class="icon-btn clear-btn hidden" id="inboxSearchClear" onclick="clearInboxSearch()" aria-label="Clear"><i class='bx bx-x'></i></button>
       </div>
       <div id="chatList"></div>
     </div>
@@ -385,6 +390,17 @@
     <button class="btn-ghost" onclick="selectAvatar(this, 'google')" style="margin-bottom:12px;"><i class='bx bxl-google'></i> Use Google Photo</button>
     <button class="btn-ghost" onclick="closeProfileModal()">Cancel</button>
   </div>
+</div>
+
+<div id="searchScreen" class="full-screen-view hidden">
+  <div class="screen-header search-header">
+    <button class="back-btn" onclick="closeSearch()"><i class='bx bx-left-arrow-alt'></i></button>
+    <div class="search-field">
+      <i class='bx bx-search'></i>
+      <input id="searchInput" type="search" placeholder="Search people and events..." oninput="onSearchInput(this.value)" autocomplete="off" autocapitalize="none" spellcheck="false">
+    </div>
+  </div>
+  <div class="screen-body" id="searchResults"></div>
 </div>
 
 <div id="reportModal" class="modal-overlay hidden">

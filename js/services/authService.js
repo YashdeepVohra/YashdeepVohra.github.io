@@ -15,6 +15,7 @@
 import { auth, db, isLocalhost } from '../config/firebase.js';
 import { state, resetState } from '../state/store.js';
 import { switchScreen, setLoading } from '../utils/ui.js';
+import { clearOverlays } from '../utils/overlays.js';
 import { renderAvatar } from '../utils/formatters.js';
 import { normalizeUsername } from './userService.js';
 import { loadEvents, renderEvents } from './eventsService.js';
@@ -371,6 +372,7 @@ export async function claimUsername() {
 }
 
 export function logout() {
+  clearOverlays();
   setLoading(true);
   switchScreen(null);
   resetState();

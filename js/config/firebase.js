@@ -54,6 +54,7 @@ export const db = firebase.firestore();
 // Shorthands for Firestore sentinels, so services don't reach for the
 // global `firebase` object everywhere.
 export const FieldValue = firebase.firestore.FieldValue;
+export const FieldPath = firebase.firestore.FieldPath;
 
 // Keep the session alive across tabs/reloads on shared campus machines
 // only as long as the browser session lasts is NOT what we want here —

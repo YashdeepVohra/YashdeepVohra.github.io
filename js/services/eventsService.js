@@ -16,6 +16,7 @@ import { auth, db, FieldValue } from '../config/firebase.js';
 import { state } from '../state/store.js';
 import { renderAvatar, escapeHtml, safeId } from '../utils/formatters.js';
 import { showTab } from '../utils/ui.js';
+import { openOverlay, closeOverlay } from '../utils/overlays.js';
 import { primeUsers, displayNameFor, usernameFor, avatarFor } from './userService.js';
 import { isBlocked, withoutBlocked } from './blockService.js';
 
@@ -65,7 +66,7 @@ export function toggleEventDesc(eventId) {
 }
 
 export function openCreateScreen() {
-  document.getElementById("createScreen")?.classList.remove("hidden");
+  openOverlay("createScreen");
   const now = new Date();
   const inTwoHours = new Date(now.getTime() + 2 * 60 * 60 * 1000);
   const forInput = (d) => new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
@@ -77,7 +78,7 @@ export function openCreateScreen() {
 }
 
 export function closeCreateScreen() {
-  document.getElementById("createScreen")?.classList.add("hidden");
+  closeOverlay("createScreen");
 }
 
 export async function addEvent(e) {
@@ -116,7 +117,7 @@ export async function addEvent(e) {
   }
 
   try {
-    await db.collection("events").add({
+    const ref = await db.collection("events").add({
       hostUid: state.uid,
       title: title.slice(0, 80),
       place: place.slice(0, 80),
@@ -136,6 +137,9 @@ export async function addEvent(e) {
       if (el) el.value = "";
     });
     closeCreateScreen();
+    // Land on the thing they just created rather than the top of the feed.
+    showTab("events");
+    setTimeout(() => focusEvent(ref.id), 350);
   } catch (error) {
     console.error("Publish failed:", error.code || error.message);
     alert("Failed to publish. Try again.");
@@ -529,12 +533,11 @@ function burstFrom(el) {
 // ---------- Host controls ----------
 export function openDeleteModal(id) {
   state.eventIdToManage = id;
-  document.getElementById("deleteModal")?.classList.remove("hidden");
+  openOverlay("deleteModal", { onClose: () => { state.eventIdToManage = null; } });
 }
 
 export function closeDeleteModal() {
-  state.eventIdToManage = null;
-  document.getElementById("deleteModal")?.classList.add("hidden");
+  closeOverlay("deleteModal");
 }
 
 function fadeOutCard(id, remove) {

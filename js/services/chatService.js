@@ -18,11 +18,12 @@
 import { auth, db, FieldValue } from '../config/firebase.js';
 import { state } from '../state/store.js';
 import { renderAvatar, formatTime, formatMessage, escapeHtml, safeId } from '../utils/formatters.js';
-import { switchScreen, showNotification, toggleTime } from '../utils/ui.js';
+import { switchScreen, showTab, showNotification, toggleTime } from '../utils/ui.js';
 import { openProfileScreen } from './profileService.js';
 import { isBlocked } from './blockService.js';
+import { searchPeople } from './searchService.js';
 import {
-  primeUsers, fetchUser, displayNameFor, avatarFor,
+  primeUsers, fetchUser, displayNameFor, usernameFor, avatarFor,
   resolveUsernameToUid, directChatId, normalizeUsername
 } from './userService.js';
 
@@ -166,8 +167,14 @@ export function openEventChat(eventId) {
   // innerText, not innerHTML — the title is user-supplied.
   if (hTitle) {
     hTitle.innerText = cached.title || "Event chat";
-    hTitle.style.cursor = "default";
-    hTitle.onclick = null;
+    // Tapping the title returns you to the event itself.
+    hTitle.style.cursor = "pointer";
+    hTitle.onclick = () => {
+      closeChat({ silent: true });
+      switchScreen("home");
+      showTab("events");
+      setTimeout(() => window.focusEvent?.(eventId), 80);
+    };
   }
 
   document.querySelector(".topbar")?.classList.add("hidden");
@@ -747,4 +754,67 @@ function retryInbox() {
   const wait = 1200 * Math.pow(2, inboxRetries);
   inboxRetries++;
   setTimeout(() => { if (state.uid) loadChatList(); }, wait);
+}
+
+
+/* ---------------------------------------------------------------------
+   Inbox search — replaces the old "type the exact handle" box
+   ------------------------------------------------------------------- */
+
+let inboxDebounce = 0;
+let inboxQuery = "";
+
+export function onInboxSearch(value) {
+  const q = String(value || "").trim();
+  inboxQuery = q;
+  document.getElementById("inboxSearchClear")?.classList.toggle("hidden", q.length === 0);
+
+  clearTimeout(inboxDebounce);
+
+  // Empty box means "show me my conversations again".
+  if (q.length < 2) {
+    state.chatListUnsubscribe ? renderInboxFromCache() : loadChatList();
+    return;
+  }
+
+  inboxDebounce = setTimeout(async () => {
+    const uids = await searchPeople(q);
+    if (inboxQuery !== q) return;
+
+    const list = document.getElementById("chatList");
+    if (!list) return;
+
+    if (!uids.length) {
+      list.innerHTML = `<div class="empty-state"><p>No one matches “${escapeHtml(q)}”.</p></div>`;
+      return;
+    }
+
+    list.innerHTML = uids.map((uid) => {
+      const id = safeId(uid);
+      if (!id) return "";
+      return `
+        <div class="chat-item" onclick="window.startChatWithUid('${id}')">
+          <div class="chat-avatar">${renderAvatar(avatarFor(uid))}</div>
+          <div style="flex:1;min-width:0;">
+            <div class="chat-name">${escapeHtml(displayNameFor(uid))}</div>
+            <div class="result-sub">@${escapeHtml(usernameFor(uid))}</div>
+          </div>
+          <i class='bx bx-message-rounded-dots' style="color:var(--fog);font-size:20px;"></i>
+        </div>`;
+    }).join("");
+  }, 260);
+}
+
+export function clearInboxSearch() {
+  const input = document.getElementById("chatUser");
+  if (input) input.value = "";
+  onInboxSearch("");
+  input?.focus();
+}
+
+/** Re-render the inbox from the live listener's last snapshot. */
+function renderInboxFromCache() {
+  // Simplest correct thing: re-attach. The listener fires immediately
+  // with the cached snapshot, so this costs nothing.
+  loadChatList();
 }

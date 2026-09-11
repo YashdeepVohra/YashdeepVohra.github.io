@@ -9,7 +9,9 @@
 import { auth, db } from '../config/firebase.js';
 import { state } from '../state/store.js';
 import { renderAvatar, escapeHtml, safeId } from '../utils/formatters.js';
-import { switchScreen } from '../utils/ui.js';
+import { switchScreen, showTab } from '../utils/ui.js';
+import { focusEvent } from './eventsService.js';
+import { openOverlay, closeOverlay } from '../utils/overlays.js';
 import { closeChat, startChatWithUid } from './chatService.js';
 import { fetchUser, displayNameFor, usernameFor, avatarFor } from './userService.js';
 import { isBlocked, blockUser, unblockUser, submitReport, myBlockList } from './blockService.js';
@@ -17,8 +19,8 @@ import { isBlocked, blockUser, unblockUser, submitReport, myBlockList } from './
 // The avatar picker only ever writes one of these, or the Google photo.
 const ALLOWED_AVATARS = ["\u{1F98A}", "\u{1F43C}", "\u{1F42F}", "\u{1F438}", "\u{1F436}", "\u{1F431}", "\u{1F984}", "\u{1F47D}", "\u{1F47B}"];
 
-export function openProfileModal() { document.getElementById("profileModal")?.classList.remove("hidden"); }
-export function closeProfileModal() { document.getElementById("profileModal")?.classList.add("hidden"); }
+export function openProfileModal() { openOverlay("profileModal"); }
+export function closeProfileModal() { closeOverlay("profileModal"); }
 
 function applyAvatarEverywhere(avatar) {
   ["topAvatar", "profileAvatarDisplay", "profileLargeAvatar", "sideAvatar"].forEach((id) => {
@@ -88,11 +90,20 @@ export function loadUserEvents(targetUid) {
           return;
         }
 
-        list.innerHTML = events.map((e) => `
-          <div class="card" style="padding: 16px 20px; margin-bottom: 12px; border-radius: 20px;">
-            <div style="font-size: 16px; font-weight: 700; margin-bottom: 4px;">${escapeHtml(e.title)}</div>
-            <div style="font-size: 12px; color: var(--text-muted);"><i class='bx bx-map'></i> ${escapeHtml(e.place)}</div>
-          </div>`).join("");
+        // Tapping one takes you to it in the feed — these used to be
+        // inert, which made the profile a dead end.
+        list.innerHTML = events.map((e) => {
+          const id = safeId(e.id);
+          const live = e.expiresAt > Date.now();
+          return `
+          <button class="card profile-event-row${id ? " tappable" : ""}" ${id ? `onclick="window.jumpToEvent('${id}')"` : ""}>
+            <div class="result-text">
+              <div class="result-title">${escapeHtml(e.title)}</div>
+              <div class="result-sub"><i class='bx bx-map-pin'></i> ${escapeHtml(e.place)}</div>
+            </div>
+            ${live ? `<span class="status-chip live"><span class="live-dot"></span> Live</span>` : `<span class="status-chip soon">Ended</span>`}
+          </button>`;
+        }).join("");
       },
       (error) => console.error("Profile events error:", error.code || error.message)
     );
@@ -155,7 +166,7 @@ export async function loadProfileUI(targetUid) {
 
 // ---------- Settings ----------
 export function openSettingsScreen() {
-  document.getElementById("settingsScreen")?.classList.remove("hidden");
+  openOverlay("settingsScreen");
   refreshBlockedList();
 
   const nameInput = document.getElementById("editDisplayNameInput");
@@ -168,7 +179,7 @@ export function openSettingsScreen() {
 }
 
 export function closeSettingsScreen() {
-  document.getElementById("settingsScreen")?.classList.add("hidden");
+  closeOverlay("settingsScreen");
 }
 
 export function selectSettingsAvatar(element, avatarChoice) {
@@ -329,11 +340,11 @@ export function openReport(targetUid) {
 
   const note = document.getElementById("reportNote");
   if (note) note.value = "";
-  modal.classList.remove("hidden");
+  openOverlay("reportModal");
 }
 
 export function closeReport() {
-  document.getElementById("reportModal")?.classList.add("hidden");
+  closeOverlay("reportModal");
 }
 
 export function pickReason(el) {
@@ -402,4 +413,14 @@ export function messageFromProfile(targetUid) {
   if (!uid) return;
   closeProfileScreen();
   startChatWithUid(uid);
+}
+
+
+/** From a profile, jump to one of their events in the feed. */
+export function jumpToEvent(eventId) {
+  closeProfileScreen();
+  setTimeout(() => {
+    showTab("events");
+    focusEvent(eventId);
+  }, 80);
 }
