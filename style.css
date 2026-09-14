@@ -1999,11 +1999,14 @@ html:not(.kb-open) .chat-footer {
 
 .starter-wm {
   position: absolute;
-  top: -14px;
-  right: -6px;
-  font-size: 62px;
+  /* Tucked further into the corner than an event card's, because a
+     row is short and the arrow sits centred against the right edge —
+     left where it was, the glyph read straight through the arrow. */
+  top: -20px;
+  right: -16px;
+  font-size: 58px;
   line-height: 1;
-  opacity: 0.1;
+  opacity: 0.09;
   transform: rotate(14deg);
   pointer-events: none;
   z-index: 0 !important;
@@ -2013,7 +2016,7 @@ html:not(.kb-open) .chat-footer {
 .starter:hover { transform: translateY(-2px); box-shadow: var(--lift-3); }
 .starter:active { transform: translateY(0) scale(0.99); }
 .starter:hover::before { width: 6px; }
-.starter:hover .starter-wm { transform: rotate(6deg) scale(1.1); opacity: 0.16; }
+.starter:hover .starter-wm { transform: rotate(6deg) scale(1.1); opacity: 0.15; }
 
 .starter-glyph {
   width: 42px;
@@ -2045,11 +2048,32 @@ html:not(.kb-open) .chat-footer {
 }
 .starter:hover .starter-go { transform: translateX(1px); opacity: 1; }
 
+/* The open-ended one. Same row, same shape, deliberately colourless:
+   it belongs to the set but must not compete with the three actual
+   suggestions, which are there to save somebody the thinking. */
+.starter-blank {
+  background: transparent;
+  box-shadow: none;
+  border: 1.5px dashed var(--ash);
+  padding: 12.5px 14.5px 12.5px 18.5px;
+}
+.starter-blank::before, .starter-blank::after { display: none; }
+.starter-blank .starter-glyph { background: var(--bone); color: var(--fog); }
+.starter-blank .starter-go { color: var(--fog); }
+.starter-blank:hover {
+  background: var(--paper);
+  border-color: var(--periwinkle);
+  box-shadow: var(--lift-2);
+}
+.starter-blank:hover .starter-glyph { color: var(--violet); }
+.starter-blank:hover .starter-go { color: var(--violet); }
+
 /* They arrive one after another, using the feed's own entrance. */
 .starter { animation: riseIn 0.42s var(--ease) backwards; }
 .starter:nth-child(1) { animation-delay: 0.05s; }
 .starter:nth-child(2) { animation-delay: 0.12s; }
 .starter:nth-child(3) { animation-delay: 0.19s; }
+.starter:nth-child(4) { animation-delay: 0.26s; }
 
 /* Below 360px the arrow is what pushes the sub-line over the edge, and
    it is the one part of the row carrying no information. */
@@ -2063,25 +2087,5 @@ html:not(.kb-open) .chat-footer {
   .fr-spark, .starter { animation: none !important; }
 }
 
-/* .empty-state p sets margin:0 and, being a class plus a type, outranks
-   a lone class — which is why this line sat flush against the tiles. */
-.empty-state .starter-foot {
-  margin-top: var(--s-24);
-  font-size: 13px;
-  color: var(--text-muted);
-}
 
-/* A button that reads as a sentence, not a control. */
-.linkish {
-  width: auto;
-  display: inline;
-  padding: 0;
-  background: none;
-  box-shadow: none;
-  color: var(--violet);
-  font-size: inherit;
-  font-weight: 450;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-.linkish:hover { box-shadow: none; transform: none; filter: none; }
+

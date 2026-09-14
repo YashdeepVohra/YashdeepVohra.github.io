@@ -842,8 +842,21 @@ export function renderEvents() {
              </svg>
            </button>`;
          }).join("")}
+         <button class="starter starter-blank" onclick="window.openCreateScreen()">
+           <span class="starter-glyph">
+             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true">
+               <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+             </svg>
+           </span>
+           <span class="starter-body">
+             <span class="starter-label">Start from scratch</span>
+             <span class="starter-sub">Anything else you've got</span>
+           </span>
+           <svg class="starter-go" viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true">
+             <path d="M5 12h13M12.5 6l6 6-6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+           </svg>
+         </button>
        </div>
-       <p class="starter-foot">Something else in mind? <button class="linkish" onclick="window.openCreateScreen()">Start from scratch</button></p>
      </div>`
   );
   syncList(
