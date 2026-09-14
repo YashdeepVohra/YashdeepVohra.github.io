@@ -96,7 +96,12 @@ import {
   toggleVouch
 } from './services/orbitService.js';
 
-import { toggleFollow } from './services/followService.js';
+import {
+  toggleFollow,
+  toggleFollowInList,
+  openFollowList,
+  closeFollowList
+} from './services/followService.js';
 
 import { initSwipeListeners } from './interactions/swipeReply.js';
 import { initViewportFit } from './utils/viewport.js';
@@ -127,6 +132,11 @@ function peopleForManagedEvent() {
 /** Follow from a profile, re-rendering that profile's controls. */
 function followFromProfile(uid) {
   toggleFollow(uid, () => refreshProfileSocial(uid));
+}
+
+/** The three numbers on a profile open the people behind them. */
+function openProfileList(kind) {
+  openFollowList(state.currentProfileUid || state.uid, kind);
 }
 
 function goToTab(tab) {
@@ -217,6 +227,9 @@ Object.assign(window, {
 
   // Following
   toggleFollow: followFromProfile,
+  toggleFollowInList,
+  openProfileList,
+  closeFollowList,
 
   // Orbit
   openOrbitScreen,

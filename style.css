@@ -1553,6 +1553,14 @@ html:not(.kb-open) .chat-footer {
   100% { transform: scale(1.55); opacity: 0; }
 }
 
+/* A phone that reports few cores or little memory gets the identical
+   picture, standing still. The layout carries the meaning; the turning
+   was only ever decoration, and it is the one part that costs a weak
+   device anything. */
+.orbit-system.still .orbit-ring,
+.orbit-system.still .orbit-face,
+.orbit-system.still .orbit-face.is-out::after { animation: none !important; }
+
 @media (prefers-reduced-motion: reduce) {
   .orbit-ring, .orbit-face, .orbit-face.is-out::after { animation: none !important; }
 }
@@ -1609,6 +1617,7 @@ html:not(.kb-open) .chat-footer {
 
 /* ---- Somebody else's profile ---- */
 .orbit-actions { display: flex; gap: var(--s-8); flex-wrap: wrap; }
+.orbit-actions.second { margin-top: var(--s-8); }
 
 .orbit-btn {
   flex: 1;
@@ -1631,6 +1640,7 @@ html:not(.kb-open) .chat-footer {
 .orbit-btn.linked  { background: color-mix(in srgb, var(--mint) 16%, transparent); color: #17765a; }
 .orbit-btn.pending { background: var(--bone); color: var(--text-muted); }
 .orbit-btn.vouched { background: color-mix(in srgb, var(--periwinkle) 26%, transparent); color: var(--plum); }
+.orbit-btn.following { background: var(--bone); color: var(--text); box-shadow: inset 0 0 0 1px var(--ash); }
 
 .vouch-line {
   display: flex;
@@ -1725,3 +1735,12 @@ html:not(.kb-open) .chat-footer {
 /* The trust chip makes the name column taller, which left the Live /
    Soon pill floating halfway down the card. Pin it to the top row. */
 .card-top .status-chip { align-self: flex-start; margin-top: 2px; }
+
+/* Joined / hosted moved out of the stat boxes to make room for the
+   numbers a stranger actually reads a profile for. */
+.profile-track {
+  margin-top: 5px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.profile-track span { color: var(--text); font-weight: 450; }

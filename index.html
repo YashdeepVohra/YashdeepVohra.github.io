@@ -234,18 +234,18 @@
           </div>
         </div>
         <div class="profile-stats-pro no-margin-bottom">
-          <div class="stat-box-pro">
+          <button class="stat-box-pro tappable" onclick="openProfileList('followers')">
             <span class="stat-num" id="statFollowers">0</span>
             <span class="stat-label">Followers</span>
-          </div>
-          <div class="stat-box-pro">
+          </button>
+          <button class="stat-box-pro tappable" onclick="openProfileList('following')">
             <span class="stat-num" id="statFollowing">0</span>
             <span class="stat-label">Following</span>
-          </div>
-          <div class="stat-box-pro">
+          </button>
+          <button class="stat-box-pro tappable" onclick="openProfileList('vouches')">
             <span class="stat-num" id="statVouches">0</span>
             <span class="stat-label">Vouches</span>
-          </div>
+          </button>
         </div>
       </div>
 
@@ -442,6 +442,15 @@
     </button>
   </div>
   <div class="screen-body" id="orbitBody"></div>
+</div>
+
+<!-- The people behind a number on a profile -->
+<div id="followListScreen" class="full-screen-view hidden">
+  <div class="screen-header">
+    <button class="back-btn" onclick="closeFollowList()"><i class='bx bx-left-arrow-alt'></i></button>
+    <div class="header-title" id="followListTitle">Followers</div>
+  </div>
+  <div class="screen-body" id="followListBody"></div>
 </div>
 
 <div id="peopleModal" class="modal-overlay hidden">
