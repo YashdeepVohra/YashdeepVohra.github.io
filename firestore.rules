@@ -21,6 +21,7 @@ rules_version = '2';
 //   chats/{uidA_uidB}             userUids[2], sorted, id == the join
 //   chats/{chatId}/messages/*     direct messages, the two members only
 //   orbit/{uidA_uidB}             a connection: pending, then linked
+//                                 (follows live as arrays on users/*)
 // =====================================================================
 
 service cloud.firestore {
@@ -62,6 +63,14 @@ service cloud.firestore {
     function selfToggleOnly(before, after) {
       return after.toSet().difference(before.toSet()).hasOnly([uid()])
           && before.toSet().difference(after.toSet()).hasOnly([uid()]);
+    }
+
+    // A list may gain or lose at most one entry per write. It does not
+    // prove the entry is true, but it does stop a list being stuffed in
+    // a single request.
+    function oneAtATime(before, after) {
+      return after.toSet().difference(before.toSet()).size() <= 1
+          && before.toSet().difference(after.toSet()).size() <= 1;
     }
 
     function isString(value, maxLen) {
@@ -122,12 +131,30 @@ service cloud.firestore {
         && isString(request.resource.data.displayName, 20)
         && request.resource.data.avatar is string
         && request.resource.data.avatar.size() <= 300
-        // Vouches are earned from other people, never handed to yourself.
-        && !('vouchedBy' in request.resource.data);
+        // Vouches and followers are given by other people. Neither can
+        // be handed to yourself at sign-up.
+        && !('vouchedBy' in request.resource.data)
+        && !('followers' in request.resource.data)
+        && !('following' in request.resource.data);
 
       allow update: if isMe(userId)
         // Fields the client is allowed to touch at all.
-        && changedKeys().hasOnly(['username', 'displayName', 'avatar', 'googlePfp', 'updatedAt'])
+        && changedKeys().hasOnly(['username', 'displayName', 'avatar', 'googlePfp', 'updatedAt', 'following'])
+        // You keep your OWN following list, and only ever one name at a
+        // time. Note the asymmetry, which is the point of the design:
+        // `followers` below can only be written by the follower, so a
+        // follower count is not something its owner can inflate.
+        && (
+             !(changedKeys().hasAny(['following']))
+             || (
+                  request.resource.data.following is list
+                  && request.resource.data.following.size() <= 5000
+                  && oneAtATime(
+                       'following' in resource.data ? resource.data.following : [],
+                       request.resource.data.following
+                     )
+                )
+           )
         // Nobody promotes or un-bans themselves.
         && request.resource.data.uid == resource.data.uid
         && request.resource.data.banned == resource.data.banned
@@ -162,6 +189,25 @@ service cloud.firestore {
              request.resource.data.vouchedBy
            )
         && linkedWith(userId)
+        && !blockedWith(userId);
+
+      // FOLLOWING is the light, public, one-way half of the graph: no
+      // permission is asked, and the only thing it writes on someone
+      // else's profile is the follower's own uid in their `followers`.
+      //
+      // That single restriction is what makes the number worth showing.
+      // The owner of a profile cannot touch `followers` at all, and
+      // nobody can add anyone but themselves, so a follower count can
+      // only ever have been earned one real account at a time.
+      allow update: if signedIn()
+        && !isMe(userId)
+        && changedKeys().hasOnly(['followers'])
+        && request.resource.data.followers is list
+        && request.resource.data.followers.size() <= 5000
+        && selfToggleOnly(
+             'followers' in resource.data ? resource.data.followers : [],
+             request.resource.data.followers
+           )
         && !blockedWith(userId);
 
       // Accounts are never deleted from the client — that would free a

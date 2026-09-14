@@ -29,6 +29,7 @@ export const state = {
   // ---- Orbit: who you'd actually show up for ----
   // One listener over orbit/{pairId} fills all three of these, so a
   // connection and a request waiting on you cost the same single query.
+  following: [],           // uids I follow — my own list, from my user doc
   orbitUids: [],           // linked — both of you accepted
   orbitIncoming: [],       // uids who asked to join your orbit
   orbitOutgoing: [],       // uids you asked, still waiting
@@ -104,6 +105,7 @@ export function resetState() {
   state.googlePfp = "";
   state.userCache = {};
   state.blockedUids = [];
+  state.following = [];
   state.orbitUids = [];
   state.orbitIncoming = [];
   state.orbitOutgoing = [];

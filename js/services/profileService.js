@@ -17,6 +17,7 @@ import { fetchUser, displayNameFor, usernameFor, avatarFor, rememberUser } from 
 import {
   orbitStatus, inOrbit, hasVouched, vouchCount, vouchersYouKnow, renderOrbitRings
 } from './orbitService.js';
+import { isFollowing, followerCount, followingCount } from './followService.js';
 import { isBlocked, blockUser, unblockUser, submitReport, myBlockList } from './blockService.js';
 
 // The avatar picker only ever writes one of these, or the Google photo.
@@ -126,6 +127,8 @@ export async function loadProfileUI(targetUid) {
   const statJoined = document.getElementById("statEventsJoined");
   const statHosted = document.getElementById("statEventsHosted");
   const statVouches = document.getElementById("statVouches");
+  const statFollowers = document.getElementById("statFollowers");
+  const statFollowing = document.getElementById("statFollowing");
   const eventsList = document.getElementById("myProfileEvents");
 
   // Placeholders while we fetch. innerText everywhere: no markup path.
@@ -135,6 +138,8 @@ export async function loadProfileUI(targetUid) {
   if (statJoined) statJoined.innerText = "-";
   if (statHosted) statHosted.innerText = "-";
   if (statVouches) statVouches.innerText = "-";
+  if (statFollowers) statFollowers.innerText = "-";
+  if (statFollowing) statFollowing.innerText = "-";
   if (eventsList) {
     eventsList.innerHTML = `<div style="text-align:center; padding:20px; color:var(--text-muted); font-size: 13px;"><i class='bx bx-loader-alt bx-spin'></i> Loading...</div>`;
   }
@@ -153,10 +158,7 @@ export async function loadProfileUI(targetUid) {
     if (usernameDisplay) usernameDisplay.innerText = "@" + usernameFor(targetUid);
     renderOrbitActions(targetUid, isSelf);
 
-    // The public trust number. Not a follower count — a vouch is one
-    // person deliberately saying they know this one, and it is the only
-    // social number on a profile anybody else can actually verify.
-    if (statVouches) statVouches.innerText = vouchCount(targetUid);
+    refreshProfileSocial(targetUid);
 
     if (isSelf) {
       state.userDisplayName = displayNameFor(targetUid);
@@ -282,6 +284,29 @@ export async function saveProfileData() {
    ------------------------------------------------------------------- */
 
 /**
+ * The three numbers, and the follow button. Split out so following
+ * somebody can update the profile in place instead of reloading it.
+ *
+ * Followers is the one that carries weight: the rules let only the
+ * follower write their own uid into it, so it is the single social
+ * number on a profile that its owner could not have inflated. Vouches
+ * sits beside it as the stronger, rarer version of the same idea.
+ */
+export function refreshProfileSocial(targetUid) {
+  if (!targetUid || state.currentProfileUid !== targetUid) return;
+
+  const followers = document.getElementById("statFollowers");
+  const following = document.getElementById("statFollowing");
+  const vouches = document.getElementById("statVouches");
+
+  if (followers) followers.innerText = followerCount(targetUid);
+  if (following) following.innerText = followingCount(targetUid);
+  if (vouches) vouches.innerText = vouchCount(targetUid);
+
+  renderOrbitActions(targetUid, targetUid === state.uid);
+}
+
+/**
  * The orbit half of a profile. On your own it is the rings and a way
  * into the Orbit screen; on someone else's it is where you stand with
  * them, their vouches, and — once you are linked — your own vouch.
@@ -324,6 +349,11 @@ export function renderOrbitActions(targetUid, isSelf) {
   const known = vouchersYouKnow(targetUid);
   const total = vouchCount(targetUid);
 
+  // The light action sits next to the deliberate one: follow to keep
+  // up with someone, orbit for the people you'd actually show up for.
+  const following = isFollowing(targetUid);
+  const followBtn = `<button class="orbit-btn ${following ? "following" : "primary"}" onclick="window.toggleFollow('${id}')"><i class='bx ${following ? "bx-check" : "bx-plus"}'></i> ${following ? "Following" : "Follow"}</button>`;
+
   let action;
   if (status === "linked") {
     action = `<button class="orbit-btn linked" onclick="window.confirmLeaveOrbit('${id}')"><i class='bx bx-check-circle'></i> In your orbit</button>`;
@@ -350,7 +380,7 @@ export function renderOrbitActions(targetUid, isSelf) {
     ? `<button class="orbit-btn ${hasVouched(targetUid) ? "vouched" : ""}" onclick="window.toggleVouch('${id}')"><i class='bx ${hasVouched(targetUid) ? "bxs-badge-check" : "bx-badge-check"}'></i> ${hasVouched(targetUid) ? "You vouched" : "Vouch for them"}</button>`
     : "";
 
-  host.innerHTML = `<div class="orbit-actions">${action}${vouch}</div>${trust}`;
+  host.innerHTML = `<div class="orbit-actions">${followBtn}${action}</div>${vouch ? `<div class="orbit-actions second">${vouch}</div>` : ""}${trust}`;
 }
 
 /** Block / report controls, shown only on someone else's profile. */

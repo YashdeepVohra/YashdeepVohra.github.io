@@ -384,20 +384,48 @@ function orbitArt() {
 
 // Faces a ring can hold, innermost first — roughly its circumference
 // divided by a face, so nothing ever overlaps its neighbour.
-const RING_CAPS = [6, 10, 14, 18, 22];
-const RING_FACE = [34, 30, 26, 23, 21];   // px, shrinking outwards
-const RING_SPIN = [26, 34, 44, 56, 70];   // seconds — outer rings drift
+//
+// Three rings, not five. Seventy faces was technically fine and
+// visually a mess: past about twenty there is no reading it, just
+// texture. Everyone beyond the third ring becomes a "+N" on your own
+// avatar, which is both calmer and a good deal cheaper, since every
+// face on screen is one more running animation.
+const RING_CAPS = [5, 8, 11];
+const RING_FACE = [36, 31, 27];           // px, shrinking outwards
+const RING_SPIN = [30, 42, 58];           // seconds — outer rings drift
 const MAX_SHOWN = RING_CAPS.reduce((a, b) => a + b, 0);
 
 // Where the rings sit for each possible ring count, so two rings are
-// spaced like two rings rather than like the first and last of five.
+// spaced like two rings rather than like the first and last of three.
 const RING_LAYOUT = [
-  [132],
+  [128],
   [112, 206],
-  [104, 182, 260],
-  [98, 154, 210, 266],
-  [96, 138, 180, 222, 264]
+  [104, 180, 256]
 ];
+
+/**
+ * Weak phones get the same picture, standing still.
+ *
+ * Even three rings means a dozen-odd elements each running their own
+ * infinite transform. That is cheap on anything recent — but "cheap on
+ * anything recent" is exactly the assumption that makes an app feel
+ * broken on the ₹8,000 phone half a campus actually owns. So on a
+ * device reporting few cores or little memory, and for anyone who has
+ * asked their system for less motion, the orbit is laid out exactly
+ * the same way and simply does not turn. Nothing is lost: it was never
+ * the spinning that carried the meaning.
+ */
+const WEAK_DEVICE = (() => {
+  try {
+    const cores = navigator.hardwareConcurrency || 8;
+    const memory = navigator.deviceMemory || 4;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    return reduced || cores <= 4 || memory <= 2;
+  } catch (e) {
+    return false;
+  }
+})();
+
 
 /**
  * Spread `n` faces over `k` rings in proportion to what each ring can
@@ -467,7 +495,10 @@ export function renderOrbitRings(hostEl, uids, total) {
 
     const faces = list.map((u, n) => {
       const id = safeId(u);
-      const out = outNow.includes(u);
+      // Only the innermost ring pulses. Six green rings blinking at
+      // once stops reading as "these people are out" and starts
+      // reading as decoration.
+      const out = outNow.includes(u) && i === 0;
       return `
         <span class="orbit-slot" style="--a:${(n * slotStep).toFixed(1)}deg">
           <span class="orbit-face${out ? " is-out" : ""}"
@@ -486,7 +517,7 @@ export function renderOrbitRings(hostEl, uids, total) {
   const count = typeof total === "number" ? total : people.length;
 
   hostEl.innerHTML = `
-    <div class="orbit-system" style="--box:${BOX}">
+    <div class="orbit-system${WEAK_DEVICE ? " still" : ""}" style="--box:${BOX}">
       <button class="orbit-core" onclick="window.openOrbitScreen()" title="Open your orbit">
         ${renderAvatar(state.userAvatar)}
         ${hidden ? `<span class="orbit-more">+${hidden}</span>` : ""}

@@ -66,6 +66,7 @@ import {
 } from './services/chatService.js';
 
 import {
+  refreshProfileSocial,
   openProfileScreen,
   closeProfileScreen,
   openProfileModal,
@@ -95,6 +96,8 @@ import {
   toggleVouch
 } from './services/orbitService.js';
 
+import { toggleFollow } from './services/followService.js';
+
 import { initSwipeListeners } from './interactions/swipeReply.js';
 import { initViewportFit } from './utils/viewport.js';
 import { popOverlay, anyOverlayOpen, clearOverlays } from './utils/overlays.js';
@@ -121,6 +124,11 @@ function peopleForManagedEvent() {
  * and profile are full-screen layers, so they have to be dismissed
  * first or the tab switches invisibly behind them.
  */
+/** Follow from a profile, re-rendering that profile's controls. */
+function followFromProfile(uid) {
+  toggleFollow(uid, () => refreshProfileSocial(uid));
+}
+
 function goToTab(tab) {
   clearOverlays();
   // Recap is only fetched the first time someone actually asks for it.
@@ -206,6 +214,9 @@ Object.assign(window, {
   closeSettingsScreen,
   selectSettingsAvatar,
   saveProfileData,
+
+  // Following
+  toggleFollow: followFromProfile,
 
   // Orbit
   openOrbitScreen,

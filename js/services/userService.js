@@ -86,7 +86,12 @@ export function rememberUser(uid, data) {
       // localStorage. The count is exact; the list is capped, and is
       // only ever used to find the vouchers you already know.
       vouchedBy: Array.isArray(data.vouchedBy) ? data.vouchedBy.slice(0, 50) : [],
-      vouchCount: Array.isArray(data.vouchedBy) ? data.vouchedBy.length : 0
+      vouchCount: Array.isArray(data.vouchedBy) ? data.vouchedBy.length : 0,
+      // Follower lists can run to thousands of uids. Only the numbers
+      // are kept here — nothing on screen needs the list itself, since
+      // whether YOU follow someone is answered by your own list.
+      followerCount: Array.isArray(data.followers) ? data.followers.length : 0,
+      followingCount: Array.isArray(data.following) ? data.following.length : 0
     }
   };
   writeStore(store);

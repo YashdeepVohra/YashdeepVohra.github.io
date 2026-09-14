@@ -239,6 +239,7 @@ export function initializeUserApp(userData) {
   state.userDisplayName = userData.displayName || state.username || "Student";
   state.userAvatar = userData.avatar || "\u{1F464}";
   state.googlePfp = userData.googlePfp || "";
+  state.following = Array.isArray(userData.following) ? userData.following : [];
 
   // Names and avatars saved on a previous visit go back into the cache
   // before anything renders, so the first paint costs zero reads.

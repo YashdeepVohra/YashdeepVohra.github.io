@@ -1436,69 +1436,125 @@ html:not(.kb-open) .chat-footer {
 
 .orbit-system {
   position: relative;
-  width: 190px;
-  height: 190px;
-  margin: var(--s-8) auto 0;
+  width: calc(var(--box) * 1px);
+  height: calc(var(--box) * 1px);
+  margin: var(--s-12) auto var(--s-8);
   display: grid;
   place-items: center;
+}
+
+/* Small screens get the same system, just smaller — scaling the whole
+   thing keeps every ring in proportion and costs nothing, since the
+   transform is composited like the rotations inside it. */
+@media (max-width: 420px) {
+  .orbit-system { transform: scale(0.82); margin: 0 auto -26px; }
 }
 
 .orbit-core {
   position: relative;
-  z-index: 2;
-  width: 52px;
-  height: 52px;
+  z-index: 3;
+  width: 58px;
+  height: 58px;
   border-radius: 50%;
   display: grid;
   place-items: center;
-  font-size: 24px;
+  font-size: 26px;
   background: var(--paper);
   box-shadow: 0 0 0 2px var(--periwinkle), var(--lift-1);
+  transition: transform 0.18s var(--ease);
+}
+.orbit-core:active { transform: scale(0.94); }
+
+/* The overflow count, once five rings are full. */
+.orbit-more {
+  position: absolute;
+  bottom: -7px;
+  right: -9px;
+  min-width: 26px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--r-pill);
+  background: var(--aubergine);
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 500;
+  display: grid;
+  place-items: center;
+  box-shadow: var(--lift-1);
 }
 
+/* One rule covers all five rings: --d is the diameter, --dur the time
+   for a full turn, --fade how present the ring's line is. */
 .orbit-ring {
   position: absolute;
-  inset: 0;
+  top: 50%;
+  left: 50%;
+  width: calc(var(--d) * 1px);
+  height: calc(var(--d) * 1px);
+  margin: calc(var(--d) * -0.5px) 0 0 calc(var(--d) * -0.5px);
   border-radius: 50%;
-  border: 1px solid color-mix(in srgb, var(--periwinkle) 32%, transparent);
-  animation: orbitSpin 34s linear infinite;
+  border: 1px solid color-mix(in srgb, var(--periwinkle) calc(var(--fade) * 100%), transparent);
+  animation: orbitSpin var(--dur) linear infinite;
 }
-.orbit-ring.ring-in {
-  inset: 34px;
-  border-color: color-mix(in srgb, var(--periwinkle) 46%, transparent);
-  animation-duration: 24s;
-}
-.orbit-ring.ring-out { animation-direction: reverse; }
 
-/* A face is placed by rotating its slot out to the rim; the face then
-   spins back the other way so it stays the right way up. */
+/* Neighbouring rings turn opposite ways, and each face turns back the
+   other way at the same rate so nobody ends up upside down. */
+.orbit-ring.cw  { animation-direction: normal; }
+.orbit-ring.ccw { animation-direction: reverse; }
+.orbit-ring.cw  .orbit-face { animation-direction: reverse; }
+.orbit-ring.ccw .orbit-face { animation-direction: normal; }
+
+/* Hovering holds the whole system still so a face can be aimed at. */
+.orbit-system:hover .orbit-ring,
+.orbit-system:hover .orbit-face { animation-play-state: paused; }
+
 .orbit-slot {
   position: absolute;
   inset: 0;
   transform: rotate(var(--a));
 }
+
 .orbit-face {
   position: absolute;
-  top: -17px;
+  top: 0;
   left: 50%;
-  width: 34px;
-  height: 34px;
-  margin-left: -17px;
+  width: calc(var(--s) * 1px);
+  height: calc(var(--s) * 1px);
+  margin-left: calc(var(--s) * -0.5px);
+  margin-top: calc(var(--s) * -0.5px);
   border-radius: 50%;
   display: grid;
   place-items: center;
-  font-size: 17px;
+  font-size: calc(var(--s) * 0.5px);
   background: var(--paper);
   box-shadow: var(--lift-1);
-  animation: orbitSpin 34s linear infinite reverse;
+  cursor: pointer;
+  animation: orbitSpin var(--dur) linear infinite;
+  transition: box-shadow 0.18s var(--ease);
 }
-.ring-in .orbit-face { animation-duration: 24s; }
-.ring-out .orbit-face { animation-direction: normal; }
+.orbit-face:hover { box-shadow: 0 0 0 2px var(--violet), var(--lift-2); }
+
+/* Somebody in your orbit who is at something RIGHT NOW. This is the
+   whole reason the visual exists rather than being a number. */
+.orbit-face.is-out { box-shadow: 0 0 0 2px var(--mint), var(--lift-1); }
+.orbit-face.is-out::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+  border: 2px solid var(--mint);
+  animation: outPulse 2.4s var(--ease) infinite;
+}
 
 @keyframes orbitSpin { to { transform: rotate(360deg); } }
+@keyframes outPulse {
+  0%   { transform: scale(1);    opacity: 0.75; }
+  70%  { transform: scale(1.55); opacity: 0; }
+  100% { transform: scale(1.55); opacity: 0; }
+}
 
 @media (prefers-reduced-motion: reduce) {
-  .orbit-ring, .orbit-face { animation: none !important; }
+  .orbit-ring, .orbit-face, .orbit-face.is-out::after { animation: none !important; }
 }
 
 .orbit-system-label {
@@ -1506,6 +1562,29 @@ html:not(.kb-open) .chat-footer {
   font-size: 13px;
   color: var(--text-muted);
   margin-top: var(--s-8);
+}
+.orbit-system-label b { color: var(--text); font-weight: 450; }
+
+.out-now {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #17765a;
+}
+.out-now .live-dot { width: 6px; height: 6px; }
+
+.orbit-out-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  padding: 3px 9px;
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--mint) 16%, transparent);
+  color: #17765a;
+  font-size: 11px;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 /* ---- The card on your own profile ---- */
