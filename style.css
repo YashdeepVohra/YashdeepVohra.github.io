@@ -1915,54 +1915,152 @@ html:not(.kb-open) .chat-footer {
    The empty feed is the whole app for the first people to open it, so
    it asks for something rather than reporting that nothing is there.
    ===================================================================== */
-.empty-state.first-run { padding-block: var(--s-24); }
-.empty-state.first-run p { max-width: 34ch; margin-left: auto; margin-right: auto; }
+/* The first screen anybody sees deserves the same language as the rest
+   of the app, not a form. Each starter is built like a miniature event
+   card — its own vibe colour, the leading accent bar, the oversized
+   watermark glyph tucked into the corner — so the empty feed previews
+   the thing it is asking you to make. */
+.empty-state.first-run { padding-block: var(--s-32) var(--s-24); }
+.empty-state.first-run h4 {
+  font-size: 19px;
+  letter-spacing: -0.02em;
+  margin-bottom: 6px;
+  max-width: 20ch;
+  margin-left: auto;
+  margin-right: auto;
+}
+.empty-state.first-run p { max-width: 32ch; margin-left: auto; margin-right: auto; }
 
-/* Three openers. On a phone they are full-width rows, because a row is
-   an easy thing to hit with a thumb and three pills wrapping 2-then-1
-   looks like a mistake. From tablet up they become three equal tiles
-   with the glyph over the label, which is what the width is for. */
+/* The brand mark, doing the job the sad little face used to do badly:
+   an empty feed is an invitation, not an error. */
+.fr-spark {
+  width: 58px;
+  height: 58px;
+  border-radius: 19px;
+  display: grid;
+  place-items: center;
+  margin: 0 auto var(--s-16);
+  color: var(--paper);
+  background: linear-gradient(140deg, var(--violet), var(--periwinkle) 55%, #f9a8d4);
+  box-shadow: 0 10px 26px rgba(124, 107, 240, 0.30);
+  animation: sparkFloat 4.5s var(--ease) infinite;
+}
+@keyframes sparkFloat {
+  0%, 100% { transform: translateY(0) rotate(-4deg); }
+  50%      { transform: translateY(-6px) rotate(4deg); }
+}
+
 .starter-grid {
   display: grid;
   grid-template-columns: 1fr;
   gap: 10px;
-  max-width: 320px;
+  max-width: 380px;
   margin: var(--s-24) auto 0;
+  text-align: left;
 }
 
 .starter {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
   width: 100%;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
-  gap: 12px;
-  padding: 14px 18px;
+  gap: 13px;
+  padding: 14px 16px 14px 20px;
   border-radius: var(--r-card);
   background: var(--paper);
   color: var(--text);
-  font-size: 15px;
-  font-weight: 450;
   text-align: left;
-  box-shadow: var(--lift-1);
+  box-shadow: var(--lift-2);
+  transition: transform 0.18s var(--ease), box-shadow 0.18s var(--ease);
 }
-.starter-glyph { font-size: 20px; line-height: 1; flex-shrink: 0; }
-.starter-label { white-space: nowrap; }
+.starter > * { position: relative; z-index: 1; }
 
-@media (min-width: 560px) {
-  .starter-grid {
-    grid-template-columns: repeat(3, 1fr);
-    max-width: 480px;
-    gap: 12px;
-  }
-  .starter {
-    flex-direction: column;
-    justify-content: center;
-    gap: 8px;
-    padding: 20px 10px;
-    text-align: center;
-  }
-  .starter-glyph { font-size: 26px; }
-  .starter-label { font-size: 14px; }
+/* The same leading bar and top wash an event card carries. */
+.starter::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 4px;
+  background: var(--vibe, var(--periwinkle));
+  transition: width 0.2s var(--ease);
+  z-index: 0;
+}
+.starter::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 72px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--vibe, var(--periwinkle)) 15%, transparent), transparent);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.starter-wm {
+  position: absolute;
+  top: -14px;
+  right: -6px;
+  font-size: 62px;
+  line-height: 1;
+  opacity: 0.1;
+  transform: rotate(14deg);
+  pointer-events: none;
+  z-index: 0 !important;
+  transition: transform 0.5s var(--ease), opacity 0.5s var(--ease);
+}
+
+.starter:hover { transform: translateY(-2px); box-shadow: var(--lift-3); }
+.starter:active { transform: translateY(0) scale(0.99); }
+.starter:hover::before { width: 6px; }
+.starter:hover .starter-wm { transform: rotate(6deg) scale(1.1); opacity: 0.16; }
+
+.starter-glyph {
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  font-size: 20px;
+  background: color-mix(in srgb, var(--vibe, var(--periwinkle)) 22%, var(--paper));
+}
+
+.starter-body { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.starter-label { font-size: 15px; font-weight: 450; white-space: nowrap; }
+.starter-sub {
+  font-size: 12.5px;
+  font-weight: 400;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.starter-go {
+  flex-shrink: 0;
+  color: var(--vibe, var(--periwinkle));
+  transform: translateX(-2px);
+  opacity: 0.7;
+  transition: transform 0.18s var(--ease), opacity 0.18s var(--ease);
+}
+.starter:hover .starter-go { transform: translateX(1px); opacity: 1; }
+
+/* They arrive one after another, using the feed's own entrance. */
+.starter { animation: riseIn 0.42s var(--ease) backwards; }
+.starter:nth-child(1) { animation-delay: 0.05s; }
+.starter:nth-child(2) { animation-delay: 0.12s; }
+.starter:nth-child(3) { animation-delay: 0.19s; }
+
+/* Below 360px the arrow is what pushes the sub-line over the edge, and
+   it is the one part of the row carrying no information. */
+@media (max-width: 359px) {
+  .starter { padding: 13px 14px 13px 18px; gap: 10px; }
+  .starter-glyph { width: 38px; height: 38px; font-size: 18px; }
+  .starter-go { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fr-spark, .starter { animation: none !important; }
 }
 
 /* .empty-state p sets margin:0 and, being a class plus a type, outranks

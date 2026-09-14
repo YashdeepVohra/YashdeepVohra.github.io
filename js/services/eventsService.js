@@ -93,9 +93,27 @@ export function toggleEventDesc(eventId) {
    because the only question left is where.
    ------------------------------------------------------------------- */
 const STARTERS = [
-  { tag: "\u2615 Chill",  title: "Chai and complaining", label: "Chai run" },
-  { tag: "\u{1F4DA} Study",  title: "Study grind", label: "Study session" },
-  { tag: "\u{1F3C0} Sports", title: "Football, whoever turns up", label: "Kick a ball" }
+  {
+    tag: "\u2615 Chill",
+    title: "Chai and complaining",
+    label: "Chai run",
+    sub: "Grab whoever's free",
+    vibe: "var(--vibe-chill)"
+  },
+  {
+    tag: "\u{1F4DA} Study",
+    title: "Study grind",
+    label: "Study session",
+    sub: "Misery loves company",
+    vibe: "var(--vibe-study)"
+  },
+  {
+    tag: "\u{1F3C0} Sports",
+    title: "Football, whoever turns up",
+    label: "Kick a ball",
+    sub: "Whoever turns up",
+    vibe: "var(--vibe-sports)"
+  }
 ];
 
 /** Open Create Event already filled in, from one tap on the empty feed. */
@@ -798,17 +816,34 @@ export function renderEvents() {
     liveCards,
     "",
     `<div class="empty-state first-run">
-       ${EMPTY_ART}
-       <h4>Nothing on right now</h4>
-       <p>This is where your campus shows up. Somebody has to go first — it takes about twenty seconds.</p>
+       <span class="fr-spark">
+         <!-- Drawn rather than an icon font. This is the first thing
+              anybody sees, and a webfont that fails to load would leave
+              an empty gradient blob in its place. -->
+         <svg viewBox="0 0 24 24" width="27" height="27" aria-hidden="true">
+           <path d="M13.5 2 4 13.2h6.2L9.8 22 20 10.6h-6.6L13.5 2Z" fill="currentColor"/>
+         </svg>
+       </span>
+       <h4>Someone has to go first</h4>
+       <p>Nothing is on right now. Start something and everyone nearby sees it the second you publish.</p>
        <div class="starter-grid">
-         ${STARTERS.map((s, i) => `
-           <button class="starter" onclick="window.startSomething(${i})">
-             <span class="starter-glyph">${escapeHtml(s.tag.trim().split(" ")[0])}</span>
-             <span class="starter-label">${escapeHtml(s.label)}</span>
-           </button>`).join("")}
+         ${STARTERS.map((s, i) => {
+           const glyph = escapeHtml(s.tag.trim().split(" ")[0]);
+           return `
+           <button class="starter" style="--vibe:${s.vibe}" onclick="window.startSomething(${i})">
+             <span class="starter-wm">${glyph}</span>
+             <span class="starter-glyph">${glyph}</span>
+             <span class="starter-body">
+               <span class="starter-label">${escapeHtml(s.label)}</span>
+               <span class="starter-sub">${escapeHtml(s.sub)}</span>
+             </span>
+             <svg class="starter-go" viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true">
+               <path d="M5 12h13M12.5 6l6 6-6 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+             </svg>
+           </button>`;
+         }).join("")}
        </div>
-       <p class="starter-foot">Or <button class="linkish" onclick="window.openCreateScreen()">start something else</button></p>
+       <p class="starter-foot">Something else in mind? <button class="linkish" onclick="window.openCreateScreen()">Start from scratch</button></p>
      </div>`
   );
   syncList(
