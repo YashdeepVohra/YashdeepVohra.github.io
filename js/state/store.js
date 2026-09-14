@@ -78,6 +78,7 @@ export const state = {
   chatListUnsubscribe: null,
   blocksUnsubscribe: null,
   orbitUnsubscribe: null,
+  myProfileUnsubscribe: null,
   eventsUnsubscribe: null,
   profileEventsUnsubscribe: null,
   typingTimer: null,
@@ -95,6 +96,7 @@ export function resetState() {
     state.chatListUnsubscribe,
     state.blocksUnsubscribe,
     state.orbitUnsubscribe,
+    state.myProfileUnsubscribe,
     state.eventsUnsubscribe,
     state.profileEventsUnsubscribe
   ].forEach((unsub) => { if (typeof unsub === "function") unsub(); });
@@ -133,6 +135,7 @@ export function resetState() {
   state.chatListUnsubscribe = null;
   state.blocksUnsubscribe = null;
   state.orbitUnsubscribe = null;
+  state.myProfileUnsubscribe = null;
   state.eventsUnsubscribe = null;
   state.profileEventsUnsubscribe = null;
 }

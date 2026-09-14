@@ -19,6 +19,7 @@ import { showTab } from '../utils/ui.js';
 import { openOverlay, closeOverlay, replaceOverlay, isOverlayTop } from '../utils/overlays.js';
 import { primeUsers, displayNameFor, usernameFor, avatarFor } from './userService.js';
 import { isBlocked, withoutBlocked } from './blockService.js';
+import { stampEvent, readLimits, limitMessage } from './limitsService.js';
 import { inOrbit, vouchersYouKnow } from './orbitService.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -77,6 +78,43 @@ export function toggleEventDesc(eventId) {
 }
 
 /** Create mode: blank sheet, "Publish". */
+/* ---------------------------------------------------------------------
+   Day one
+   ---------------------------------------------------------------------
+   The first students to open this app will open it to nothing, because
+   nothing exists yet. That empty screen IS the product for them, and
+   "Campus is quiet" told them the app was working but gave them nothing
+   to do — so they close it, and the app never reaches the point where
+   there is something to see.
+
+   So the empty feed asks for one thing instead: start something. Three
+   openers, each one tap, each landing in Create Event with the title
+   and the vibe already filled in and the cursor in the place field —
+   because the only question left is where.
+   ------------------------------------------------------------------- */
+const STARTERS = [
+  { tag: "\u2615 Chill",  title: "Chai and complaining", label: "Chai run" },
+  { tag: "\u{1F4DA} Study",  title: "Study grind", label: "Study session" },
+  { tag: "\u{1F3C0} Sports", title: "Football, whoever turns up", label: "Kick a ball" }
+];
+
+/** Open Create Event already filled in, from one tap on the empty feed. */
+export function startSomething(index) {
+  const s = STARTERS[Number(index)] || STARTERS[0];
+  openCreateScreen();
+  state.currentSelectedTag = s.tag;
+  document.querySelectorAll("#tagSelector .tag").forEach((t) => {
+    t.classList.toggle("active", t.innerText.trim() === s.tag);
+  });
+
+  const title = document.getElementById("title");
+  if (title) title.value = s.title;
+  const place = document.getElementById("place");
+  // The one thing only they know. Focus it, but not so fast that the
+  // keyboard fights the sheet opening.
+  if (place) setTimeout(() => place.focus(), 260);
+}
+
 export function openCreateScreen() {
   state.editingEventId = null;
   setCreateSheetMode("create");
@@ -188,7 +226,14 @@ export async function addEvent(e) {
   }
 
   try {
-    const ref = await db.collection("events").add({
+    // The event and the rate-limit stamp go together or not at all:
+    // the rule for the event checks, with getAfter(), that the stamp
+    // landed in this same batch.
+    const current = await readLimits();
+    const batch = db.batch();
+    const ref = db.collection("events").doc();
+    stampEvent(batch, current);
+    batch.set(ref, {
       hostUid: state.uid,
       title: title.slice(0, 80),
       place: place.slice(0, 80),
@@ -204,6 +249,7 @@ export async function addEvent(e) {
       maxCapacity: Number.isFinite(maxCapacity) && maxCapacity > 1 ? maxCapacity : null,
       createdAt: Date.now()
     });
+    await batch.commit();
 
     ["title", "place", "description", "maxCapacity"].forEach((id) => {
       const el = document.getElementById(id);
@@ -215,7 +261,11 @@ export async function addEvent(e) {
     setTimeout(() => focusEvent(ref.id), 350);
   } catch (error) {
     console.error("Publish failed:", error.code || error.message);
-    alert("Failed to publish. Try again.");
+    // A rules rejection arrives as a flat permission-denied, so the
+    // only honest guess at the reason is the limit we just checked.
+    alert(error.code === "permission-denied"
+      ? limitMessage("event")
+      : "Failed to publish. Try again.");
   } finally {
     restore();
   }
@@ -747,7 +797,19 @@ export function renderEvents() {
     liveList,
     liveCards,
     "",
-    `<div class="empty-state">${EMPTY_ART}<h4>Campus is quiet</h4><p>Nothing live right now — be the one who starts something.</p></div>`
+    `<div class="empty-state first-run">
+       ${EMPTY_ART}
+       <h4>Nothing on right now</h4>
+       <p>This is where your campus shows up. Somebody has to go first — it takes about twenty seconds.</p>
+       <div class="starter-grid">
+         ${STARTERS.map((s, i) => `
+           <button class="starter" onclick="window.startSomething(${i})">
+             <span class="starter-glyph">${escapeHtml(s.tag.trim().split(" ")[0])}</span>
+             <span class="starter-label">${escapeHtml(s.label)}</span>
+           </button>`).join("")}
+       </div>
+       <p class="starter-foot">Or <button class="linkish" onclick="window.openCreateScreen()">start something else</button></p>
+     </div>`
   );
   syncList(
     recapList,

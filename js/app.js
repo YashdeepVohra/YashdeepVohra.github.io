@@ -46,6 +46,7 @@ import {
   toggleEventDesc,
   openCreateScreen,
   closeCreateScreen,
+  startSomething,
   openDeleteModal,
   closeDeleteModal,
   confirmMoveToRecap,
@@ -88,6 +89,7 @@ import {
 } from './services/profileService.js';
 
 import {
+  updateOrbitBadge,
   openOrbitScreen,
   closeOrbitScreen,
   pullIn,
@@ -186,6 +188,7 @@ Object.assign(window, {
   toggleEventDesc,
   openCreateScreen,
   closeCreateScreen,
+  startSomething,
   addEvent,
   joinEvent,
   leaveEvent,
@@ -278,6 +281,7 @@ function boot() {
   // repaints together. Registered here because this is the only module
   // that already imports all of them.
   onSocialChange(renderEvents);
+  onSocialChange(updateOrbitBadge);
   onSocialChange(refreshSearchResults);
   onSocialChange(() => refreshProfileSocial(state.currentProfileUid));
 

@@ -42,6 +42,7 @@ import { pairKey, isBlocked } from './blockService.js';
 import { fetchUser, primeUsers, displayNameFor, usernameFor, avatarFor } from './userService.js';
 import { openOverlay, closeOverlay } from '../utils/overlays.js';
 import { toast, refreshSocialUI } from '../utils/ui.js';
+import { stampAsk, limitMessage } from './limitsService.js';
 
 const MAX_VOUCHES = 500;
 
@@ -197,17 +198,21 @@ export async function pullIn(targetUid) {
   setLocalOrbit(uid, "outgoing");
 
   try {
-    await db.collection("orbit").doc(pairKey(state.uid, uid)).set({
+    // Batched with the rate-limit stamp, which the rule checks for.
+    const batch = db.batch();
+    stampAsk(batch);
+    batch.set(db.collection("orbit").doc(pairKey(state.uid, uid)), {
       pair: [state.uid, uid].sort(),
       fromUid: state.uid,
       status: "pending",
       at: Date.now()
     });
+    await batch.commit();
     toast("Request sent to " + displayNameFor(uid));
   } catch (e) {
     console.error("Orbit request failed:", e.code || e.message);
     setLocalOrbit(uid, before);
-    toast("Couldn't send that request. Try again.");
+    toast(e.code === "permission-denied" ? limitMessage("ask") : "Couldn't send that request. Try again.");
   }
 }
 
@@ -318,9 +323,15 @@ export function closeOrbitScreen() {
   closeOverlay("orbitScreen");
 }
 
-/** The number on the nav, so a request waiting on you is never missed. */
+/**
+ * The number on the nav. It counts everything waiting on YOU, not just
+ * orbit requests — somebody asking to follow a private account is the
+ * same kind of thing and belongs behind the same badge, or it goes
+ * unnoticed until they happen to open their own profile.
+ */
 export function updateOrbitBadge() {
-  const n = state.orbitIncoming.filter((u) => !isBlocked(u)).length;
+  const waiting = state.orbitIncoming.concat(state.followRequests || []);
+  const n = waiting.filter((u) => !isBlocked(u)).length;
   document.querySelectorAll(".orbit-badge").forEach((el) => {
     el.innerText = n > 9 ? "9+" : String(n);
     el.classList.toggle("hidden", n === 0);
@@ -379,7 +390,32 @@ export function renderOrbit() {
       return d || displayNameFor(a).localeCompare(displayNameFor(b));
     });
 
+  // Follow requests are read straight from the store rather than
+  // imported, which keeps this module and followService from importing
+  // each other in a circle. The handler is already on window.
+  const wantToFollow = (state.followRequests || []).filter((u) => !isBlocked(u));
+
   let html = "";
+
+  if (wantToFollow.length) {
+    html += `<h3 class="orbit-heading">Want to follow you <span class="orbit-count">${wantToFollow.length}</span></h3>`;
+    html += wantToFollow.map((uid) => {
+      const id = safeId(uid);
+      if (!id) return "";
+      return `
+        <div class="orbit-row" onclick="window.openProfileScreen('${id}')">
+          <div class="chat-avatar" style="width:44px;height:44px;font-size:19px;">${renderAvatar(avatarFor(uid))}</div>
+          <div class="result-text">
+            <div class="result-title">${escapeHtml(displayNameFor(uid))}</div>
+            <div class="result-sub">@${escapeHtml(usernameFor(uid))}</div>
+          </div>
+          <div class="orbit-row-actions">
+            <button class="act primary" onclick="event.stopPropagation(); window.answerFollowRequest('${id}', true)">Approve</button>
+            <button class="act" onclick="event.stopPropagation(); window.answerFollowRequest('${id}', false)">Decline</button>
+          </div>
+        </div>`;
+    }).join("");
+  }
 
   if (incoming.length) {
     html += `<h3 class="orbit-heading">Waiting on you <span class="orbit-count">${incoming.length}</span></h3>`;

@@ -21,6 +21,7 @@ import { normalizeUsername, hydrateProfileCache, rememberUser, clearProfileCache
 import { loadEvents, renderEvents } from './eventsService.js';
 import { loadBlocks } from './blockService.js';
 import { loadOrbit } from './orbitService.js';
+import { loadMyProfile } from './followService.js';
 import { refreshSocialUI } from '../utils/ui.js';
 import { loadChatList } from './chatService.js';
 
@@ -282,6 +283,10 @@ export function initializeUserApp(userData) {
   // chips, search results, whichever profile is open, and the Orbit
   // screen itself. They all repaint together, or they disagree.
   loadOrbit(() => refreshSocialUI());
+
+  // Somebody asking to follow you writes it into YOUR profile, so your
+  // own document has to be watched or the request never arrives.
+  loadMyProfile(() => refreshSocialUI());
 
   loadChatList();
   loadEvents();

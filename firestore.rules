@@ -87,6 +87,64 @@ service cloud.firestore {
           && before.toSet().difference(after.toSet()).size() <= 1;
     }
 
+    /* -----------------------------------------------------------------
+       RATE LIMITS
+       -----------------------------------------------------------------
+       Rules cannot count writes over time on their own, so the count
+       lives in a document the person owns — users/{uid}/private/limits
+       — and the rule below pins every field in it to request.time, so
+       it can only ever say "now". It cannot be backdated to buy another
+       turn.
+
+       The action and the stamp then go in ONE batched write, and the
+       action's rule uses getAfter() to require that the stamp really
+       landed in the same batch. Skipping the stamp is not a way round
+       the limit: without it getAfter() does not match and the action
+       itself is refused.
+
+       This costs a couple of document accesses on the actions it
+       guards. They are all things people do a handful of times a day —
+       starting an event, asking to follow — never the hot paths.
+       ----------------------------------------------------------------- */
+    function limits() {
+      return /databases/$(database)/documents/users/$(uid())/private/limits;
+    }
+
+    // The action is only allowed if the same batch stamped it.
+    function stampedEvent() {
+      return getAfter(limits()).data.eventAt == request.time;
+    }
+    function stampedAsk() {
+      return getAfter(limits()).data.askAt == request.time;
+    }
+
+    function lastEventAt() {
+      return exists(limits()) && 'eventAt' in get(limits()).data
+        ? get(limits()).data.eventAt
+        : timestamp.value(0);
+    }
+    function lastAskAt() {
+      return exists(limits()) && 'askAt' in get(limits()).data
+        ? get(limits()).data.askAt
+        : timestamp.value(0);
+    }
+
+    // How many have been started since the window opened, and when it
+    // opened. A window older than a day is treated as a fresh one.
+    function eventWindowStart() {
+      return exists(limits()) && 'eventWindowAt' in get(limits()).data
+        ? get(limits()).data.eventWindowAt
+        : timestamp.value(0);
+    }
+    function eventsInWindow() {
+      return exists(limits()) && 'eventCount' in get(limits()).data
+        ? get(limits()).data.eventCount
+        : 0;
+    }
+    function windowIsOpen() {
+      return eventWindowStart() > request.time - duration.value(1, 'd');
+    }
+
     function isString(value, maxLen) {
       return value is string && value.size() > 0 && value.size() <= maxLen;
     }
@@ -249,10 +307,15 @@ service cloud.firestore {
            )
         && !blockedWith(userId)
         // Withdrawing always works; asking only makes sense while the
-        // account is actually private.
+        // account is actually private, and not faster than one every
+        // ten seconds.
         && (
              !added(listOr(resource.data, 'followRequests'), request.resource.data.followRequests).hasAny([uid()])
-             || resource.data.private == true
+             || (
+                  resource.data.private == true
+                  && stampedAsk()
+                  && lastAskAt() < request.time - duration.value(10, 's')
+                )
            );
 
       // APPROVING OR DECLINING, by the owner and nobody else. This is
@@ -275,6 +338,28 @@ service cloud.firestore {
       // Accounts are never deleted from the client — that would free a
       // handle and orphan every event and message it owns.
       allow delete: if false;
+
+      // THE RATE-LIMIT LEDGER. Owner-only like everything under
+      // private/, but unlike everything else under private/ it is not
+      // free-form: every timestamp in it must be request.time. That is
+      // the whole trick — the client writes it, but can only ever write
+      // "now" into it, so it cannot hand itself an earlier last-used
+      // time and start again.
+      match /private/limits {
+        allow read: if isMe(userId);
+        allow write: if isMe(userId)
+          && request.resource.data.keys().hasOnly(
+               ['eventAt', 'askAt', 'eventWindowAt', 'eventCount'])
+          && (!('eventAt' in request.resource.data)
+              || request.resource.data.eventAt == request.time)
+          && (!('askAt' in request.resource.data)
+              || request.resource.data.askAt == request.time)
+          && (!('eventWindowAt' in request.resource.data)
+              || request.resource.data.eventWindowAt == request.time
+              || request.resource.data.eventWindowAt == resource.data.eventWindowAt)
+          && (!('eventCount' in request.resource.data)
+              || request.resource.data.eventCount is int);
+      }
 
       // Email and anything else private. Only the owner, ever.
       match /private/{docId} {
@@ -351,7 +436,22 @@ service cloud.firestore {
         && request.resource.data.get('unconfirmedUids', []) == []
         && request.resource.data.get('requiresApproval', false) is bool
         && (request.resource.data.maxCapacity == null
-            || (request.resource.data.maxCapacity is int && request.resource.data.maxCapacity > 1));
+            || (request.resource.data.maxCapacity is int && request.resource.data.maxCapacity > 1))
+
+        // RATE LIMIT. Ninety seconds between events, and twenty-five in
+        // any rolling day. A feed flooded by one bored person on launch
+        // night is the single easiest way to kill this app, and it is
+        // not something the client can be trusted to prevent.
+        && stampedEvent()
+        && lastEventAt() < request.time - duration.value(90, 's')
+        && (
+             !windowIsOpen()
+             ? getAfter(limits()).data.eventCount == 1
+                 && getAfter(limits()).data.eventWindowAt == request.time
+             : eventsInWindow() < 25
+                 && getAfter(limits()).data.eventCount == eventsInWindow() + 1
+                 && getAfter(limits()).data.eventWindowAt == eventWindowStart()
+           );
 
       // Two very different kinds of update, kept strictly apart.
       allow update: if
@@ -515,10 +615,17 @@ service cloud.firestore {
         && request.resource.data.userUids[0] < request.resource.data.userUids[1]
         && chatId == request.resource.data.userUids[0] + '_' + request.resource.data.userUids[1]
         && request.resource.data.initiatedByUid == uid()
-        && request.resource.data.status in ['unlocked', 'icebreaker'];
+        && request.resource.data.status in ['unlocked', 'icebreaker']
+        && request.resource.data.get('icebreakerUsed', false) is bool;
 
       allow update: if inThisChat()
-        && changedKeys().hasOnly(['unreadByUid', 'typingUid', 'status', 'lastUpdated'])
+        && changedKeys().hasOnly(['unreadByUid', 'typingUid', 'status', 'lastUpdated', 'icebreakerUsed'])
+        // The icebreaker flag only ever goes from unset to true, and
+        // only the person who opened the chat can set it.
+        && (!(changedKeys().hasAny(['icebreakerUsed']))
+            || (request.resource.data.icebreakerUsed == true
+                && resource.data.get('icebreakerUsed', false) == false
+                && resource.data.initiatedByUid == uid()))
         // The pair is fixed for the life of the chat.
         && request.resource.data.userUids == resource.data.userUids
         && request.resource.data.initiatedByUid == resource.data.initiatedByUid
@@ -537,13 +644,40 @@ service cloud.firestore {
 
         allow read: if inThisChat();
 
+        function chat() {
+          return get(/databases/$(database)/documents/chats/$(chatId)).data;
+        }
+        function chatAfter() {
+          return getAfter(/databases/$(database)/documents/chats/$(chatId)).data;
+        }
+
+        // THE ICEBREAKER, for real this time.
+        //
+        // The app has always shown one message and then locked the box
+        // until the other person replied — but only in the client, so
+        // anybody willing to open the console could send a hundred. For
+        // an app where a stranger can message any student by handle,
+        // that is the thing most worth getting right.
+        //
+        // Now the single opening message must flip `icebreakerUsed` on
+        // the chat in the same batch, and the flag can never go back.
+        // There is exactly one such write, ever. The other person is
+        // never limited — replying is what unlocks the thread.
+        function icebreakerAllowed() {
+          return chat().status != 'icebreaker'
+              || chat().initiatedByUid != uid()
+              || (chat().get('icebreakerUsed', false) == false
+                  && chatAfter().icebreakerUsed == true);
+        }
+
         // The chat id IS the block key for a direct chat, so this is a
         // single cheap existence check.
         allow create: if inThisChat()
           && !exists(/databases/$(database)/documents/blocks/$(chatId))
           && request.resource.data.senderUid == uid()
           && isString(request.resource.data.text, 2000)
-          && request.resource.data.time is number;
+          && request.resource.data.time is number
+          && icebreakerAllowed();
 
         allow update: if false;
         allow delete: if signedIn() && resource.data.senderUid == uid();
@@ -626,7 +760,11 @@ service cloud.firestore {
         && request.resource.data.fromUid == uid()
         && request.resource.data.status == 'pending'
         && request.resource.data.at is number
-        && !blockedWith(theOther());
+        && !blockedWith(theOther())
+        // Same ten-second gate as asking to follow, off the same
+        // ledger — one person cannot paper the campus in requests.
+        && stampedAsk()
+        && lastAskAt() < request.time - duration.value(10, 's');
 
       // Accepting is the only edit, it only goes one way, and only the
       // person who RECEIVED the request can do it.

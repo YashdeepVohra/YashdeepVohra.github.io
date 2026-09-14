@@ -278,6 +278,8 @@ export async function sendMessage() {
     let status = state.currentChatStatus;
     let initiatedByUid = state.currentChatInitiatorUid;
 
+    let usedIcebreaker = false;
+
     if (!chatDoc.exists) {
       const crossed = await checkCrossedPaths(state.uid, otherUid);
       status = crossed ? "unlocked" : "icebreaker";
@@ -287,12 +289,18 @@ export async function sendMessage() {
         createdAt: Date.now(),
         initiatedByUid,
         status,
+        icebreakerUsed: false,
         unreadByUid: otherUid,
         typingUid: "",
         lastUpdated: Date.now()
       });
+      usedIcebreaker = status === "icebreaker";
     } else {
+      const data = chatDoc.data() || {};
       if (status === "icebreaker" && initiatedByUid === otherUid) status = "unlocked";
+      usedIcebreaker = status === "icebreaker"
+        && data.initiatedByUid === state.uid
+        && data.icebreakerUsed !== true;
       await chatRef.set({
         unreadByUid: otherUid,
         lastUpdated: Date.now(),
@@ -301,12 +309,23 @@ export async function sendMessage() {
       }, { merge: true });
     }
 
-    await messagesRef().add({
-      senderUid: state.uid,
-      text,
-      time: Date.now(),
-      replyTo: replyData
-    });
+    // THE ICEBREAKER. One opening message to somebody who has never
+    // replied, and the rules enforce it now rather than the app: the
+    // message only goes through if this same batch flips icebreakerUsed
+    // from false to true, and the flag can never go back. So there is
+    // exactly one such message, ever. Everything after it is an
+    // ordinary send, once they have written back.
+    const msgRef = messagesRef().doc();
+    const body = { senderUid: state.uid, text, time: Date.now(), replyTo: replyData };
+
+    if (usedIcebreaker) {
+      const batch = db.batch();
+      batch.set(chatRef, { icebreakerUsed: true }, { merge: true });
+      batch.set(msgRef, body);
+      await batch.commit();
+    } else {
+      await msgRef.set(body);
+    }
   } catch (error) {
     console.error("Send failed:", error.code || error.message);
     input.value = text;

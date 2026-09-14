@@ -49,6 +49,33 @@ import {
 } from './userService.js';
 import { toast, refreshSocialUI } from '../utils/ui.js';
 import { openOverlay, closeOverlay } from '../utils/overlays.js';
+import { stampAsk, limitMessage } from './limitsService.js';
+
+/**
+ * A live view of your own profile document.
+ *
+ * Follow requests land in YOUR document, written by somebody else, so
+ * without a listener the first you would know of one is the next time
+ * the app was opened from cold. This is one read to start and one per
+ * change after that, and it keeps the follower count, the following
+ * list and the private switch honest across two devices at once.
+ */
+export function loadMyProfile(onChange) {
+  if (state.myProfileUnsubscribe) state.myProfileUnsubscribe();
+
+  state.myProfileUnsubscribe = db.collection("users").doc(state.uid).onSnapshot(
+    (doc) => {
+      const d = doc.data() || {};
+      state.following = Array.isArray(d.following) ? d.following : [];
+      state.followRequests = Array.isArray(d.followRequests) ? d.followRequests : [];
+      state.isPrivate = d.private === true;
+      if (state.userCache[state.uid]) Object.assign(state.userCache[state.uid], d);
+      syncPrivacyUI();
+      if (typeof onChange === "function") onChange();
+    },
+    (error) => console.error("Own profile listener:", error.code || error.message)
+  );
+}
 
 /** Am I following them? Read from my own list, never the network. */
 export function isFollowing(uid) {
@@ -182,16 +209,24 @@ export async function askToFollow(targetUid, onDone) {
   refreshSocialUI();
 
   try {
-    await db.collection("users").doc(uid).update({
-      followRequests: asked
-        ? FieldValue.arrayRemove(state.uid)
-        : FieldValue.arrayUnion(state.uid)
-    });
+    if (asked) {
+      // Withdrawing is never rate limited — leaving never is.
+      await db.collection("users").doc(uid).update({
+        followRequests: FieldValue.arrayRemove(state.uid)
+      });
+    } else {
+      const batch = db.batch();
+      stampAsk(batch);
+      batch.update(db.collection("users").doc(uid), {
+        followRequests: FieldValue.arrayUnion(state.uid)
+      });
+      await batch.commit();
+    }
     toast(asked ? "Request withdrawn" : "Asked to follow " + displayNameFor(uid));
   } catch (e) {
     console.error("Follow request failed:", e.code || e.message);
     nudgeRequests(uid, asked);
-    toast("Couldn't send that. Check your connection.");
+    toast(e.code === "permission-denied" ? limitMessage("ask") : "Couldn't send that. Check your connection.");
   }
   if (typeof onDone === "function") onDone();
   refreshSocialUI();
