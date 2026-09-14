@@ -155,6 +155,10 @@ a { color: inherit; }
    only thing left that should move. */
 .card-in { animation: riseIn 0.34s var(--ease); }
 
+/* Filtered out, not deleted. Every card stays in the DOM so switching
+   vibes is a class toggle rather than sixty cards being rebuilt. */
+.event.filtered-out { display: none !important; }
+
 .screen-enter { animation: rise 0.32s var(--ease); }
 
 /* Skeletons: the shape of the content that's coming, not a spinner */

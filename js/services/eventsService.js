@@ -41,16 +41,21 @@ function syncFilterPills(containerSelector, tag) {
   });
 }
 
+// Filtering used to call renderEvents(), which threw away every card
+// that did not match and built the matching ones from scratch — so
+// every pill tap meant up to 60 cards destroyed, 12 created, and a
+// 340ms entry animation on each new one. Every card is in the DOM
+// already; a filter just decides which of them are shown.
 export function setLiveFilter(element, tag) {
   state.currentLiveFilter = tag;
   syncFilterPills("#liveFilters", tag);
-  renderEvents();
+  applyFilter(document.getElementById("events"), tag);
 }
 
 export function setRecapFilter(element, tag) {
   state.currentRecapFilter = tag;
   syncFilterPills("#recapFilters", tag);
-  renderEvents();
+  applyFilter(document.getElementById("recapEvents"), tag);
 }
 
 /**
@@ -519,6 +524,38 @@ function syncList(listEl, cards, tailHTML, emptyHTML) {
   if (tailHTML) listEl.insertAdjacentHTML("beforeend", tailHTML);
 }
 
+/**
+ * Show only the cards carrying `tag`. Pure class toggling: no markup is
+ * built, no node is created or destroyed, so a pill tap lands in the
+ * same frame instead of animating sixty cards back in.
+ */
+function applyFilter(listEl, tag) {
+  if (!listEl) return;
+
+  // Read the DOM first, write second. Querying after a run of class
+  // changes makes the browser recompute style for the whole list.
+  const note = listEl.querySelector(".filter-empty");
+
+  let cards = 0;
+  let shown = 0;
+  Array.from(listEl.children).forEach((el) => {
+    if (!el.classList.contains("event")) return;
+    cards++;
+    const match = tag === "All" || el.dataset.tag === tag;
+    const hidden = el.classList.contains("filtered-out");
+    if (hidden === match) el.classList.toggle("filtered-out", !match);
+    if (match) shown++;
+  });
+  if (cards && !shown) {
+    if (!note) {
+      listEl.insertAdjacentHTML("beforeend",
+        `<div class="empty-state filter-empty">${EMPTY_ART}<h4>Nothing under ${escapeHtml(tag)}</h4><p>Try another vibe, or tap All to see everything.</p></div>`);
+    }
+  } else if (note) {
+    note.remove();
+  }
+}
+
 /* ---------------------------------------------------------------------
    Feed
    ------------------------------------------------------------------- */
@@ -661,22 +698,21 @@ export function renderEvents() {
       </div>
       ${capacity}`;
 
-    const matchesLive = state.currentLiveFilter === "All" || e.tag === state.currentLiveFilter;
-    const matchesRecap = state.currentRecapFilter === "All" || e.tag === state.currentRecapFilter;
+    // Every card is built, whatever the active filter — applyFilter()
+    // below decides what is on screen, and can change its mind for free.
+    const tagAttr = ` data-tag="${escapeHtml(e.tag || "")}"`;
 
     if (e.expiresAt > now) {
-      if (!matchesLive) return;
       const glyph = (e.tag || "").trim().split(" ")[0];
       liveCards.push({ id, html: `
-        <article class="event card ${isLive ? "is-live" : ""}" id="event-${id}" style="--vibe:${vibe}">
+        <article class="event card ${isLive ? "is-live" : ""}" id="event-${id}"${tagAttr} style="--vibe:${vibe}">
           ${isLive ? `<span class="live-edge"></span>` : ""}
           <span class="vibe-watermark">${escapeHtml(glyph)}</span>
           ${header}${body}${actions}
         </article>` });
     } else if (e.expiresAt > oneDayAgo) {
-      if (!matchesRecap) return;
       recapCards.push({ id, html: `
-        <article class="event card recap" id="event-${id}" style="--vibe:${vibe}">
+        <article class="event card recap" id="event-${id}"${tagAttr} style="--vibe:${vibe}">
           <span class="vibe-watermark">${escapeHtml((e.tag || "").trim().split(" ")[0])}</span>
           ${header}
           <div class="event-title">${escapeHtml(e.title)}</div>
@@ -701,8 +737,11 @@ export function renderEvents() {
     state.recapDone ? "" : `<button class="btn-ghost" style="margin-top:8px;" onclick="window.loadRecap()">Load more</button>`,
     state.recapLoading
       ? skeletonFeed(2)
-      : `<div class="empty-state">${EMPTY_ART}<h4>Nothing here yet</h4><p>No history for this filter.</p></div>`
+      : `<div class="empty-state">${EMPTY_ART}<h4>Nothing here yet</h4><p>Nothing has wrapped up in the last day.</p></div>`
   );
+
+  applyFilter(liveList, state.currentLiveFilter);
+  applyFilter(recapList, state.currentRecapFilter);
 
   updateRail(order, now);
 
