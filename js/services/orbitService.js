@@ -339,12 +339,14 @@ function personRow(uid, kind, outNow) {
       <button class="act primary" onclick="event.stopPropagation(); window.acceptOrbit('${id}')">Accept</button>
       <button class="act" onclick="event.stopPropagation(); window.declineOrbit('${id}')">Ignore</button>`;
   } else if (kind === "outgoing") {
-    actions = `<button class="act requested" onclick="event.stopPropagation(); window.declineOrbit('${id}')"><i class='bx bx-time-five'></i> Asked</button>`;
+    actions = `<button class="act requested" title="Withdraw the request" onclick="event.stopPropagation(); window.declineOrbit('${id}')"><i class='bx bx-time-five'></i><span class="act-label">Asked</span></button>`;
   } else {
+    // Both labels collapse to their icon on a narrow screen — two
+    // words of housekeeping should not squeeze somebody's name out.
     const vouched = hasVouched(uid);
     actions = `
-      <button class="act ${vouched ? "hyped" : ""}" onclick="event.stopPropagation(); window.toggleVouch('${id}')"><i class='bx ${vouched ? "bxs-badge-check" : "bx-badge-check"}'></i> ${vouched ? "Vouched" : "Vouch"}</button>
-      <button class="act" onclick="event.stopPropagation(); window.confirmLeaveOrbit('${id}')">Remove</button>`;
+      <button class="act ${vouched ? "hyped" : ""}" title="${vouched ? "You vouched for them" : "Vouch for them"}" onclick="event.stopPropagation(); window.toggleVouch('${id}')"><i class='bx ${vouched ? "bxs-badge-check" : "bx-badge-check"}'></i><span class="act-label">${vouched ? "Vouched" : "Vouch"}</span></button>
+      <button class="act" title="Remove from your orbit" onclick="event.stopPropagation(); window.confirmLeaveOrbit('${id}')"><i class='bx bx-user-minus'></i><span class="act-label">Remove</span></button>`;
   }
 
   return `
@@ -545,15 +547,30 @@ export function renderOrbitRings(hostEl, uids, total) {
 
   const BOX = 300;
 
-  const html = rings.filter((list) => list.length).map((list, i) => {
+  const drawn = rings.filter((list) => list.length);
+
+  const html = drawn.map((list, i) => {
     const diameter = layout[i];
     const size = RING_FACE[i];
     const spin = RING_SPIN[i];
     const dir = i % 2 === 0 ? "cw" : "ccw";
     const fade = (0.42 - i * 0.06).toFixed(2);
-    const slotStep = 360 / list.length;
 
-    const faces = list.map((u, n) => {
+    // The "+N" for everyone not drawn takes a slot of its own on the
+    // outermost ring, rather than sitting on the avatar in the middle
+    // where the inner ring kept sweeping a face underneath it.
+    const isOuter = i === drawn.length - 1;
+    const slots = isOuter && hidden ? list.concat([null]) : list;
+    const slotStep = 360 / slots.length;
+
+    const faces = slots.map((u, n) => {
+      if (u === null) {
+        return `
+        <span class="orbit-slot" style="--a:${(n * slotStep).toFixed(1)}deg">
+          <span class="orbit-face orbit-more" style="--s:${size}" title="${hidden} more in your orbit"
+                onclick="event.stopPropagation(); window.openOrbitScreen()">+${hidden}</span>
+        </span>`;
+      }
       const id = safeId(u);
       // Only the innermost ring pulses. Six green rings blinking at
       // once stops reading as "these people are out" and starts
@@ -580,7 +597,6 @@ export function renderOrbitRings(hostEl, uids, total) {
     <div class="orbit-system${WEAK_DEVICE ? " still" : ""}" style="--box:${BOX}">
       <button class="orbit-core" onclick="window.openOrbitScreen()" title="Open your orbit">
         ${renderAvatar(state.userAvatar)}
-        ${hidden ? `<span class="orbit-more">+${hidden}</span>` : ""}
       </button>
       ${html}
     </div>

@@ -1744,3 +1744,99 @@ html:not(.kb-open) .chat-footer {
   color: var(--text-muted);
 }
 .profile-track span { color: var(--text); font-weight: 450; }
+
+/* A number you can open. The stat boxes are buttons now, so they need
+   to look tappable without shouting about it. */
+.stat-box-pro.tappable {
+  cursor: pointer;
+  border: none;
+  font: inherit;
+  transition: background 0.15s var(--ease), transform 0.12s var(--ease);
+}
+.stat-box-pro.tappable:hover { background: color-mix(in srgb, var(--periwinkle) 16%, var(--bone)); }
+.stat-box-pro.tappable:active { transform: scale(0.97); }
+
+/* =====================================================================
+   NARROW-SCREEN FIXES
+   ===================================================================== */
+
+/* The base button rule is display:flex, so turning the stat boxes into
+   buttons silently laid the number and its label out side by side —
+   which fitted at 1280 and ran clean off the edge of a 360px phone. */
+.stat-box-pro {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+}
+.stat-box-pro .stat-num,
+.stat-box-pro .stat-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+/* Buttons get a lift on hover; a stat box should not jump about. */
+.stat-box-pro.tappable { box-shadow: none; }
+.stat-box-pro.tappable:hover { box-shadow: none; transform: none; filter: none; }
+
+/* The nav and sidebar badges are 9px dots, meant to be empty. The orbit
+   badge carries a number, so it needs to be a pill instead — otherwise
+   the count spills out of a dot it cannot fit in. */
+.orbit-badge {
+  width: auto;
+  height: 18px;
+  min-width: 18px;
+  padding: 0 5px;
+  background: var(--violet);
+  color: #fff;
+  border: 2px solid var(--paper);
+  border-radius: var(--r-pill);
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1;
+  display: grid;
+  place-items: center;
+}
+.nav-badge.orbit-badge { top: 1px; right: 1px; }
+.side-badge.orbit-badge { margin-left: auto; }
+
+/* A row with two buttons on it leaves a phone about 120px for a name.
+   Long names ellipsised, and the handle too — .result-sub is a flex
+   container, and text-overflow does not apply to the anonymous box a
+   bare text node lands in, so it was being cut mid-word instead. */
+.orbit-row .result-text { min-width: 0; flex: 1; }
+.orbit-row .result-sub {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.orbit-row .result-sub .out-now { display: inline-flex; vertical-align: middle; }
+.orbit-row-actions .act { flex-shrink: 0; }
+
+/* On a phone the actions drop onto their own line, aligned under the
+   name, rather than squeezing it. Collapsing them to bare icons was the
+   other option and a worse one: an icon-only control says nothing to a
+   first-time user, and it disappears completely if the icon font ever
+   fails to load. A row is a cheap thing to make taller. */
+@media (max-width: 480px) {
+  .orbit-row { flex-wrap: wrap; row-gap: var(--s-8); }
+  .orbit-row .result-text { flex: 1 1 140px; }
+  .orbit-row-actions { width: 100%; }
+  .orbit-row-actions .act { flex: 1; min-width: 0; justify-content: center; }
+}
+
+/* The overflow count used to sit diagonally off the centre avatar,
+   straight on top of whichever face the inner ring had brought round to
+   that corner. It is a slot on the outer ring now — it cannot collide
+   with anything, and it reads as "and these others" rather than as a
+   badge stuck on your own face. */
+.orbit-face.orbit-more {
+  background: var(--aubergine);
+  color: #fff;
+  font-size: calc(var(--s) * 0.34px);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.orbit-face.orbit-more:hover { box-shadow: 0 0 0 2px var(--violet), var(--lift-2); }
