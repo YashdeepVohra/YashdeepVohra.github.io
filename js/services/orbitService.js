@@ -114,6 +114,28 @@ export function hasVouched(uid) {
   return !!(u && Array.isArray(u.vouchedBy) && u.vouchedBy.includes(state.uid));
 }
 
+/**
+ * Who in your orbit is at something live, right now. Read straight out
+ * of the event cache the feed already holds, so it costs nothing and
+ * updates the moment the feed does.
+ *
+ * This is the bit that ties Orbit back to what the app is for: a
+ * connection here is not a number on a profile, it is a person you
+ * might go and find in the next twenty minutes.
+ */
+export function orbitOutNow() {
+  const now = Date.now();
+  const out = new Set();
+  Object.keys(state.eventCache || {}).forEach((id) => {
+    const e = state.eventCache[id];
+    if (!e || e.expiresAt <= now || e.startTime > now) return;
+    (e.participantUids || []).forEach((u) => {
+      if (u !== state.uid && state.orbitUids.includes(u)) out.add(u);
+    });
+  });
+  return [...out];
+}
+
 /** How many of the people who vouched for them are in YOUR orbit. */
 export function vouchersYouKnow(uid) {
   const u = state.userCache[uid];
@@ -254,9 +276,11 @@ export function updateOrbitBadge() {
   });
 }
 
-function personRow(uid, kind) {
+function personRow(uid, kind, outNow) {
   const id = safeId(uid);
   if (!id) return "";
+
+  const isOut = outNow && outNow.includes(uid);
 
   let actions;
   if (kind === "incoming") {
@@ -277,7 +301,9 @@ function personRow(uid, kind) {
       <div class="chat-avatar" style="width:44px;height:44px;font-size:19px;">${renderAvatar(avatarFor(uid))}</div>
       <div class="result-text">
         <div class="result-title">${escapeHtml(displayNameFor(uid))}</div>
-        <div class="result-sub">@${escapeHtml(usernameFor(uid))}</div>
+        <div class="result-sub">${isOut
+          ? `<span class="out-now"><span class="live-dot"></span> Out right now</span>`
+          : "@" + escapeHtml(usernameFor(uid))}</div>
       </div>
       <div class="orbit-row-actions">${actions}</div>
     </div>`;
@@ -289,23 +315,35 @@ export function renderOrbit() {
 
   const incoming = state.orbitIncoming.filter((u) => !isBlocked(u));
   const outgoing = state.orbitOutgoing.filter((u) => !isBlocked(u));
-  const linked = state.orbitUids.filter((u) => !isBlocked(u));
+  const outNow = orbitOutNow();
+
+  // Anyone who is actually at something comes first — the whole point
+  // of the list is deciding where to go next.
+  const linked = state.orbitUids
+    .filter((u) => !isBlocked(u))
+    .sort((a, b) => {
+      const d = (outNow.includes(b) ? 1 : 0) - (outNow.includes(a) ? 1 : 0);
+      return d || displayNameFor(a).localeCompare(displayNameFor(b));
+    });
 
   let html = "";
 
   if (incoming.length) {
     html += `<h3 class="orbit-heading">Waiting on you <span class="orbit-count">${incoming.length}</span></h3>`;
-    html += incoming.map((u) => personRow(u, "incoming")).join("");
+    html += incoming.map((u) => personRow(u, "incoming", outNow)).join("");
   }
 
   if (linked.length) {
-    html += `<h3 class="orbit-heading">In your orbit <span class="orbit-count">${linked.length}</span></h3>`;
-    html += linked.map((u) => personRow(u, "linked")).join("");
+    const outCount = linked.filter((u) => outNow.includes(u)).length;
+    html += `<h3 class="orbit-heading">In your orbit <span class="orbit-count">${linked.length}</span>${
+      outCount ? `<span class="orbit-out-tag"><span class="live-dot"></span> ${outCount} out now</span>` : ""
+    }</h3>`;
+    html += linked.map((u) => personRow(u, "linked", outNow)).join("");
   }
 
   if (outgoing.length) {
     html += `<h3 class="orbit-heading">Asked</h3>`;
-    html += outgoing.map((u) => personRow(u, "outgoing")).join("");
+    html += outgoing.map((u) => personRow(u, "outgoing", outNow)).join("");
   }
 
   if (!html) {
@@ -321,14 +359,7 @@ export function renderOrbit() {
   box.innerHTML = html;
 }
 
-/* ---------------------------------------------------------------------
-   The visual: you, with everyone else going round you
-   ---------------------------------------------------------------------
-   Three rings, one rotation each, all of it transform-only so it runs
-   on the compositor and never touches layout or paint. The avatars
-   counter-rotate at the same speed so faces stay upright.
-   ------------------------------------------------------------------- */
-
+/** The little system drawn for an empty orbit. */
 function orbitArt() {
   return `<svg viewBox="0 0 120 120" width="86" height="86" fill="none" aria-hidden="true">
     <circle cx="60" cy="60" r="52" stroke="currentColor" stroke-opacity="0.18" stroke-width="1.5"/>
@@ -339,11 +370,66 @@ function orbitArt() {
   </svg>`;
 }
 
-/** Render the rings on a profile. `uids` is who to show, closest first. */
+/* ---------------------------------------------------------------------
+   The rings, at any size
+   ---------------------------------------------------------------------
+   Four people and four hundred have to look right in the same 300px,
+   so the system grows in rings rather than in radius: each ring holds
+   roughly as many faces as its circumference allows, and once five
+   rings are full the rest become a "+N" in the middle. Faces shrink
+   and fade as they go outwards, which reads as depth rather than as
+   clutter, and every ring turns at its own speed in the opposite
+   direction to its neighbour.
+   ------------------------------------------------------------------- */
+
+// Faces a ring can hold, innermost first — roughly its circumference
+// divided by a face, so nothing ever overlaps its neighbour.
+const RING_CAPS = [6, 10, 14, 18, 22];
+const RING_FACE = [34, 30, 26, 23, 21];   // px, shrinking outwards
+const RING_SPIN = [26, 34, 44, 56, 70];   // seconds — outer rings drift
+const MAX_SHOWN = RING_CAPS.reduce((a, b) => a + b, 0);
+
+// Where the rings sit for each possible ring count, so two rings are
+// spaced like two rings rather than like the first and last of five.
+const RING_LAYOUT = [
+  [132],
+  [112, 206],
+  [104, 182, 260],
+  [98, 154, 210, 266],
+  [96, 138, 180, 222, 264]
+];
+
+/**
+ * Spread `n` faces over `k` rings in proportion to what each ring can
+ * hold. Filling greedily instead would leave the outermost ring with
+ * three faces rattling around it while the inner one is packed.
+ */
+function spreadOverRings(n, k) {
+  const caps = RING_CAPS.slice(0, k);
+  const room = caps.reduce((a, b) => a + b, 0);
+  const counts = caps.map((cap) => Math.floor((n * cap) / room));
+  let left = n - counts.reduce((a, b) => a + b, 0);
+  // Remainders go outwards, where there is the most room for them.
+  for (let i = counts.length - 1; i >= 0 && left > 0; i--) {
+    const take = Math.min(left, caps[i] - counts[i]);
+    counts[i] += take;
+    left -= take;
+  }
+  return counts;
+}
+
+/**
+ * Render the orbit around `hostEl`. People who are out right now are
+ * placed first, so they land on the innermost, largest, brightest ring.
+ */
 export function renderOrbitRings(hostEl, uids, total) {
   if (!hostEl) return;
 
-  const people = (uids || []).filter((u) => !isBlocked(u)).slice(0, 8);
+  const outNow = orbitOutNow();
+  const people = (uids || [])
+    .filter((u) => !isBlocked(u))
+    .sort((a, b) => (outNow.includes(b) ? 1 : 0) - (outNow.includes(a) ? 1 : 0));
+
   if (!people.length) {
     hostEl.innerHTML = "";
     hostEl.classList.add("hidden");
@@ -351,25 +437,65 @@ export function renderOrbitRings(hostEl, uids, total) {
   }
   hostEl.classList.remove("hidden");
 
-  // Two rings: up to three close in, the rest further out.
-  const inner = people.slice(0, 3);
-  const outer = people.slice(3);
+  const shown = people.slice(0, MAX_SHOWN);
+  const hidden = people.length - shown.length;
 
-  const ring = (list, cls) => {
-    if (!list.length) return "";
-    const step = 360 / list.length;
-    const faces = list.map((u, i) => `
-      <span class="orbit-slot" style="--a:${(i * step).toFixed(1)}deg">
-        <span class="orbit-face" title="${escapeHtml(displayNameFor(u))}">${renderAvatar(avatarFor(u))}</span>
-      </span>`).join("");
-    return `<span class="orbit-ring ${cls}">${faces}</span>`;
-  };
+  // Open only as many rings as the orbit actually needs, then fill them
+  // evenly rather than packing the inner one and stranding the outer.
+  let ringCount = 1;
+  let room = RING_CAPS[0];
+  while (room < shown.length && ringCount < RING_CAPS.length) {
+    room += RING_CAPS[ringCount];
+    ringCount++;
+  }
+
+  const counts = spreadOverRings(shown.length, ringCount);
+  const layout = RING_LAYOUT[ringCount - 1];
+  const rings = [];
+  let cursor = 0;
+  counts.forEach((c) => { rings.push(shown.slice(cursor, cursor + c)); cursor += c; });
+
+  const BOX = 300;
+
+  const html = rings.filter((list) => list.length).map((list, i) => {
+    const diameter = layout[i];
+    const size = RING_FACE[i];
+    const spin = RING_SPIN[i];
+    const dir = i % 2 === 0 ? "cw" : "ccw";
+    const fade = (0.42 - i * 0.06).toFixed(2);
+    const slotStep = 360 / list.length;
+
+    const faces = list.map((u, n) => {
+      const id = safeId(u);
+      const out = outNow.includes(u);
+      return `
+        <span class="orbit-slot" style="--a:${(n * slotStep).toFixed(1)}deg">
+          <span class="orbit-face${out ? " is-out" : ""}"
+                style="--s:${size}"
+                title="${escapeHtml(displayNameFor(u))}"
+                ${id ? `onclick="event.stopPropagation(); window.openProfileScreen('${id}')"` : ""}>
+            ${renderAvatar(avatarFor(u))}
+          </span>
+        </span>`;
+    }).join("");
+
+    return `<span class="orbit-ring ${dir}" style="--d:${diameter}; --dur:${spin}s; --fade:${fade}">${faces}</span>`;
+  }).join("");
+
+  const outCount = outNow.length;
+  const count = typeof total === "number" ? total : people.length;
 
   hostEl.innerHTML = `
-    <div class="orbit-system">
-      <span class="orbit-core">${renderAvatar(state.userAvatar)}</span>
-      ${ring(inner, "ring-in")}
-      ${ring(outer, "ring-out")}
+    <div class="orbit-system" style="--box:${BOX}">
+      <button class="orbit-core" onclick="window.openOrbitScreen()" title="Open your orbit">
+        ${renderAvatar(state.userAvatar)}
+        ${hidden ? `<span class="orbit-more">+${hidden}</span>` : ""}
+      </button>
+      ${html}
     </div>
-    <div class="orbit-system-label">${total} ${total === 1 ? "person" : "people"} in your orbit</div>`;
+    <div class="orbit-system-label">
+      <b>${count}</b> ${count === 1 ? "person" : "people"} in your orbit${
+        outCount ? ` · <span class="out-now"><span class="live-dot"></span> ${outCount} out right now</span>` : ""
+      }
+    </div>`;
 }

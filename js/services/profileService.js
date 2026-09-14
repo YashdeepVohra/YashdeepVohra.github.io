@@ -125,6 +125,7 @@ export async function loadProfileUI(targetUid) {
   const editInput = document.getElementById("editDisplayNameInput");
   const statJoined = document.getElementById("statEventsJoined");
   const statHosted = document.getElementById("statEventsHosted");
+  const statVouches = document.getElementById("statVouches");
   const eventsList = document.getElementById("myProfileEvents");
 
   // Placeholders while we fetch. innerText everywhere: no markup path.
@@ -133,6 +134,7 @@ export async function loadProfileUI(targetUid) {
   if (usernameDisplay) usernameDisplay.innerText = "";
   if (statJoined) statJoined.innerText = "-";
   if (statHosted) statHosted.innerText = "-";
+  if (statVouches) statVouches.innerText = "-";
   if (eventsList) {
     eventsList.innerHTML = `<div style="text-align:center; padding:20px; color:var(--text-muted); font-size: 13px;"><i class='bx bx-loader-alt bx-spin'></i> Loading...</div>`;
   }
@@ -150,6 +152,11 @@ export async function loadProfileUI(targetUid) {
     if (nameDisplay) nameDisplay.innerText = displayNameFor(targetUid);
     if (usernameDisplay) usernameDisplay.innerText = "@" + usernameFor(targetUid);
     renderOrbitActions(targetUid, isSelf);
+
+    // The public trust number. Not a follower count — a vouch is one
+    // person deliberately saying they know this one, and it is the only
+    // social number on a profile anybody else can actually verify.
+    if (statVouches) statVouches.innerText = vouchCount(targetUid);
 
     if (isSelf) {
       state.userDisplayName = displayNameFor(targetUid);

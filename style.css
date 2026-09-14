@@ -1642,3 +1642,7 @@ html:not(.kb-open) .chat-footer {
 
 /* The topbar orbit button needs a positioning context for its badge. */
 .icon-btn.has-badge { position: relative; }
+
+/* The trust chip makes the name column taller, which left the Live /
+   Soon pill floating halfway down the card. Pin it to the top row. */
+.card-top .status-chip { align-self: flex-start; margin-top: 2px; }
