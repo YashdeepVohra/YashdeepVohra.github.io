@@ -1908,3 +1908,82 @@ html:not(.kb-open) .chat-footer {
 /* Matches the back button's footprint so a header with nothing on its
    right still centres its title. */
 .header-spacer { width: 40px; flex-shrink: 0; }
+
+/* =====================================================================
+   DAY ONE
+   ---------------------------------------------------------------------
+   The empty feed is the whole app for the first people to open it, so
+   it asks for something rather than reporting that nothing is there.
+   ===================================================================== */
+.empty-state.first-run { padding-block: var(--s-24); }
+.empty-state.first-run p { max-width: 34ch; margin-left: auto; margin-right: auto; }
+
+/* Three openers. On a phone they are full-width rows, because a row is
+   an easy thing to hit with a thumb and three pills wrapping 2-then-1
+   looks like a mistake. From tablet up they become three equal tiles
+   with the glyph over the label, which is what the width is for. */
+.starter-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  max-width: 320px;
+  margin: var(--s-24) auto 0;
+}
+
+.starter {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  padding: 14px 18px;
+  border-radius: var(--r-card);
+  background: var(--paper);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 450;
+  text-align: left;
+  box-shadow: var(--lift-1);
+}
+.starter-glyph { font-size: 20px; line-height: 1; flex-shrink: 0; }
+.starter-label { white-space: nowrap; }
+
+@media (min-width: 560px) {
+  .starter-grid {
+    grid-template-columns: repeat(3, 1fr);
+    max-width: 480px;
+    gap: 12px;
+  }
+  .starter {
+    flex-direction: column;
+    justify-content: center;
+    gap: 8px;
+    padding: 20px 10px;
+    text-align: center;
+  }
+  .starter-glyph { font-size: 26px; }
+  .starter-label { font-size: 14px; }
+}
+
+/* .empty-state p sets margin:0 and, being a class plus a type, outranks
+   a lone class — which is why this line sat flush against the tiles. */
+.empty-state .starter-foot {
+  margin-top: var(--s-24);
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* A button that reads as a sentence, not a control. */
+.linkish {
+  width: auto;
+  display: inline;
+  padding: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--violet);
+  font-size: inherit;
+  font-weight: 450;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.linkish:hover { box-shadow: none; transform: none; filter: none; }
