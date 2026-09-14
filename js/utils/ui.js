@@ -77,19 +77,55 @@ export function showTab(tab) {
  * `senderUid` is a Firebase uid; the display name is looked up from the
  * cache and escaped before it reaches the DOM.
  */
+/** The one place toasts are mounted, shared by every kind of toast. */
+function toastBoxEl() {
+  let box = document.getElementById("toastBox");
+  if (!box) {
+    box = document.createElement("div");
+    box.id = "toastBox";
+    box.style.cssText =
+      "position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 9000; width: calc(100% - 32px); max-width: 420px; display: flex; flex-direction: column; align-items: center; pointer-events: none;";
+    document.body.appendChild(box);
+  }
+  return box;
+}
+
+/**
+ * A short confirmation of something the user just did. Plain text only
+ * — callers pass their own words, never anything typed by another
+ * student, and it is inserted as text rather than markup regardless.
+ */
+export function toast(text, icon) {
+  const box = toastBoxEl();
+  box.innerHTML = "";
+
+  const el = document.createElement("div");
+  el.style.cssText =
+    "background: #3c315b; color: #fdfcfe; padding: 13px 20px; border-radius: 100px; font-size: 14.5px; font-weight: 350; letter-spacing: -0.025em; transform: translateY(-150%); transition: transform 0.4s cubic-bezier(0.175,0.885,0.32,1.275); display: flex; align-items: center; gap: 9px; width: 100%; pointer-events: none;";
+
+  if (icon) {
+    const i = document.createElement("i");
+    i.className = "bx " + icon;
+    i.style.fontSize = "19px";
+    el.appendChild(i);
+  }
+  el.appendChild(document.createTextNode(String(text || "")));
+
+  box.appendChild(el);
+  void el.offsetWidth;
+  el.style.transform = "translateY(0)";
+
+  setTimeout(() => {
+    el.style.transform = "translateY(-150%)";
+    setTimeout(() => el.remove(), 400);
+  }, 2600);
+}
+
 export function showNotification(senderUid, chatId, openChatCallback) {
   if (state.currentChat === chatId) return;
   if (!safeId(senderUid)) return;
 
-  let toastBox = document.getElementById("toastBox");
-  if (!toastBox) {
-    toastBox = document.createElement("div");
-    toastBox.id = "toastBox";
-    toastBox.style.cssText =
-      "position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 9000; width: calc(100% - 32px); max-width: 420px; display: flex; flex-direction: column; align-items: center; pointer-events: none;";
-    document.body.appendChild(toastBox);
-  }
-
+  const toastBox = toastBoxEl();
   toastBox.innerHTML = "";
   const cached = state.userCache[senderUid] || {};
   const displayName = cached.displayName || cached.username || "Someone";

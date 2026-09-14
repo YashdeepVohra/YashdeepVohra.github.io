@@ -20,6 +20,7 @@ rules_version = '2';
 //   events/{eventId}/messages/*   event chat, participants only
 //   chats/{uidA_uidB}             userUids[2], sorted, id == the join
 //   chats/{chatId}/messages/*     direct messages, the two members only
+//   orbit/{uidA_uidB}             a connection: pending, then linked
 // =====================================================================
 
 service cloud.firestore {
@@ -78,6 +79,13 @@ service cloud.firestore {
       return exists(/databases/$(database)/documents/blocks/$(pairKey(uid(), otherUid)));
     }
 
+    // True once both people have accepted each other. Costs a document
+    // read, so it guards writes only (vouching), never a read path.
+    function linkedWith(otherUid) {
+      return exists(/databases/$(database)/documents/orbit/$(pairKey(uid(), otherUid)))
+        && get(/databases/$(database)/documents/orbit/$(pairKey(uid(), otherUid))).data.status == 'linked';
+    }
+
     function eventData(eventId) {
       return get(/databases/$(database)/documents/events/$(eventId)).data;
     }
@@ -113,7 +121,9 @@ service cloud.firestore {
         && !('username' in request.resource.data)
         && isString(request.resource.data.displayName, 20)
         && request.resource.data.avatar is string
-        && request.resource.data.avatar.size() <= 300;
+        && request.resource.data.avatar.size() <= 300
+        // Vouches are earned from other people, never handed to yourself.
+        && !('vouchedBy' in request.resource.data);
 
       allow update: if isMe(userId)
         // Fields the client is allowed to touch at all.
@@ -134,6 +144,25 @@ service cloud.firestore {
                   && handleIsMine(request.resource.data.username)
                 )
            );
+
+      // A VOUCH is someone else saying "I actually know this person",
+      // and it is the only thing anyone may write on a profile that is
+      // not their own. The guards, in order: you can only ever add or
+      // remove YOURSELF from the list; you cannot touch any other
+      // field; you must already be linked to them in orbit, which is
+      // what stops a fresh account vouching for a hundred strangers;
+      // and a block cancels it in either direction.
+      allow update: if signedIn()
+        && !isMe(userId)
+        && changedKeys().hasOnly(['vouchedBy'])
+        && request.resource.data.vouchedBy is list
+        && request.resource.data.vouchedBy.size() <= 500
+        && selfToggleOnly(
+             'vouchedBy' in resource.data ? resource.data.vouchedBy : [],
+             request.resource.data.vouchedBy
+           )
+        && linkedWith(userId)
+        && !blockedWith(userId);
 
       // Accounts are never deleted from the client — that would free a
       // handle and orphan every event and message it owns.
@@ -446,6 +475,62 @@ service cloud.firestore {
       // Only the blocker can unblock. The blocked person must not be
       // able to clear it themselves.
       allow delete: if signedIn() && resource.data.blockerUid == uid();
+    }
+
+    // ---------------------------------------------------------------
+    // ORBIT  —  orbit/{uidA_uidB}
+    //
+    // A connection between two people, stored the same way as a block
+    // or a direct chat: one document, id = the two uids sorted and
+    // joined. `fromUid` records who asked and `status` is 'pending'
+    // until the OTHER person accepts, so a single document carries both
+    // the request and the connection and the two can never disagree.
+    //
+    // One document per pair also means one query — `pair array-contains
+    // me` — returns your whole orbit and every request waiting on you,
+    // in one listener.
+    // ---------------------------------------------------------------
+    match /orbit/{pairId} {
+
+      function inPair() {
+        return signedIn() && uid() in pairId.split('_');
+      }
+
+      function theOther() {
+        return pairId.split('_')[0] == uid()
+          ? pairId.split('_')[1]
+          : pairId.split('_')[0];
+      }
+
+      // get by id answers "have I already asked?" before the document
+      // exists; list mirrors the client's own query so Firestore can
+      // verify it without reading anything.
+      allow get: if inPair();
+      allow list: if signedIn() && uid() in resource.data.pair;
+
+      allow create: if inPair()
+        && request.resource.data.keys().hasOnly(['pair', 'fromUid', 'status', 'at'])
+        && request.resource.data.pair.size() == 2
+        && request.resource.data.pair[0] < request.resource.data.pair[1]
+        && pairId == request.resource.data.pair[0] + '_' + request.resource.data.pair[1]
+        && uid() in request.resource.data.pair
+        // You send your own requests. Nobody opens one on your behalf.
+        && request.resource.data.fromUid == uid()
+        && request.resource.data.status == 'pending'
+        && request.resource.data.at is number
+        && !blockedWith(theOther());
+
+      // Accepting is the only edit, it only goes one way, and only the
+      // person who RECEIVED the request can do it.
+      allow update: if inPair()
+        && resource.data.status == 'pending'
+        && resource.data.fromUid != uid()
+        && changedKeys().hasOnly(['status'])
+        && request.resource.data.status == 'linked';
+
+      // Withdraw, decline, or leave someone's orbit — all the same
+      // delete, available to either side at any point.
+      allow delete: if inPair();
     }
 
     // ---------------------------------------------------------------

@@ -80,7 +80,13 @@ export function rememberUser(uid, data) {
     u: {
       username: data.username || "",
       displayName: data.displayName || "",
-      avatar: data.avatar || ""
+      avatar: data.avatar || "",
+      // Vouches are needed to draw the trust chip on the very first
+      // paint, but an unbounded list of uids has no business in
+      // localStorage. The count is exact; the list is capped, and is
+      // only ever used to find the vouchers you already know.
+      vouchedBy: Array.isArray(data.vouchedBy) ? data.vouchedBy.slice(0, 50) : [],
+      vouchCount: Array.isArray(data.vouchedBy) ? data.vouchedBy.length : 0
     }
   };
   writeStore(store);

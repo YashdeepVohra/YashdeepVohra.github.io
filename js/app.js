@@ -85,6 +85,16 @@ import {
   jumpToEvent
 } from './services/profileService.js';
 
+import {
+  openOrbitScreen,
+  closeOrbitScreen,
+  pullIn,
+  acceptRequest,
+  removeOrbit,
+  confirmLeaveOrbit,
+  toggleVouch
+} from './services/orbitService.js';
+
 import { initSwipeListeners } from './interactions/swipeReply.js';
 import { initViewportFit } from './utils/viewport.js';
 import { popOverlay, anyOverlayOpen, clearOverlays } from './utils/overlays.js';
@@ -196,6 +206,17 @@ Object.assign(window, {
   closeSettingsScreen,
   selectSettingsAvatar,
   saveProfileData,
+
+  // Orbit
+  openOrbitScreen,
+  closeOrbitScreen,
+  pullIn,
+  acceptOrbit: acceptRequest,
+  // Declining a request, withdrawing one and leaving an orbit are the
+  // same delete, so they are the same handler.
+  declineOrbit: removeOrbit,
+  confirmLeaveOrbit,
+  toggleVouch,
 
   // Safety
   confirmBlock,

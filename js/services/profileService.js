@@ -14,6 +14,9 @@ import { focusEvent } from './eventsService.js';
 import { openOverlay, closeOverlay } from '../utils/overlays.js';
 import { closeChat, startChatWithUid } from './chatService.js';
 import { fetchUser, displayNameFor, usernameFor, avatarFor, rememberUser } from './userService.js';
+import {
+  orbitStatus, inOrbit, hasVouched, vouchCount, vouchersYouKnow, renderOrbitRings
+} from './orbitService.js';
 import { isBlocked, blockUser, unblockUser, submitReport, myBlockList } from './blockService.js';
 
 // The avatar picker only ever writes one of these, or the Google photo.
@@ -137,6 +140,7 @@ export async function loadProfileUI(targetUid) {
   const isSelf = targetUid === state.uid;
   settingsGear?.classList.toggle("hidden", !isSelf);
   renderSafetyActions(targetUid, isSelf);
+  renderOrbitActions(targetUid, isSelf);
 
   try {
     await fetchUser(targetUid, { force: true });
@@ -145,6 +149,7 @@ export async function loadProfileUI(targetUid) {
     if (avatarEl) avatarEl.innerHTML = renderAvatar(avatarFor(targetUid));
     if (nameDisplay) nameDisplay.innerText = displayNameFor(targetUid);
     if (usernameDisplay) usernameDisplay.innerText = "@" + usernameFor(targetUid);
+    renderOrbitActions(targetUid, isSelf);
 
     if (isSelf) {
       state.userDisplayName = displayNameFor(targetUid);
@@ -268,6 +273,78 @@ export async function saveProfileData() {
 /* ---------------------------------------------------------------------
    Safety actions
    ------------------------------------------------------------------- */
+
+/**
+ * The orbit half of a profile. On your own it is the rings and a way
+ * into the Orbit screen; on someone else's it is where you stand with
+ * them, their vouches, and — once you are linked — your own vouch.
+ */
+export function renderOrbitActions(targetUid, isSelf) {
+  const host = document.getElementById("profileOrbit");
+  const rings = document.getElementById("profileRings");
+  if (!host) return;
+
+  const id = safeId(targetUid);
+  if (!id) return;
+
+  if (isSelf) {
+    const n = state.orbitUids.length;
+    const waiting = state.orbitIncoming.length;
+    host.classList.remove("hidden");
+    host.innerHTML = `
+      <button class="orbit-cta" onclick="window.openOrbitScreen()">
+        <i class='bx bx-planet'></i>
+        <span class="orbit-cta-text">
+          <b>${n} in your orbit</b>
+          <small>${waiting ? waiting + (waiting === 1 ? " request waiting" : " requests waiting") : "People you'd show up for"}</small>
+        </span>
+        ${waiting ? `<span class="orbit-count">${waiting}</span>` : `<i class='bx bx-chevron-right'></i>`}
+      </button>`;
+    renderOrbitRings(rings, state.orbitUids, n);
+    return;
+  }
+
+  if (rings) { rings.innerHTML = ""; rings.classList.add("hidden"); }
+
+  if (isBlocked(targetUid)) {
+    host.innerHTML = "";
+    host.classList.add("hidden");
+    return;
+  }
+
+  host.classList.remove("hidden");
+  const status = orbitStatus(targetUid);
+  const known = vouchersYouKnow(targetUid);
+  const total = vouchCount(targetUid);
+
+  let action;
+  if (status === "linked") {
+    action = `<button class="orbit-btn linked" onclick="window.confirmLeaveOrbit('${id}')"><i class='bx bx-check-circle'></i> In your orbit</button>`;
+  } else if (status === "outgoing") {
+    action = `<button class="orbit-btn pending" onclick="window.declineOrbit('${id}')"><i class='bx bx-time-five'></i> Requested</button>`;
+  } else if (status === "incoming") {
+    action = `
+      <button class="orbit-btn primary" onclick="window.acceptOrbit('${id}')"><i class='bx bx-user-check'></i> Accept</button>
+      <button class="orbit-btn" onclick="window.declineOrbit('${id}')">Ignore</button>`;
+  } else {
+    action = `<button class="orbit-btn primary" onclick="window.pullIn('${id}')"><i class='bx bx-user-plus'></i> Pull into orbit</button>`;
+  }
+
+  // The trust line. "3 people you know" is worth far more here than a
+  // raw total, so it leads, and the total only fills in behind it.
+  let trust = "";
+  if (known.length) {
+    trust = `<div class="vouch-line strong"><i class='bx bxs-badge-check'></i> Vouched for by <b>${known.length}</b> ${known.length === 1 ? "person" : "people"} in your orbit</div>`;
+  } else if (total) {
+    trust = `<div class="vouch-line"><i class='bx bx-badge-check'></i> Vouched for by ${total} ${total === 1 ? "student" : "students"}</div>`;
+  }
+
+  const vouch = status === "linked"
+    ? `<button class="orbit-btn ${hasVouched(targetUid) ? "vouched" : ""}" onclick="window.toggleVouch('${id}')"><i class='bx ${hasVouched(targetUid) ? "bxs-badge-check" : "bx-badge-check"}'></i> ${hasVouched(targetUid) ? "You vouched" : "Vouch for them"}</button>`
+    : "";
+
+  host.innerHTML = `<div class="orbit-actions">${action}${vouch}</div>${trust}`;
+}
 
 /** Block / report controls, shown only on someone else's profile. */
 function renderSafetyActions(targetUid, isSelf) {

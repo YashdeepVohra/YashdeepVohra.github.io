@@ -7,6 +7,7 @@ import { escapeHtml, safeId, renderAvatar } from '../utils/formatters.js';
 import { openOverlay, closeOverlay } from '../utils/overlays.js';
 import { showTab } from '../utils/ui.js';
 import { displayNameFor, usernameFor, avatarFor } from '../services/userService.js';
+import { orbitStatus } from '../services/orbitService.js';
 import { searchPeople, searchEvents } from '../services/searchService.js';
 import { focusEvent } from '../services/eventsService.js';
 
@@ -52,15 +53,33 @@ export function onSearchInput(value) {
 function personRow(uid) {
   const id = safeId(uid);
   if (!id) return "";
+
+  // Search is the main way into someone's orbit, so the action lives
+  // right here rather than one tap further in. A div, not a button:
+  // the row already has an action button inside it.
+  const status = orbitStatus(uid);
+  let action;
+  if (status === "self") {
+    action = `<i class='bx bx-chevron-right'></i>`;
+  } else if (status === "linked") {
+    action = `<span class="row-chip linked"><i class='bx bx-check-circle'></i> In orbit</span>`;
+  } else if (status === "outgoing") {
+    action = `<span class="row-chip"><i class='bx bx-time-five'></i> Asked</span>`;
+  } else if (status === "incoming") {
+    action = `<button class="act primary" onclick="event.stopPropagation(); window.acceptOrbit('${id}')">Accept</button>`;
+  } else {
+    action = `<button class="act primary" onclick="event.stopPropagation(); window.pullIn('${id}')"><i class='bx bx-user-plus'></i> Pull in</button>`;
+  }
+
   return `
-    <button class="result-row" onclick="window.searchOpenProfile('${id}')">
+    <div class="result-row" role="button" tabindex="0" onclick="window.searchOpenProfile('${id}')">
       <div class="chat-avatar" style="width:40px;height:40px;font-size:18px;">${renderAvatar(avatarFor(uid))}</div>
       <div class="result-text">
         <div class="result-title">${escapeHtml(displayNameFor(uid))}</div>
         <div class="result-sub">@${escapeHtml(usernameFor(uid))}</div>
       </div>
-      <i class='bx bx-chevron-right'></i>
-    </button>`;
+      ${action}
+    </div>`;
 }
 
 function eventRow(e) {

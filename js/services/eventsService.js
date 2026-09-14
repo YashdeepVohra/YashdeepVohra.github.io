@@ -19,6 +19,7 @@ import { showTab } from '../utils/ui.js';
 import { openOverlay, closeOverlay, replaceOverlay, isOverlayTop } from '../utils/overlays.js';
 import { primeUsers, displayNameFor, usernameFor, avatarFor } from './userService.js';
 import { isBlocked, withoutBlocked } from './blockService.js';
+import { inOrbit, vouchersYouKnow } from './orbitService.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -607,6 +608,22 @@ export function renderEvents() {
     const hostId = safeId(e.hostUid);
     const openHost = hostId ? `onclick="event.stopPropagation(); window.openProfileScreen('${hostId}')"` : "";
 
+    // THE TRUST LINE. The question this app really asks is "should I
+    // walk across campus for a stranger's thing?" — so the card answers
+    // it. Both halves are computed from data already in memory: your
+    // orbit, and the host's cached profile. No extra reads.
+    let trust = "";
+    if (e.hostUid !== state.uid) {
+      if (inOrbit(e.hostUid)) {
+        trust = `<span class="trust-chip in-orbit"><i class='bx bx-planet'></i> In your orbit</span>`;
+      } else {
+        const known = vouchersYouKnow(e.hostUid).length;
+        if (known) {
+          trust = `<span class="trust-chip"><i class='bx bxs-badge-check'></i> Vouched by ${known} you know</span>`;
+        }
+      }
+    }
+
     const header = `
       <div class="card-top">
         <div class="av-ring ${isLive ? "live" : ""} tappable" ${openHost}>
@@ -618,6 +635,7 @@ export function renderEvents() {
             <span class="who-meta">@${escapeHtml(usernameFor(e.hostUid))} · ${escapeHtml(relTime(e.startTime, now))}</span>
           </div>
           <div class="who-place"><i class='bx bx-map-pin'></i> ${escapeHtml(e.place)}</div>
+          ${trust}
         </div>
         ${isLive
           ? `<span class="status-chip live"><span class="live-dot"></span> Live</span>`

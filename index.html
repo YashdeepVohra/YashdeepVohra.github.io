@@ -68,6 +68,10 @@
       <i class='bx bx-message-rounded-dots'></i> Chats
       <div id="sideBadge" class="side-badge hidden"></div>
     </button>
+    <button class="side-item" onclick="openOrbitScreen()">
+      <i class='bx bx-planet'></i> Orbit
+      <div class="side-badge orbit-badge hidden"></div>
+    </button>
     <button class="sidebar-create" onclick="openCreateScreen()">+ New Event</button>
     <div class="sidebar-foot">
       <button class="sidebar-me" onclick="openProfileScreen()">
@@ -85,6 +89,10 @@
     </div>
     <div class="topbar-actions">
       <button class="icon-btn" onclick="openSearch()" aria-label="Search"><i class='bx bx-search'></i></button>
+      <button class="icon-btn has-badge" onclick="openOrbitScreen()" aria-label="Orbit">
+        <i class='bx bx-planet'></i>
+        <span class="nav-badge orbit-badge hidden"></span>
+      </button>
       <button class="profileBtn hidden" onclick="window.openProfileScreen()" id="topAvatar">👤</button>
     </div>
   </header>
@@ -233,6 +241,9 @@
           </div>
         </div>
       </div>
+
+      <div id="profileOrbit" class="profile-orbit hidden"></div>
+      <div id="profileRings" class="profile-rings hidden"></div>
 
       <div id="profileSafety" class="profile-safety hidden"></div>
 
@@ -412,6 +423,18 @@
     </div>
   </div>
   <div class="screen-body" id="searchResults"></div>
+</div>
+
+<!-- ORBIT — who you'd actually show up for -->
+<div id="orbitScreen" class="full-screen-view hidden">
+  <div class="screen-header">
+    <button class="back-btn" onclick="closeOrbitScreen()"><i class='bx bx-left-arrow-alt'></i></button>
+    <div class="header-title">Orbit</div>
+    <button class="icon-btn" onclick="closeOrbitScreen(); openSearch();" aria-label="Find people">
+      <i class='bx bx-user-plus'></i>
+    </button>
+  </div>
+  <div class="screen-body" id="orbitBody"></div>
 </div>
 
 <div id="peopleModal" class="modal-overlay hidden">

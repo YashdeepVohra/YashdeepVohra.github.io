@@ -20,6 +20,7 @@ import { renderAvatar } from '../utils/formatters.js';
 import { normalizeUsername, hydrateProfileCache, rememberUser, clearProfileCache } from './userService.js';
 import { loadEvents, renderEvents } from './eventsService.js';
 import { loadBlocks } from './blockService.js';
+import { loadOrbit } from './orbitService.js';
 import { loadChatList } from './chatService.js';
 
 const REDIRECT_KEY = "isRedirecting";
@@ -272,6 +273,10 @@ export function initializeUserApp(userData) {
     renderEvents();
     loadChatList();
   });
+
+  // The orbit decides what the trust chip on each card says, so a
+  // change to it re-renders the feed the same way a block does.
+  loadOrbit(() => renderEvents());
 
   loadChatList();
   loadEvents();

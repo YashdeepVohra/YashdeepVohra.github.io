@@ -25,6 +25,13 @@ export const state = {
   // ---- Caches ----
   userCache: {},           // uid -> { username, displayName, avatar }
   blockedUids: [],         // blocked in EITHER direction — always hidden
+
+  // ---- Orbit: who you'd actually show up for ----
+  // One listener over orbit/{pairId} fills all three of these, so a
+  // connection and a request waiting on you cost the same single query.
+  orbitUids: [],           // linked — both of you accepted
+  orbitIncoming: [],       // uids who asked to join your orbit
+  orbitOutgoing: [],       // uids you asked, still waiting
   eventCache: {},          // eventId -> event data (avoids passing text through inline HTML)
   eventOrder: [],          // live eventIds, newest first
   recapOrder: [],          // past eventIds, paged in on demand
@@ -67,6 +74,7 @@ export const state = {
   typingUnsubscribe: null,
   chatListUnsubscribe: null,
   blocksUnsubscribe: null,
+  orbitUnsubscribe: null,
   eventsUnsubscribe: null,
   profileEventsUnsubscribe: null,
   typingTimer: null,
@@ -83,6 +91,7 @@ export function resetState() {
     state.typingUnsubscribe,
     state.chatListUnsubscribe,
     state.blocksUnsubscribe,
+    state.orbitUnsubscribe,
     state.eventsUnsubscribe,
     state.profileEventsUnsubscribe
   ].forEach((unsub) => { if (typeof unsub === "function") unsub(); });
@@ -95,6 +104,9 @@ export function resetState() {
   state.googlePfp = "";
   state.userCache = {};
   state.blockedUids = [];
+  state.orbitUids = [];
+  state.orbitIncoming = [];
+  state.orbitOutgoing = [];
   state.eventCache = {};
   state.eventOrder = [];
   state.recapOrder = [];
@@ -114,6 +126,7 @@ export function resetState() {
   state.eventTypingUids = [];
   state.chatListUnsubscribe = null;
   state.blocksUnsubscribe = null;
+  state.orbitUnsubscribe = null;
   state.eventsUnsubscribe = null;
   state.profileEventsUnsubscribe = null;
 }

@@ -1419,3 +1419,226 @@ html:not(.kb-open) .chat-footer {
 
 /* Loading older messages */
 .history-spinner { display: flex; justify-content: center; padding: var(--s-12) 0; }
+
+/* =====================================================================
+   ORBIT
+   ---------------------------------------------------------------------
+   A connection here is not a follow. The visual says so: you in the
+   middle, the people you'd show up for going round you. Two rings, one
+   rotation each, and the faces counter-rotate at the same rate so
+   nobody ends up upside down.
+
+   Everything animated below is transform and opacity only, so it runs
+   on the compositor and never triggers layout or paint. That is the
+   whole reason this can spin forever on a mid-range phone without
+   costing the feed a single frame.
+   ===================================================================== */
+
+.orbit-system {
+  position: relative;
+  width: 190px;
+  height: 190px;
+  margin: var(--s-8) auto 0;
+  display: grid;
+  place-items: center;
+}
+
+.orbit-core {
+  position: relative;
+  z-index: 2;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 24px;
+  background: var(--paper);
+  box-shadow: 0 0 0 2px var(--periwinkle), var(--lift-1);
+}
+
+.orbit-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--periwinkle) 32%, transparent);
+  animation: orbitSpin 34s linear infinite;
+}
+.orbit-ring.ring-in {
+  inset: 34px;
+  border-color: color-mix(in srgb, var(--periwinkle) 46%, transparent);
+  animation-duration: 24s;
+}
+.orbit-ring.ring-out { animation-direction: reverse; }
+
+/* A face is placed by rotating its slot out to the rim; the face then
+   spins back the other way so it stays the right way up. */
+.orbit-slot {
+  position: absolute;
+  inset: 0;
+  transform: rotate(var(--a));
+}
+.orbit-face {
+  position: absolute;
+  top: -17px;
+  left: 50%;
+  width: 34px;
+  height: 34px;
+  margin-left: -17px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 17px;
+  background: var(--paper);
+  box-shadow: var(--lift-1);
+  animation: orbitSpin 34s linear infinite reverse;
+}
+.ring-in .orbit-face { animation-duration: 24s; }
+.ring-out .orbit-face { animation-direction: normal; }
+
+@keyframes orbitSpin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .orbit-ring, .orbit-face { animation: none !important; }
+}
+
+.orbit-system-label {
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: var(--s-8);
+}
+
+/* ---- The card on your own profile ---- */
+.profile-orbit { margin-bottom: var(--s-12); }
+
+.orbit-cta {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--s-12);
+  padding: var(--s-12) var(--s-16);
+  background: var(--paper);
+  border: 1px solid var(--ash);
+  border-radius: var(--r-card);
+  text-align: left;
+  color: inherit;
+}
+.orbit-cta > i:first-child { font-size: 22px; color: var(--violet); }
+.orbit-cta-text { flex: 1; display: flex; flex-direction: column; }
+.orbit-cta-text b { font-size: 15px; font-weight: 450; }
+.orbit-cta-text small { font-size: 12.5px; color: var(--text-muted); }
+
+/* ---- Somebody else's profile ---- */
+.orbit-actions { display: flex; gap: var(--s-8); flex-wrap: wrap; }
+
+.orbit-btn {
+  flex: 1;
+  min-width: 132px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 11px 14px;
+  border-radius: var(--r-pill);
+  font-size: 14px;
+  font-weight: 400;
+  background: var(--bone);
+  color: var(--text);
+  border: 1px solid transparent;
+  transition: transform 0.12s var(--ease);
+}
+.orbit-btn:active { transform: scale(0.97); }
+.orbit-btn.primary { background: var(--violet); color: #fff; }
+.orbit-btn.linked  { background: color-mix(in srgb, var(--mint) 16%, transparent); color: #17765a; }
+.orbit-btn.pending { background: var(--bone); color: var(--text-muted); }
+.orbit-btn.vouched { background: color-mix(in srgb, var(--periwinkle) 26%, transparent); color: var(--plum); }
+
+.vouch-line {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: var(--s-12);
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.vouch-line.strong { color: var(--plum); }
+.vouch-line i { font-size: 16px; color: var(--violet); }
+
+/* ---- The Orbit screen ---- */
+.orbit-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--s-8);
+  margin: var(--s-20) 0 var(--s-8);
+  font-size: 13px;
+  font-weight: 450;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.orbit-heading:first-child { margin-top: var(--s-8); }
+
+.orbit-count {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--r-pill);
+  background: var(--violet);
+  color: #fff;
+  font-size: 11.5px;
+  font-weight: 500;
+  display: grid;
+  place-items: center;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.orbit-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-12);
+  padding: var(--s-12);
+  border-radius: var(--r-card);
+  background: var(--paper);
+  border: 1px solid var(--ash);
+  margin-bottom: var(--s-8);
+  cursor: pointer;
+}
+.orbit-row-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.orbit-row-actions .act { padding: 8px 12px; font-size: 13px; }
+
+.orbit-empty-art { color: var(--periwinkle); display: grid; place-items: center; margin-bottom: var(--s-12); }
+
+/* ---- The trust line on an event card ---- */
+.trust-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 5px;
+  padding: 3px 9px;
+  border-radius: var(--r-pill);
+  font-size: 11.5px;
+  font-weight: 400;
+  background: color-mix(in srgb, var(--periwinkle) 22%, transparent);
+  color: var(--plum);
+}
+.trust-chip i { font-size: 13px; }
+.trust-chip.in-orbit {
+  background: color-mix(in srgb, var(--mint) 18%, transparent);
+  color: #17765a;
+}
+
+/* ---- Search result chips ---- */
+.row-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.row-chip.linked { color: #17765a; }
+.row-chip i { font-size: 15px; }
+
+/* The topbar orbit button needs a positioning context for its badge. */
+.icon-btn.has-badge { position: relative; }
