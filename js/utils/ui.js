@@ -77,6 +77,33 @@ export function showTab(tab) {
  * `senderUid` is a Firebase uid; the display name is looked up from the
  * cache and escaped before it reaches the DOM.
  */
+/* ---------------------------------------------------------------------
+   Repainting everything that shows social state
+   ---------------------------------------------------------------------
+   Following somebody, or a request being accepted, changes what is on
+   screen in four places at once: the trust chip on every event card,
+   the button on a search result, whichever profile is open, and the
+   Orbit screen. Before this, only the feed was told — so pulling
+   somebody in from search left the row saying "Pull in" until the
+   whole query was typed again.
+
+   A registry rather than direct imports, because ui.js sits underneath
+   almost every other module and importing them back would be a cycle.
+   app.js registers the painters once at boot.
+   ------------------------------------------------------------------- */
+
+const socialPainters = [];
+
+export function onSocialChange(paint) {
+  if (typeof paint === "function") socialPainters.push(paint);
+}
+
+export function refreshSocialUI() {
+  socialPainters.forEach((paint) => {
+    try { paint(); } catch (e) { console.error("Repaint failed:", e.message); }
+  });
+}
+
 /** The one place toasts are mounted, shared by every kind of toast. */
 function toastBoxEl() {
   let box = document.getElementById("toastBox");

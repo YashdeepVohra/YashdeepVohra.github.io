@@ -21,6 +21,7 @@ import { normalizeUsername, hydrateProfileCache, rememberUser, clearProfileCache
 import { loadEvents, renderEvents } from './eventsService.js';
 import { loadBlocks } from './blockService.js';
 import { loadOrbit } from './orbitService.js';
+import { refreshSocialUI } from '../utils/ui.js';
 import { loadChatList } from './chatService.js';
 
 const REDIRECT_KEY = "isRedirecting";
@@ -275,9 +276,10 @@ export function initializeUserApp(userData) {
     loadChatList();
   });
 
-  // The orbit decides what the trust chip on each card says, so a
-  // change to it re-renders the feed the same way a block does.
-  loadOrbit(() => renderEvents());
+  // Orbit state is on screen in four places at once — the feed's trust
+  // chips, search results, whichever profile is open, and the Orbit
+  // screen itself. They all repaint together, or they disagree.
+  loadOrbit(() => refreshSocialUI());
 
   loadChatList();
   loadEvents();

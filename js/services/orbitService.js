@@ -41,7 +41,7 @@ import { safeId, escapeHtml, renderAvatar } from '../utils/formatters.js';
 import { pairKey, isBlocked } from './blockService.js';
 import { fetchUser, primeUsers, displayNameFor, usernameFor, avatarFor } from './userService.js';
 import { openOverlay, closeOverlay } from '../utils/overlays.js';
-import { toast } from '../utils/ui.js';
+import { toast, refreshSocialUI } from '../utils/ui.js';
 
 const MAX_VOUCHES = 500;
 
@@ -83,13 +83,14 @@ export function loadOrbit(onChange) {
         state.orbitOutgoing = outgoing;
 
         updateOrbitBadge();
+        if (typeof onOrbitChange === "function") onOrbitChange();
+        if (isOrbitOpen()) renderOrbit();
+
         // Names for the orbit screen, fetched once and then cached.
+        // Only the second paint waits on the network.
         primeUsers(linked.concat(incoming, outgoing)).then(() => {
           if (isOrbitOpen()) renderOrbit();
         });
-
-        if (typeof onOrbitChange === "function") onOrbitChange();
-        if (isOrbitOpen()) renderOrbit();
       },
       (error) => console.error("Orbit error:", error.code || error.message)
     );
@@ -140,7 +141,9 @@ export function orbitOutNow() {
 export function vouchersYouKnow(uid) {
   const u = state.userCache[uid];
   if (!u || !Array.isArray(u.vouchedBy)) return [];
-  return u.vouchedBy.filter((v) => v !== state.uid && state.orbitUids.includes(v));
+  return u.vouchedBy.filter(
+    (v) => v !== state.uid && state.orbitUids.includes(v) && !isBlocked(v)
+  );
 }
 
 export function vouchCount(uid) {
@@ -155,6 +158,29 @@ export function vouchCount(uid) {
    ------------------------------------------------------------------- */
 
 /**
+ * Put the three lists into a given shape and repaint at once, before
+ * the network has said anything.
+ *
+ * The snapshot listener is the source of truth and will correct this
+ * within a moment, but "within a moment" is not the same as "in the
+ * frame the finger came up". Without this, tapping Pull in left the
+ * button saying Pull in until the round trip landed, which reads as a
+ * dead button and gets tapped twice.
+ */
+function setLocalOrbit(uid, where) {
+  state.orbitUids = state.orbitUids.filter((u) => u !== uid);
+  state.orbitIncoming = state.orbitIncoming.filter((u) => u !== uid);
+  state.orbitOutgoing = state.orbitOutgoing.filter((u) => u !== uid);
+  if (where === "linked") state.orbitUids = state.orbitUids.concat([uid]);
+  if (where === "incoming") state.orbitIncoming = state.orbitIncoming.concat([uid]);
+  if (where === "outgoing") state.orbitOutgoing = state.orbitOutgoing.concat([uid]);
+
+  updateOrbitBadge();
+  refreshSocialUI();
+  if (isOrbitOpen()) renderOrbit();
+}
+
+/**
  * Ask someone to join your orbit. The document id is derived from the
  * two uids, so sending the same request twice is the same write, not a
  * duplicate — and if THEY already asked you, this accepts instead.
@@ -165,11 +191,14 @@ export async function pullIn(targetUid) {
   if (isBlocked(uid)) return toast("You can't do that with someone you've blocked.");
 
   if (orbitStatus(uid) === "incoming") return acceptRequest(uid);
+  if (orbitStatus(uid) !== "none") return;        // already asked, or already in
 
-  const pair = [state.uid, uid].sort();
+  const before = orbitStatus(uid);
+  setLocalOrbit(uid, "outgoing");
+
   try {
     await db.collection("orbit").doc(pairKey(state.uid, uid)).set({
-      pair,
+      pair: [state.uid, uid].sort(),
       fromUid: state.uid,
       status: "pending",
       at: Date.now()
@@ -177,6 +206,7 @@ export async function pullIn(targetUid) {
     toast("Request sent to " + displayNameFor(uid));
   } catch (e) {
     console.error("Orbit request failed:", e.code || e.message);
+    setLocalOrbit(uid, before);
     toast("Couldn't send that request. Try again.");
   }
 }
@@ -185,27 +215,45 @@ export async function pullIn(targetUid) {
 export async function acceptRequest(targetUid) {
   const uid = safeId(targetUid);
   if (!uid) return;
+
+  const before = orbitStatus(uid);
+  setLocalOrbit(uid, "linked");
+
   try {
     await db.collection("orbit").doc(pairKey(state.uid, uid)).update({ status: "linked" });
     toast(displayNameFor(uid) + " is in your orbit");
   } catch (e) {
     console.error("Accept failed:", e.code || e.message);
+    setLocalOrbit(uid, before);
     toast("Couldn't accept that. Try again.");
   }
 }
 
 /**
  * Decline, withdraw, or leave an orbit. All three are the same delete —
- * there is only ever one document between two people.
+ * there is only ever one document between two people — but they are
+ * three different things to the person tapping, so they are told
+ * three different things.
  */
 export async function removeOrbit(targetUid, quietly) {
   const uid = safeId(targetUid);
   if (!uid) return;
+
+  const before = orbitStatus(uid);
+  const said = {
+    incoming: "Request ignored",
+    outgoing: "Request withdrawn",
+    linked: "Removed from your orbit"
+  }[before] || "Done";
+
+  setLocalOrbit(uid, "none");
+
   try {
     await db.collection("orbit").doc(pairKey(state.uid, uid)).delete();
-    if (!quietly) toast("Done");
+    if (!quietly) toast(said);
   } catch (e) {
     console.error("Orbit remove failed:", e.code || e.message);
+    setLocalOrbit(uid, before);
     toast("Couldn't do that right now.");
   }
 }
@@ -240,7 +288,10 @@ export async function toggleVouch(targetUid) {
     // Re-read so the count and the button agree straight away.
     await fetchUser(uid, { force: true });
     toast(on ? "Vouch removed" : "You vouched for " + displayNameFor(uid));
-    if (typeof onOrbitChange === "function") onOrbitChange();
+    // The feed, search and any open profile — and the Orbit screen
+    // itself, which is where the button that was just tapped lives.
+    refreshSocialUI();
+    if (isOrbitOpen()) renderOrbit();
   } catch (e) {
     console.error("Vouch failed:", e.code || e.message);
     toast("Couldn't save that vouch.");
@@ -458,11 +509,20 @@ export function renderOrbitRings(hostEl, uids, total) {
     .filter((u) => !isBlocked(u))
     .sort((a, b) => (outNow.includes(b) ? 1 : 0) - (outNow.includes(a) ? 1 : 0));
 
+  // The rings are rebuilt from scratch, which restarts every rotation
+  // from zero. That is fine once; doing it on every repaint made the
+  // whole system visibly jump back to its start position each time
+  // somebody was followed. Rebuild only when the people really changed.
+  const signature = people.join(",") + "|" + outNow.join(",") + "|" + total;
+  if (hostEl.dataset.signature === signature) return;
+  hostEl.dataset.signature = signature;
+
   if (!people.length) {
     hostEl.innerHTML = "";
     hostEl.classList.add("hidden");
     return;
   }
+
   hostEl.classList.remove("hidden");
 
   const shown = people.slice(0, MAX_SHOWN);

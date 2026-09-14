@@ -33,7 +33,7 @@ import { isBlocked } from './blockService.js';
 import {
   fetchUser, primeUsers, displayNameFor, usernameFor, avatarFor
 } from './userService.js';
-import { toast } from '../utils/ui.js';
+import { toast, refreshSocialUI } from '../utils/ui.js';
 import { openOverlay, closeOverlay } from '../utils/overlays.js';
 
 /** Am I following them? Read from my own list, never the network. */
@@ -94,6 +94,7 @@ export async function toggleFollow(targetUid, onDone) {
     : state.following.concat([uid]);
   nudgeFollowers(uid, on ? -1 : 1);
   if (typeof onDone === "function") onDone();
+  refreshSocialUI();
 
   try {
     await db.collection("users").doc(uid).update({
@@ -117,6 +118,7 @@ export async function toggleFollow(targetUid, onDone) {
     toast("Couldn't save that. Check your connection.");
   }
   if (typeof onDone === "function") onDone();
+  refreshSocialUI();
   if (isFollowListOpen()) renderFollowList();
 }
 
@@ -210,7 +212,13 @@ export function renderFollowList() {
     return;
   }
 
-  box.innerHTML = members.map((uid) => {
+  // Rules cap these arrays at 5000. Painting five thousand rows would
+  // lock the page up, and nobody scrolls that far anyway.
+  const LIST_CAP = 300;
+  const capped = members.slice(0, LIST_CAP);
+  const hidden = members.length - capped.length;
+
+  box.innerHTML = capped.map((uid) => {
     const id = safeId(uid);
     if (!id) return "";
     const me = uid === state.uid;
@@ -227,5 +235,7 @@ export function renderFollowList() {
         </div>
         <div class="orbit-row-actions">${action}</div>
       </div>`;
-  }).join("");
+  }).join("") + (hidden
+    ? `<p class="settings-hint" style="text-align:center;">and ${hidden} more</p>`
+    : "");
 }

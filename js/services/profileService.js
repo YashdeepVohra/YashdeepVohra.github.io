@@ -50,8 +50,26 @@ export function selectAvatar(element, type) {
   closeProfileModal();
 }
 
+/**
+ * Where you were before this profile.
+ *
+ * Profiles chain: a follower list leads to somebody's profile, whose
+ * orbit leads to another. The profile screen is one screen, not a
+ * stack, so back used to drop you all the way to the feed from three
+ * profiles deep. Each hop remembers the one before it, and back walks
+ * them in order — which matches the history entry each hop pushed.
+ */
+const profileTrail = [];
+
 export function openProfileScreen(targetUid = null) {
   const uid = safeId(targetUid) || state.uid;
+
+  const alreadyOnAProfile = !document
+    .getElementById("profileScreen")
+    ?.classList.contains("hidden");
+  if (alreadyOnAProfile && state.currentProfileUid && state.currentProfileUid !== uid) {
+    profileTrail.push(state.currentProfileUid);
+  }
 
   // A profile opened from a chat used to render UNDERNEATH it — the
   // chat sits at a higher layer — so nothing appeared to happen, and
@@ -66,7 +84,19 @@ export function openProfileScreen(targetUid = null) {
   loadProfileUI(uid);
 }
 
-export function closeProfileScreen() {
+/**
+ * Back out of a profile. One step at a time along the trail; `all`
+ * leaves for good, which is what a tab tap wants.
+ */
+export function closeProfileScreen({ all = false } = {}) {
+  if (!all && profileTrail.length) {
+    const previous = profileTrail.pop();
+    state.currentProfileUid = previous;
+    loadProfileUI(previous);
+    return;
+  }
+
+  profileTrail.length = 0;
   if (state.profileEventsUnsubscribe) {
     state.profileEventsUnsubscribe();
     state.profileEventsUnsubscribe = null;

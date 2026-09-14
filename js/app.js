@@ -8,7 +8,7 @@
 
 import { auth } from './config/firebase.js';
 import { state } from './state/store.js';
-import { switchScreen, showTab, toggleTime, setLoading } from './utils/ui.js';
+import { switchScreen, showTab, toggleTime, setLoading, onSocialChange } from './utils/ui.js';
 
 import {
   loginWithGoogle,
@@ -21,6 +21,7 @@ import {
 } from './services/authService.js';
 
 import {
+  renderEvents,
   addEvent,
   joinEvent,
   leaveEvent,
@@ -106,7 +107,7 @@ import {
 import { initSwipeListeners } from './interactions/swipeReply.js';
 import { initViewportFit } from './utils/viewport.js';
 import { popOverlay, anyOverlayOpen, clearOverlays } from './utils/overlays.js';
-import { openSearch, closeSearch, onSearchInput, searchOpenProfile, searchOpenEvent } from './interactions/searchUI.js';
+import { openSearch, closeSearch, onSearchInput, searchOpenProfile, searchOpenEvent, refreshSearchResults } from './interactions/searchUI.js';
 
 // ==========================================
 // EXPOSE TO WINDOW FOR INLINE HTML HANDLERS
@@ -144,7 +145,7 @@ function goToTab(tab) {
   // Recap is only fetched the first time someone actually asks for it.
   if (tab === "recap") ensureRecapLoaded();
   if (state.currentChat) closeChat({ silent: true });
-  if (state.currentProfileUid) closeProfileScreen();
+  if (state.currentProfileUid) closeProfileScreen({ all: true });
   switchScreen("home");
   document.querySelector(".topbar")?.classList.remove("hidden");
   showTab(tab);
@@ -258,6 +259,14 @@ Object.assign(window, {
 // ==========================================
 function boot() {
   window.__livesociyaBooted = true;
+
+  // Everything that shows who you follow or who is in your orbit
+  // repaints together. Registered here because this is the only module
+  // that already imports all of them.
+  onSocialChange(renderEvents);
+  onSocialChange(refreshSearchResults);
+  onSocialChange(() => refreshProfileSocial(state.currentProfileUid));
+
   checkRedirectLock();
   initAuthListener();
   initSwipeListeners();

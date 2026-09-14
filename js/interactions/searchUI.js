@@ -14,6 +14,14 @@ import { focusEvent } from '../services/eventsService.js';
 let debounce = 0;
 let lastQuery = "";
 
+// The last thing painted, kept so the list can be redrawn when the
+// orbit changes underneath it. Pulling somebody in used to leave the
+// row still saying "Pull in" until the whole search was typed again,
+// because nothing ever told this screen that anything had happened.
+let lastPeople = [];
+let lastEvents = [];
+let lastOptions = {};
+
 export function openSearch() {
   openOverlay("searchScreen");
   const input = document.getElementById("searchInput");
@@ -23,6 +31,13 @@ export function openSearch() {
     setTimeout(() => input.focus(), 180);
   }
   renderSearch("", [], []);
+}
+
+/** Repaint the current results in place — no query, no reads. */
+export function refreshSearchResults() {
+  const el = document.getElementById("searchScreen");
+  if (!el || el.classList.contains("hidden")) return;
+  renderSearch(lastQuery, lastPeople, lastEvents, lastOptions);
 }
 
 export function closeSearch() {
@@ -99,9 +114,14 @@ function eventRow(e) {
     </button>`;
 }
 
-function renderSearch(query, people, events, { peopleLoading = false } = {}) {
+function renderSearch(query, people, events, options = {}) {
   const box = document.getElementById("searchResults");
   if (!box) return;
+
+  const { peopleLoading = false } = options;
+  lastPeople = people;
+  lastEvents = events;
+  lastOptions = options;
 
   if (query.trim().length < 2) {
     box.innerHTML = `
