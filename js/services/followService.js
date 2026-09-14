@@ -24,6 +24,20 @@
 // document, so a determined person could add uids they do not really
 // follow. That is why the FOLLOWER count is the one used as a signal
 // anywhere it matters, and the following count is just context.
+//
+// PRIVATE ACCOUNTS
+// ----------------
+// With `private: true`, a follow does not land in `followers` at all —
+// the rules forbid it — it lands in `followRequests`, and only the
+// owner can move a name from that queue into their followers. One name
+// at a time, and only a name that actually asked.
+//
+// What that does and does not mean is worth being straight about. It
+// decides who is in your follower list, and it is enforced by the
+// database rather than by the app. It does NOT hide your events: the
+// campus feed is public by design, which was the deliberate choice
+// made when private events were left out. Hiding those needs a second
+// feed listener and an allow list on every event.
 // ==========================================
 
 import { db, FieldValue } from '../config/firebase.js';
@@ -39,6 +53,24 @@ import { openOverlay, closeOverlay } from '../utils/overlays.js';
 /** Am I following them? Read from my own list, never the network. */
 export function isFollowing(uid) {
   return !!uid && state.following.includes(uid);
+}
+
+/** Does this account approve its followers? */
+export function isPrivateAccount(uid) {
+  if (uid === state.uid) return state.isPrivate === true;
+  const u = state.userCache[uid];
+  return !!(u && u.private === true);
+}
+
+/** Have I already asked to follow them? */
+export function hasAskedToFollow(uid) {
+  const u = state.userCache[uid];
+  return !!(u && Array.isArray(u.followRequests) && u.followRequests.includes(state.uid));
+}
+
+/** People waiting on ME to let them follow. */
+export function myFollowRequests() {
+  return (state.followRequests || []).filter((u) => u && !isBlocked(u));
 }
 
 export function followerCount(uid) {
@@ -86,6 +118,12 @@ export async function toggleFollow(targetUid, onDone) {
   if (!uid || uid === state.uid) return;
   if (isBlocked(uid)) return toast("You can't do that with someone you've blocked.");
 
+  // A private account is asked, not followed. Unfollowing one still
+  // goes down the normal path — leaving is never gated.
+  if (!isFollowing(uid) && isPrivateAccount(uid)) {
+    return askToFollow(uid, onDone);
+  }
+
   const on = isFollowing(uid);
 
   // Optimistic: the button AND the count move now, network catches up.
@@ -122,6 +160,109 @@ export async function toggleFollow(targetUid, onDone) {
   if (isFollowListOpen()) renderFollowList();
 }
 
+/** Move my own uid in or out of somebody's request queue. */
+function nudgeRequests(uid, joining) {
+  const u = state.userCache[uid];
+  if (!u) return;
+  const list = Array.isArray(u.followRequests) ? u.followRequests : [];
+  u.followRequests = joining
+    ? list.concat([state.uid])
+    : list.filter((x) => x !== state.uid);
+}
+
+/** Ask a private account to let you follow, or take the ask back. */
+export async function askToFollow(targetUid, onDone) {
+  const uid = safeId(targetUid);
+  if (!uid || uid === state.uid) return;
+  if (isBlocked(uid)) return toast("You can't do that with someone you've blocked.");
+
+  const asked = hasAskedToFollow(uid);
+  nudgeRequests(uid, !asked);
+  if (typeof onDone === "function") onDone();
+  refreshSocialUI();
+
+  try {
+    await db.collection("users").doc(uid).update({
+      followRequests: asked
+        ? FieldValue.arrayRemove(state.uid)
+        : FieldValue.arrayUnion(state.uid)
+    });
+    toast(asked ? "Request withdrawn" : "Asked to follow " + displayNameFor(uid));
+  } catch (e) {
+    console.error("Follow request failed:", e.code || e.message);
+    nudgeRequests(uid, asked);
+    toast("Couldn't send that. Check your connection.");
+  }
+  if (typeof onDone === "function") onDone();
+  refreshSocialUI();
+}
+
+/**
+ * Let somebody in, or turn them away. Both are one write on your own
+ * profile, and the rules only accept it when exactly one name leaves
+ * the queue and nothing but that same name joins the followers.
+ */
+export async function answerFollowRequest(requesterUid, accept) {
+  const uid = safeId(requesterUid);
+  if (!uid) return;
+
+  const me = state.userCache[state.uid] || {};
+  const before = Array.isArray(me.followers) ? me.followers : [];
+  if (!(state.followRequests || []).includes(uid)) return;
+
+  const patch = { followRequests: FieldValue.arrayRemove(uid) };
+  if (accept) patch.followers = FieldValue.arrayUnion(uid);
+
+  state.followRequests = state.followRequests.filter((u) => u !== uid);
+  if (accept) me.followers = before.concat([uid]);
+  refreshSocialUI();
+  if (isFollowListOpen()) renderFollowList();
+
+  try {
+    await db.collection("users").doc(state.uid).update(patch);
+    toast(accept ? displayNameFor(uid) + " follows you now" : "Request declined");
+  } catch (e) {
+    console.error("Follow request answer failed:", e.code || e.message);
+    state.followRequests = state.followRequests.concat([uid]);
+    me.followers = before;
+    toast("Couldn't do that right now.");
+  }
+  refreshSocialUI();
+  if (isFollowListOpen()) renderFollowList();
+}
+
+/** Flip your own account between open and approve-first. */
+export async function setPrivateAccount(on) {
+  const want = !!on;
+  const was = state.isPrivate === true;
+  state.isPrivate = want;
+
+  try {
+    await db.collection("users").doc(state.uid).update({ private: want });
+    if (state.userCache[state.uid]) state.userCache[state.uid].private = want;
+    toast(want ? "Your account is private" : "Your account is open");
+  } catch (e) {
+    console.error("Privacy switch failed:", e.code || e.message);
+    state.isPrivate = was;
+    toast("Couldn't change that right now.");
+  }
+  refreshSocialUI();
+  return state.isPrivate;
+}
+
+/** Put the Settings switch in step with the account. */
+export function syncPrivacyUI() {
+  const on = state.isPrivate === true;
+  const sw = document.getElementById("privacySwitch");
+  const label = document.getElementById("privacyState");
+  if (sw) sw.classList.toggle("on", on);
+  if (label) {
+    label.innerText = on
+      ? "You approve everyone who follows you"
+      : "Anyone can follow you";
+  }
+}
+
 /* ---------------------------------------------------------------------
    The lists behind the numbers
    ---------------------------------------------------------------------
@@ -142,7 +283,8 @@ let listKind = "followers";
 const LIST_TITLES = {
   followers: "Followers",
   following: "Following",
-  vouches: "Vouched by"
+  vouches: "Vouched by",
+  requests: "Follow requests"
 };
 
 function isFollowListOpen() {
@@ -154,7 +296,8 @@ function isFollowListOpen() {
 function listMembers() {
   const u = state.userCache[listUid] || {};
   let uids;
-  if (listKind === "followers") uids = u.followers;
+  if (listKind === "requests") uids = state.followRequests;
+  else if (listKind === "followers") uids = u.followers;
   else if (listKind === "vouches") uids = u.vouchedBy;
   else uids = listUid === state.uid ? state.following : u.following;
   return (Array.isArray(uids) ? uids : []).filter((x) => x && !isBlocked(x));
@@ -172,11 +315,13 @@ export async function openFollowList(targetUid, kind) {
   // The arrays normally arrive with the profile that was just opened.
   // If this list was reached some other way, fetch them first.
   const u = state.userCache[uid] || {};
-  const needsDoc = listKind === "followers"
-    ? !Array.isArray(u.followers)
-    : listKind === "vouches"
-      ? !Array.isArray(u.vouchedBy)
-      : uid !== state.uid && !Array.isArray(u.following);
+  const needsDoc = listKind === "requests"
+    ? false
+    : listKind === "followers"
+      ? !Array.isArray(u.followers)
+      : listKind === "vouches"
+        ? !Array.isArray(u.vouchedBy)
+        : uid !== state.uid && !Array.isArray(u.following);
   if (needsDoc) await fetchUser(uid, { force: true });
 
   await primeUsers(listMembers());
@@ -206,7 +351,8 @@ export function renderFollowList() {
     const empty = {
       followers: "No followers yet.",
       following: "Not following anyone yet.",
-      vouches: "Nobody has vouched for them yet."
+      vouches: "Nobody has vouched for them yet.",
+      requests: "Nobody is waiting. When somebody asks to follow you, they'll show up here."
     }[listKind];
     box.innerHTML = `<div class="empty-state"><h4>${escapeHtml(LIST_TITLES[listKind])}</h4><p>${escapeHtml(empty)}</p></div>`;
     return;
@@ -223,9 +369,18 @@ export function renderFollowList() {
     if (!id) return "";
     const me = uid === state.uid;
     const on = isFollowing(uid);
-    const action = me
-      ? `<span class="row-chip">You</span>`
-      : `<button class="act ${on ? "joined" : "primary"}" onclick="event.stopPropagation(); window.toggleFollowInList('${id}')">${on ? "Following" : "Follow"}</button>`;
+    let action;
+    if (listKind === "requests") {
+      action = `
+        <button class="act primary" onclick="event.stopPropagation(); window.answerFollowRequest('${id}', true)">Approve</button>
+        <button class="act" onclick="event.stopPropagation(); window.answerFollowRequest('${id}', false)">Decline</button>`;
+    } else if (me) {
+      action = `<span class="row-chip">You</span>`;
+    } else if (hasAskedToFollow(uid)) {
+      action = `<button class="act requested" onclick="event.stopPropagation(); window.toggleFollowInList('${id}')">Asked</button>`;
+    } else {
+      action = `<button class="act ${on ? "joined" : "primary"}" onclick="event.stopPropagation(); window.toggleFollowInList('${id}')">${on ? "Following" : isPrivateAccount(uid) ? "Ask" : "Follow"}</button>`;
+    }
     return `
       <div class="orbit-row" onclick="window.closeFollowList(); window.openProfileScreen('${id}')">
         <div class="chat-avatar" style="width:44px;height:44px;font-size:19px;">${renderAvatar(avatarFor(uid))}</div>

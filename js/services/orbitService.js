@@ -451,7 +451,7 @@ const MAX_SHOWN = RING_CAPS.reduce((a, b) => a + b, 0);
 // Where the rings sit for each possible ring count, so two rings are
 // spaced like two rings rather than like the first and last of three.
 const RING_LAYOUT = [
-  [128],
+  [124],
   [112, 206],
   [104, 180, 256]
 ];
@@ -545,32 +545,19 @@ export function renderOrbitRings(hostEl, uids, total) {
   let cursor = 0;
   counts.forEach((c) => { rings.push(shown.slice(cursor, cursor + c)); cursor += c; });
 
-  const BOX = 300;
+  // A single ring does not need the room three rings need, and an
+  // almost-empty 300px square under a small orbit just looks broken.
+  const BOX = rings.length === 1 ? 200 : 300;
 
-  const drawn = rings.filter((list) => list.length);
-
-  const html = drawn.map((list, i) => {
+  const html = rings.filter((list) => list.length).map((list, i) => {
     const diameter = layout[i];
     const size = RING_FACE[i];
     const spin = RING_SPIN[i];
     const dir = i % 2 === 0 ? "cw" : "ccw";
     const fade = (0.42 - i * 0.06).toFixed(2);
+    const slotStep = 360 / list.length;
 
-    // The "+N" for everyone not drawn takes a slot of its own on the
-    // outermost ring, rather than sitting on the avatar in the middle
-    // where the inner ring kept sweeping a face underneath it.
-    const isOuter = i === drawn.length - 1;
-    const slots = isOuter && hidden ? list.concat([null]) : list;
-    const slotStep = 360 / slots.length;
-
-    const faces = slots.map((u, n) => {
-      if (u === null) {
-        return `
-        <span class="orbit-slot" style="--a:${(n * slotStep).toFixed(1)}deg">
-          <span class="orbit-face orbit-more" style="--s:${size}" title="${hidden} more in your orbit"
-                onclick="event.stopPropagation(); window.openOrbitScreen()">+${hidden}</span>
-        </span>`;
-      }
+    const faces = list.map((u, n) => {
       const id = safeId(u);
       // Only the innermost ring pulses. Six green rings blinking at
       // once stops reading as "these people are out" and starts
@@ -597,6 +584,7 @@ export function renderOrbitRings(hostEl, uids, total) {
     <div class="orbit-system${WEAK_DEVICE ? " still" : ""}" style="--box:${BOX}">
       <button class="orbit-core" onclick="window.openOrbitScreen()" title="Open your orbit">
         ${renderAvatar(state.userAvatar)}
+        ${hidden ? `<span class="orbit-more">+${hidden}</span>` : ""}
       </button>
       ${html}
     </div>

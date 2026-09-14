@@ -17,7 +17,10 @@ import { fetchUser, displayNameFor, usernameFor, avatarFor, rememberUser } from 
 import {
   orbitStatus, inOrbit, hasVouched, vouchCount, vouchersYouKnow, renderOrbitRings
 } from './orbitService.js';
-import { isFollowing, followerCount, followingCount } from './followService.js';
+import {
+  isFollowing, followerCount, followingCount,
+  isPrivateAccount, hasAskedToFollow, myFollowRequests, syncPrivacyUI
+} from './followService.js';
 import { isBlocked, blockUser, unblockUser, submitReport, myBlockList } from './blockService.js';
 
 // The avatar picker only ever writes one of these, or the Google photo.
@@ -215,6 +218,7 @@ export async function loadProfileUI(targetUid) {
 export function openSettingsScreen() {
   openOverlay("settingsScreen");
   refreshBlockedList();
+  syncPrivacyUI();
 
   const nameInput = document.getElementById("editDisplayNameInput");
   if (nameInput) nameInput.value = state.userDisplayName || displayNameFor(state.uid);
@@ -349,6 +353,22 @@ export function renderOrbitActions(targetUid, isSelf) {
   const id = safeId(targetUid);
   if (!id) return;
 
+  const requestsHost = document.getElementById("profileRequests");
+  if (requestsHost) {
+    const waitingToFollow = isSelf ? myFollowRequests().length : 0;
+    requestsHost.classList.toggle("hidden", !waitingToFollow);
+    requestsHost.innerHTML = waitingToFollow
+      ? `<button class="orbit-cta" onclick="window.openProfileList('requests')">
+           <i class='bx bx-user-voice'></i>
+           <span class="orbit-cta-text">
+             <b>${waitingToFollow} ${waitingToFollow === 1 ? "person wants" : "people want"} to follow you</b>
+             <small>Your account is private, so they're waiting on you</small>
+           </span>
+           <span class="orbit-count">${waitingToFollow}</span>
+         </button>`
+      : "";
+  }
+
   if (isSelf) {
     const n = state.orbitUids.length;
     const waiting = state.orbitIncoming.length;
@@ -382,7 +402,18 @@ export function renderOrbitActions(targetUid, isSelf) {
   // The light action sits next to the deliberate one: follow to keep
   // up with someone, orbit for the people you'd actually show up for.
   const following = isFollowing(targetUid);
-  const followBtn = `<button class="orbit-btn ${following ? "following" : "primary"}" onclick="window.toggleFollow('${id}')"><i class='bx ${following ? "bx-check" : "bx-plus"}'></i> ${following ? "Following" : "Follow"}</button>`;
+  const asked = hasAskedToFollow(targetUid);
+  let followLabel = "Follow";
+  let followIcon = "bx-plus";
+  let followClass = "primary";
+  if (following) {
+    followLabel = "Following"; followIcon = "bx-check"; followClass = "following";
+  } else if (asked) {
+    followLabel = "Requested"; followIcon = "bx-time-five"; followClass = "pending";
+  } else if (isPrivateAccount(targetUid)) {
+    followLabel = "Ask to follow"; followIcon = "bx-lock-open-alt";
+  }
+  const followBtn = `<button class="orbit-btn ${followClass}" onclick="window.toggleFollow('${id}')"><i class='bx ${followIcon}'></i> ${followLabel}</button>`;
 
   let action;
   if (status === "linked") {

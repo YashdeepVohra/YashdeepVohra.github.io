@@ -13,7 +13,9 @@ rules_version = '2';
 // Test:     Firebase console > Firestore > Rules > Rules Playground
 //
 // Data model
-//   users/{uid}                   public profile
+//   users/{uid}                   public profile; followers[] is written
+//                                 only by the follower, followRequests[]
+//                                 is the queue on a private account
 //   users/{uid}/private/{doc}     email etc. — owner only
 //   usernames/{handle}            { uid } — handle reservation, create-once
 //   events/{eventId}              hostUid, participantUids[], hypedUids[]
@@ -63,6 +65,18 @@ service cloud.firestore {
     function selfToggleOnly(before, after) {
       return after.toSet().difference(before.toSet()).hasOnly([uid()])
           && before.toSet().difference(after.toSet()).hasOnly([uid()]);
+    }
+
+    // What a write adds to / removes from a list, as sets.
+    function added(before, after) {
+      return after.toSet().difference(before.toSet());
+    }
+    function removed(before, after) {
+      return before.toSet().difference(after.toSet());
+    }
+
+    function listOr(data, key) {
+      return key in data ? data[key] : [];
     }
 
     // A list may gain or lose at most one entry per write. It does not
@@ -135,11 +149,13 @@ service cloud.firestore {
         // be handed to yourself at sign-up.
         && !('vouchedBy' in request.resource.data)
         && !('followers' in request.resource.data)
-        && !('following' in request.resource.data);
+        && !('following' in request.resource.data)
+        && !('followRequests' in request.resource.data);
 
       allow update: if isMe(userId)
         // Fields the client is allowed to touch at all.
-        && changedKeys().hasOnly(['username', 'displayName', 'avatar', 'googlePfp', 'updatedAt', 'following'])
+        && changedKeys().hasOnly(['username', 'displayName', 'avatar', 'googlePfp', 'updatedAt', 'following', 'private'])
+        && (!(changedKeys().hasAny(['private'])) || request.resource.data.private is bool)
         // You keep your OWN following list, and only ever one name at a
         // time. Note the asymmetry, which is the point of the design:
         // `followers` below can only be written by the follower, so a
@@ -205,10 +221,56 @@ service cloud.firestore {
         && request.resource.data.followers is list
         && request.resource.data.followers.size() <= 5000
         && selfToggleOnly(
-             'followers' in resource.data ? resource.data.followers : [],
+             listOr(resource.data, 'followers'),
              request.resource.data.followers
            )
-        && !blockedWith(userId);
+        && !blockedWith(userId)
+        // A PRIVATE account cannot be followed directly — you may only
+        // ask, below, and wait for them to move you across. Note this
+        // guards ADDING yourself only: leaving somebody's followers has
+        // to work whatever their settings say.
+        && (
+             !added(listOr(resource.data, 'followers'), request.resource.data.followers).hasAny([uid()])
+             || listOr(resource.data, 'private') != true
+           );
+
+      // ASKING TO FOLLOW a private account. Same shape as the rule
+      // above — your own uid, nothing else, nobody else's — but it
+      // lands in a queue the owner decides on rather than in the
+      // follower list itself.
+      allow update: if signedIn()
+        && !isMe(userId)
+        && changedKeys().hasOnly(['followRequests'])
+        && request.resource.data.followRequests is list
+        && request.resource.data.followRequests.size() <= 5000
+        && selfToggleOnly(
+             listOr(resource.data, 'followRequests'),
+             request.resource.data.followRequests
+           )
+        && !blockedWith(userId)
+        // Withdrawing always works; asking only makes sense while the
+        // account is actually private.
+        && (
+             !added(listOr(resource.data, 'followRequests'), request.resource.data.followRequests).hasAny([uid()])
+             || resource.data.private == true
+           );
+
+      // APPROVING OR DECLINING, by the owner and nobody else. This is
+      // the only path that may write `followers` on your own profile,
+      // and it is tightly bounded: exactly one name leaves the queue,
+      // and the only name that may join the followers is that same one.
+      // So approving cannot smuggle in somebody who never asked, and
+      // nothing can be removed from the followers along the way.
+      allow update: if isMe(userId)
+        && changedKeys().hasOnly(['followers', 'followRequests'])
+        && request.resource.data.followers is list
+        && request.resource.data.followRequests is list
+        && removed(listOr(resource.data, 'followRequests'), request.resource.data.followRequests).size() == 1
+        && added(listOr(resource.data, 'followRequests'), request.resource.data.followRequests).size() == 0
+        && removed(listOr(resource.data, 'followers'), request.resource.data.followers).size() == 0
+        && added(listOr(resource.data, 'followers'), request.resource.data.followers).size() <= 1
+        && removed(listOr(resource.data, 'followRequests'), request.resource.data.followRequests)
+             .hasAll(added(listOr(resource.data, 'followers'), request.resource.data.followers));
 
       // Accounts are never deleted from the client — that would free a
       // handle and orphan every event and message it owns.

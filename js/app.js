@@ -101,7 +101,10 @@ import {
   toggleFollow,
   toggleFollowInList,
   openFollowList,
-  closeFollowList
+  closeFollowList,
+  answerFollowRequest,
+  setPrivateAccount,
+  syncPrivacyUI
 } from './services/followService.js';
 
 import { initSwipeListeners } from './interactions/swipeReply.js';
@@ -138,6 +141,15 @@ function followFromProfile(uid) {
 /** The three numbers on a profile open the people behind them. */
 function openProfileList(kind) {
   openFollowList(state.currentProfileUid || state.uid, kind);
+}
+
+/** Approve or decline from the requests list, keeping it on screen. */
+function answerRequest(uid, accept) {
+  answerFollowRequest(uid, accept === true || accept === "true");
+}
+
+function togglePrivateAccount() {
+  setPrivateAccount(!(state.isPrivate === true)).then(syncPrivacyUI);
 }
 
 function goToTab(tab) {
@@ -231,6 +243,8 @@ Object.assign(window, {
   toggleFollowInList,
   openProfileList,
   closeFollowList,
+  answerFollowRequest: answerRequest,
+  togglePrivateAccount,
 
   // Orbit
   openOrbitScreen,

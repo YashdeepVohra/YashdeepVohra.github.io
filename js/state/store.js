@@ -30,6 +30,8 @@ export const state = {
   // One listener over orbit/{pairId} fills all three of these, so a
   // connection and a request waiting on you cost the same single query.
   following: [],           // uids I follow — my own list, from my user doc
+  followRequests: [],      // uids waiting on me, when my account is private
+  isPrivate: false,        // do I approve my followers?
   orbitUids: [],           // linked — both of you accepted
   orbitIncoming: [],       // uids who asked to join your orbit
   orbitOutgoing: [],       // uids you asked, still waiting
@@ -106,6 +108,8 @@ export function resetState() {
   state.userCache = {};
   state.blockedUids = [];
   state.following = [];
+  state.followRequests = [];
+  state.isPrivate = false;
   state.orbitUids = [];
   state.orbitIncoming = [];
   state.orbitOutgoing = [];

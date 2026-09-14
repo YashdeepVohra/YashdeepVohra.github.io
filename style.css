@@ -1613,7 +1613,9 @@ html:not(.kb-open) .chat-footer {
 .orbit-cta > i:first-child { font-size: 22px; color: var(--violet); }
 .orbit-cta-text { flex: 1; display: flex; flex-direction: column; }
 .orbit-cta-text b { font-size: 15px; font-weight: 450; }
-.orbit-cta-text small { font-size: 12.5px; color: var(--text-muted); }
+/* These live inside a button, which is set in 600. Left alone the
+   sub-line came out as bold as the line above it. */
+.orbit-cta-text small { font-size: 12.5px; font-weight: 400; color: var(--text-muted); }
 
 /* ---- Somebody else's profile ---- */
 .orbit-actions { display: flex; gap: var(--s-8); flex-wrap: wrap; }
@@ -1840,3 +1842,69 @@ html:not(.kb-open) .chat-footer {
   letter-spacing: -0.02em;
 }
 .orbit-face.orbit-more:hover { box-shadow: 0 0 0 2px var(--violet), var(--lift-2); }
+
+/* =====================================================================
+   NO ZOOM ON FOCUS
+   ---------------------------------------------------------------------
+   Safari on iOS zooms the page in whenever a focused field has text
+   smaller than 16px — and every field here was 15px, so tapping the
+   search box, the message box or anything in Create Event punched the
+   layout up and left it there. The usual "fix" is maximum-scale=1 on
+   the viewport, which also takes away pinch-zoom from anyone who needs
+   it to read, so instead the fields are simply 16px on touch screens.
+   Pointers keep the 15px the rest of the type is set against.
+   ===================================================================== */
+@media (pointer: coarse) {
+  input, textarea, select, .search-field input, .inbox-search input {
+    font-size: 16px;
+  }
+}
+
+/* =====================================================================
+   PRIVACY SWITCH
+   ===================================================================== */
+.switch-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--s-12);
+  padding: var(--s-12) var(--s-16);
+  background: var(--bone);
+  border-radius: var(--r-card);
+  text-align: left;
+  color: inherit;
+  box-shadow: none;
+}
+.switch-row:hover { box-shadow: none; transform: none; filter: none; }
+.switch-text { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.switch-text b { font-size: 15px; font-weight: 450; }
+.switch-text small { font-size: 12.5px; font-weight: 400; color: var(--text-muted); }
+
+.switch {
+  flex-shrink: 0;
+  width: 46px;
+  height: 27px;
+  border-radius: var(--r-pill);
+  background: var(--ash);
+  padding: 3px;
+  display: block;
+  transition: background 0.2s var(--ease);
+}
+.switch-knob {
+  display: block;
+  width: 21px;
+  height: 21px;
+  border-radius: 50%;
+  background: var(--paper);
+  box-shadow: var(--lift-1);
+  transition: transform 0.2s var(--ease);
+}
+.switch.on { background: var(--violet); }
+.switch.on .switch-knob { transform: translateX(19px); }
+
+.profile-requests { margin-bottom: var(--s-12); }
+.profile-requests .orbit-cta > i:first-child { color: var(--violet); }
+
+/* Matches the back button's footprint so a header with nothing on its
+   right still centres its title. */
+.header-spacer { width: 40px; flex-shrink: 0; }

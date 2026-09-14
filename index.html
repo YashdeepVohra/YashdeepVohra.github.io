@@ -249,6 +249,7 @@
         </div>
       </div>
 
+      <div id="profileRequests" class="profile-requests hidden"></div>
       <div id="profileOrbit" class="profile-orbit hidden"></div>
       <div id="profileRings" class="profile-rings hidden"></div>
 
@@ -311,6 +312,21 @@
       <input type="text" id="editDisplayNameInput" placeholder="New Display Name" maxlength="20" class="settings-input" autocomplete="off" spellcheck="false">
 
       <button id="saveProfileBtn" onclick="saveProfileData()" class="save-settings-btn" style="margin-bottom:0;">Save Changes</button>
+    </div>
+
+    <div class="card" style="margin-top:20px;">
+      <label class="settings-label" style="margin-top:0;">Who can follow you</label>
+      <p class="settings-hint">
+        On a private account nobody follows you until you say yes. It does not hide your
+        events — the campus feed is public for everyone.
+      </p>
+      <button id="privacyToggle" class="switch-row" onclick="togglePrivateAccount()">
+        <span class="switch-text">
+          <b>Private account</b>
+          <small id="privacyState">Anyone can follow you</small>
+        </span>
+        <span class="switch" id="privacySwitch"><span class="switch-knob"></span></span>
+      </button>
     </div>
 
     <div class="card" style="margin-top:20px;">
@@ -449,6 +465,8 @@
   <div class="screen-header">
     <button class="back-btn" onclick="closeFollowList()"><i class='bx bx-left-arrow-alt'></i></button>
     <div class="header-title" id="followListTitle">Followers</div>
+    <!-- Balances the back button so the title sits in the middle. -->
+    <span class="header-spacer" aria-hidden="true"></span>
   </div>
   <div class="screen-body" id="followListBody"></div>
 </div>
