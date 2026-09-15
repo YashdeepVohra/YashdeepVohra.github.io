@@ -34,6 +34,35 @@ export function confirmYes() { finish(true); }
 export function confirmNo() { finish(false); }
 
 /**
+ * The sheet, built if it is not in the markup.
+ *
+ * There was a fallback here that called window.confirm when the element
+ * was missing — defensive, never expected to run, and still a browser
+ * dialog. Building the thing instead means there is no path left in the
+ * app that can open one.
+ */
+function sheetEl() {
+  let el = document.getElementById("confirmSheet");
+  if (el) return el;
+
+  el = document.createElement("div");
+  el.id = "confirmSheet";
+  el.className = "modal-overlay hidden";
+  el.innerHTML = `
+    <div class="modal-content confirm-sheet">
+      <h3 id="confirmTitle"></h3>
+      <p id="confirmBody"></p>
+      <button id="confirmYes"></button>
+      <button id="confirmNo" class="btn-ghost"></button>
+    </div>`;
+  el.addEventListener("click", (e) => { if (e.target === el) confirmNo(); });
+  el.querySelector("#confirmYes").addEventListener("click", confirmYes);
+  el.querySelector("#confirmNo").addEventListener("click", confirmNo);
+  document.body.appendChild(el);
+  return el;
+}
+
+/**
  * Ask, and resolve to true only if they actually said yes. Dismissing
  * by any route — Cancel, back, Escape, tapping the backdrop — is a no,
  * because the safe answer to "are you sure?" is always no.
@@ -42,8 +71,7 @@ export function askConfirm({ title, body = "", confirm = "Confirm", cancel = "Ca
   // A second ask while one is open would strand the first caller.
   if (settle) finish(false);
 
-  const sheet = document.getElementById("confirmSheet");
-  if (!sheet) return Promise.resolve(window.confirm(title));
+  sheetEl();
 
   const titleEl = document.getElementById("confirmTitle");
   const bodyEl = document.getElementById("confirmBody");

@@ -22,6 +22,7 @@ import {
 
 import {
   renderEvents,
+  flushAllHype,
   addEvent,
   joinEvent,
   leaveEvent,
@@ -304,6 +305,14 @@ function boot() {
   });
 
   document.getElementById("newUsername")?.addEventListener("input", checkUsernameAvailability);
+
+  // A hype waits a moment before it is written, so anything still
+  // waiting has to go when the app is put away — otherwise tapping and
+  // immediately locking the phone would lose it.
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flushAllHype();
+  });
+  window.addEventListener("pagehide", flushAllHype);
 
   // Page in more recap as it is scrolled, rather than all at once.
   const scroller = document.querySelector(".container");

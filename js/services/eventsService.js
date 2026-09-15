@@ -314,7 +314,7 @@ export function loadEvents() {
         const uids = new Set();
 
         snapshot.forEach((doc) => {
-          const data = { id: doc.id, ...doc.data() };
+          const data = applyPendingHype({ id: doc.id, ...doc.data() });
           events.push(data);
           state.eventCache[doc.id] = data;
           if (data.hostUid) uids.add(data.hostUid);
@@ -733,7 +733,7 @@ export function renderEvents() {
       stroke-width="${hasHyped ? 0 : 1.7}" stroke-linejoin="round" aria-hidden="true">
       <path d="M12 22a6.5 6.5 0 0 0 6.5-6.5c0-2-1-3.8-2.9-5.3 0 0 .2 2.4-1.5 2.9.1-2.9-1.8-5.8-4.7-7.6.5 3.8-1.9 4.8-2.9 6.7a6.5 6.5 0 0 0-1 3.3A6.5 6.5 0 0 0 12 22Z"/>
     </svg>`;
-    const hypeBtn = `<button class="act ${hasHyped ? "hyped" : ""}" aria-label="Hype" onclick="window.toggleHype('${id}', ${hasHyped})">${flame} ${hypeCount || "Hype"}</button>`;
+    const hypeBtn = `<button class="act ${hasHyped ? "hyped" : ""}" aria-label="Hype" onclick="window.toggleHype('${id}')">${flame} ${hypeCount || "Hype"}</button>`;
     const chatBtn = `<button class="act" onclick="window.openEventChat('${id}')"><i class='bx bx-message-rounded-dots'></i> Chat</button>`;
 
     const pending = e.pendingUids || [];
@@ -1049,17 +1049,106 @@ export function confirmAttendance(id) {
     });
 }
 
-export function toggleHype(id, isHyped) {
-  const ref = db.collection("events").doc(id);
-  const op = isHyped
-    ? { hypedUids: FieldValue.arrayRemove(state.uid) }
-    : { hypedUids: FieldValue.arrayUnion(state.uid) };
+/* ---------------------------------------------------------------------
+   Hype, settled before it is sent
+   ---------------------------------------------------------------------
+   A hype is membership in a set: you can hype an event once, so there
+   is nothing to accumulate. The only way to make it expensive is to
+   turn it on and off repeatedly — and the people who do that are
+   somebody poking at the button and somebody who tapped it by mistake.
 
-  if (!isHyped) {
+   A cooldown would punish exactly the second person. Tap by accident,
+   tap again to undo, and now you are locked out of your own correction
+   with the wrong state saved. So the write waits instead. The feed
+   moves the instant you tap, and the write goes about a second later —
+   and if by then you are back where you started, nothing is sent at
+   all. A misclick costs nothing, and a burst of taps costs one write
+   instead of six.
+
+   Each write also fans out to everyone with the feed open, so one
+   write saved here is one read saved for every person watching.
+   ------------------------------------------------------------------- */
+
+const HYPE_SETTLE_MS = 900;
+
+// eventId -> { started, desired, timer }. `started` is where this burst
+// of taps began, which is what decides whether anything needs saying.
+const pendingHype = new Map();
+
+function hypedNow(e) {
+  return !!e && (e.hypedUids || []).includes(state.uid);
+}
+
+/** Put the local view of a hype into `want`, without touching anything else. */
+function setHypedLocally(e, want) {
+  if (!e) return;
+  const others = (e.hypedUids || []).filter((u) => u !== state.uid);
+  e.hypedUids = want ? others.concat([state.uid]) : others;
+}
+
+/**
+ * A snapshot arriving mid-burst carries the server's idea of the hype,
+ * which is still the old one. Without this the button would flip back
+ * under the finger every time somebody else touched the same event.
+ */
+export function applyPendingHype(data) {
+  const p = pendingHype.get(data.id);
+  if (p) setHypedLocally(data, p.desired);
+  return data;
+}
+
+export function toggleHype(id) {
+  const e = state.eventCache[id];
+  if (!e) return;
+
+  const before = hypedNow(e);
+  const desired = !before;
+
+  setHypedLocally(e, desired);
+
+  if (desired) {
     if (navigator.vibrate) navigator.vibrate(45);
-    burstFrom(document.activeElement || document.querySelector(`#event-${id} .act`));
+    burstFrom(document.querySelector(`#event-${safeId(id)} .act`));
   }
-  ref.update(op).catch((err) => console.error("Hype failed:", err.code || err.message));
+
+  const open = pendingHype.get(id);
+  if (open) clearTimeout(open.timer);
+  pendingHype.set(id, {
+    started: open ? open.started : before,
+    desired,
+    timer: setTimeout(() => flushHype(id), HYPE_SETTLE_MS)
+  });
+
+  renderEvents();
+}
+
+function flushHype(id) {
+  const p = pendingHype.get(id);
+  if (!p) return;
+  clearTimeout(p.timer);
+  pendingHype.delete(id);
+
+  // Back where the burst began: the server already agrees.
+  if (p.desired === p.started) return;
+
+  db.collection("events").doc(id).update({
+    hypedUids: p.desired
+      ? FieldValue.arrayUnion(state.uid)
+      : FieldValue.arrayRemove(state.uid)
+  }).catch((err) => {
+    console.error("Hype failed:", err.code || err.message);
+    setHypedLocally(state.eventCache[id], p.started);
+    renderEvents();
+  });
+}
+
+/**
+ * Send anything still waiting. Called when the app is hidden or closed,
+ * so a hype is never lost to somebody tapping and immediately locking
+ * their phone.
+ */
+export function flushAllHype() {
+  [...pendingHype.keys()].forEach(flushHype);
 }
 
 /**
