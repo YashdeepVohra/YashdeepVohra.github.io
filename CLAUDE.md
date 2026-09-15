@@ -1,0 +1,162 @@
+# livesociya — working notes
+
+Read this first. It is here so a new session starts knowing what took the
+last ones a while to work out.
+
+**What it is.** A campus app for things happening *right now*: somebody
+starts an event, everyone nearby sees it instantly, it vanishes when it
+ends. Plus direct messages, and a social graph. Live at livesociya.com,
+Firebase Hosting + Firestore, vanilla ES modules — no framework, no build
+step. Open `index.html` over http (not `file://`, modules won't load).
+
+---
+
+## How to work here
+
+- The repo lives on the user's machine. Edit it there; don't rebuild it
+  in the cloud container.
+- **Always `node --check` every changed .js** before committing. There is
+  no build step to catch a typo.
+- **Run `test/smoke.mjs`** before saying something works (see Testing).
+- The user pushes and deploys themselves. After changing `firestore.rules`,
+  say so — the rules only do anything once redeployed, and until then
+  every limit in them is decoration.
+- Commits: end with the Co-Authored-By / Claude-Session lines the session
+  reminder gives.
+
+## The shape of it
+
+```
+index.html          one page, every screen is a div that hides
+style.css           one sheet, tokens at the top (--vibe-*, --s-*, --lift-*)
+js/app.js           entry: imports, window bindings, boot, back button
+js/config/          firebase init + offline persistence
+js/state/store.js   one mutable object, plus resetState() on logout
+js/services/        auth, events, chat, profile, follow, orbit, block,
+                    search, user, limits
+js/utils/           ui (screens/toasts/repaint registry), confirm, overlays,
+                    formatters, viewport
+js/interactions/    search screen, swipe-to-reply
+firestore.rules     ~700 lines, the real access control
+test/               stub.js + smoke.mjs
+```
+
+## Things that must stay true
+
+- **uid is the only identity the database trusts.** `username` is a display
+  handle: never a key, never an ownership field. Rules check
+  `request.auth.uid`, which is free; verifying a username would cost a read
+  on every write.
+- **Everything user-typed goes through `escapeHtml`**, and inline `onclick`
+  handlers take ids only (`safeId`), never text.
+- **Pair documents are one doc with a sorted composite id** — `blocks`,
+  `chats`, `orbit` all use `a_b`. Symmetrical by construction, and the id
+  itself proves membership, so rules need no lookup.
+- **`allow get` and `allow list` are different.** A list rule is checked
+  against the *query*, before documents are read, so it must mirror the
+  query's own constraint. Splitting these is what fixed chats not appearing.
+- **Blocking is total.** Filter `isBlocked` everywhere — lists, counts,
+  the feed, vouches. A count that disagrees with the list under it is a bug.
+
+## Cost model
+
+Firestore charges per document read. A snapshot listener bills **one read
+per changed document per connected client**, so the shape is
+`changes x people watching`. Roughly 31.5k reads/day at 300 daily actives,
+inside the 50k free tier; ~₹170/month at launch-night intensity with 300
+people watching at once.
+
+Decisions already made, with the reason, so they don't get undone:
+
+| | why |
+|---|---|
+| Feed capped at `LIVE_LIMIT = 60`, recap paged | the recap used to load with the feed and nobody opened it |
+| Messages: 25 live + paged scrollback | full history on every chat open |
+| Profiles cached in localStorage, 6h TTL | ~20 reads per open for data that changes twice a year |
+| Firestore offline persistence on | resume tokens: only changed docs bill |
+| Hype writes debounced 900ms | a misclick costs nothing; a burst is one write |
+| Counts live as arrays on the profile | `followers.length` is free; a subcollection is a read per follower |
+
+The remaining lever, if reads ever bite: drop `LIVE_LIMIT` to ~30. It cuts
+fan-out on everything at once.
+
+## Security model in one paragraph
+
+Rules do the enforcing, never the client. `followers` can only be written
+by the follower adding their own uid — so a follower count cannot be
+inflated by its owner. On a private account that write is refused and the
+uid goes to `followRequests`; only the owner can move one name across, and
+the rule bounds it so approving can't smuggle in somebody who never asked.
+Rate limits use `users/{uid}/private/limits`, whose own rule pins every
+timestamp to `request.time` — it can only say "now". The action and the
+stamp go in one batch and the action's rule uses `getAfter()` to check the
+stamp landed, so skipping it just gets the action refused. The icebreaker
+(one opening message to a stranger until they reply) works the same way:
+the message only commits if the same batch flips `icebreakerUsed` false to
+true, and it can never go back.
+
+## Testing
+
+No emulator, no network, no credentials. `test/stub.js` is a hand-written
+stand-in for the Firebase compat SDK with working `orbit` and `events`
+collections, batches that really apply, and counters on `window.__reads` /
+`window.__writes`.
+
+```
+python3 -m http.server 8111        # from the repo root
+node test/smoke.mjs                # CHROME_PATH=... if playwright has no browser
+```
+
+Useful handles inside a page: `window.__m` (the modules), `window.__events`
++ `window.__fireEvents()`, `window.__orbit` + `window.__fireOrbit()`,
+`window.__stubDocs['users/uid']`, `window.__authSingleton.currentUser`.
+
+Every bug in the list below was found this way, so add a case when
+something breaks.
+
+## Gotchas found the hard way
+
+- **`button { display: flex }` is in the base sheet.** Any element you turn
+  into a button inherits it, plus `padding: 13px 24px` and `width: 100%`.
+  This silently laid the profile stat boxes out sideways and squashed the
+  avatar in the middle of the orbit.
+- **`place-items: center` shrink-wraps the grid column**, so a child at
+  `width: 100%` has nothing to resolve against and collapses to its
+  intrinsic size. Emoji avatars hide it; a Google profile photo does not.
+  Photo avatars are pinned with `position: absolute; inset: 0`.
+- **Boxicons has no `bx-hot`** — only the solid `bxs-hot`. Check a class
+  exists before using it. Anything load-bearing (the brand mark, the hype
+  flame, arrows) is inline SVG now, because an icon font that fails to
+  load leaves an invisible control.
+- **Specificity beats source order.** `.empty-state p { margin: 0 }` quietly
+  outranked a later `.starter-foot` rule.
+- **Inputs under 16px make iOS Safari zoom on focus.** They are 16px on
+  `(pointer: coarse)`. Don't "fix" it with `maximum-scale=1`.
+- **The feed is diffed, not rebuilt.** `syncList` replaces only cards whose
+  markup changed. Rebuilding replayed the entry animation on every card,
+  which read as the card vanishing. Don't reintroduce `innerHTML =` there.
+- **Filters hide, they don't re-render.** Every card is in the DOM with a
+  `data-tag`; a filter toggles a class.
+- **Social state is on screen in four places** — feed chips, search rows,
+  the open profile, the Orbit screen. `refreshSocialUI()` repaints all of
+  them; painters are registered in `app.js`. Anything that changes the
+  graph must go through it or the screens disagree.
+- **Optimistic first, then the network, then roll back on failure.** Follow,
+  hype, and every orbit action work this way. A button that waits for a
+  round trip reads as broken.
+- **No `window.confirm` or `alert` anywhere.** Use `askConfirm()` from
+  `js/utils/confirm.js` and `toast()` from `js/utils/ui.js`.
+- **Overlays go through `js/utils/overlays.js`**, which backs them with
+  history so Android back works. Closing is async — `pendingPops` exists
+  because close-then-open in one tick used to tear down the new layer.
+
+## Where it is
+
+Built and working: UID migration, full rules, responsive layout, blocking
+and reporting, request-to-join, host moderation, search, Orbit (mutual
+connections + vouches), follow/followers with private accounts and
+approval, rate limits, the icebreaker, the day-one empty state.
+
+Not built, roughly in the order I'd do them: push notifications (needs
+Blaze), share links for an event, report triage for the admin, a periodic
+re-render so an event that ends while you watch slides to Recap on its own.
