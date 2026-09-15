@@ -471,6 +471,16 @@
   <div class="screen-body" id="followListBody"></div>
 </div>
 
+<!-- The app asking, rather than the browser interrupting. -->
+<div id="confirmSheet" class="modal-overlay hidden" onclick="if (event.target === this) confirmNo()">
+  <div class="modal-content confirm-sheet">
+    <h3 id="confirmTitle">Are you sure?</h3>
+    <p id="confirmBody"></p>
+    <button id="confirmYes" onclick="confirmYes()">Confirm</button>
+    <button id="confirmNo" class="btn-ghost" onclick="confirmNo()">Cancel</button>
+  </div>
+</div>
+
 <div id="peopleModal" class="modal-overlay hidden">
   <div class="modal-content" style="text-align:left;">
     <h3 style="text-align:center;">People</h3>

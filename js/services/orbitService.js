@@ -42,6 +42,7 @@ import { pairKey, isBlocked } from './blockService.js';
 import { fetchUser, primeUsers, displayNameFor, usernameFor, avatarFor } from './userService.js';
 import { openOverlay, closeOverlay } from '../utils/overlays.js';
 import { toast, refreshSocialUI } from '../utils/ui.js';
+import { askConfirm } from '../utils/confirm.js';
 import { stampAsk, limitMessage } from './limitsService.js';
 
 const MAX_VOUCHES = 500;
@@ -150,8 +151,10 @@ export function vouchersYouKnow(uid) {
 export function vouchCount(uid) {
   const u = state.userCache[uid];
   if (!u) return 0;
-  if (typeof u.vouchCount === "number") return u.vouchCount;
-  return Array.isArray(u.vouchedBy) ? u.vouchedBy.length : 0;
+  // Same rule as the follower counts: somebody you have blocked does
+  // not vouch for anybody, as far as you are concerned.
+  if (Array.isArray(u.vouchedBy)) return u.vouchedBy.filter((v) => !isBlocked(v)).length;
+  return typeof u.vouchCount === "number" ? u.vouchCount : 0;
 }
 
 /* ---------------------------------------------------------------------
@@ -264,10 +267,15 @@ export async function removeOrbit(targetUid, quietly) {
 }
 
 /** Confirmed version, for leaving an orbit you are actually in. */
-export function confirmLeaveOrbit(targetUid) {
+export async function confirmLeaveOrbit(targetUid) {
   const name = displayNameFor(targetUid);
-  if (!window.confirm("Remove " + name + " from your orbit?\n\nThey are not told. You can pull them back in later.")) return;
-  removeOrbit(targetUid);
+  const yes = await askConfirm({
+    title: "Remove " + name + " from your orbit?",
+    body: "They are never told. You can pull them back in later.",
+    confirm: "Remove",
+    danger: true
+  });
+  if (yes) removeOrbit(targetUid);
 }
 
 /**

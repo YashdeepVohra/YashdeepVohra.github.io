@@ -18,7 +18,7 @@
 import { auth, db, FieldValue } from '../config/firebase.js';
 import { state } from '../state/store.js';
 import { renderAvatar, formatTime, formatMessage, escapeHtml, safeId } from '../utils/formatters.js';
-import { switchScreen, showTab, showNotification, toggleTime } from '../utils/ui.js';
+import { switchScreen, showTab, showNotification, toggleTime, toast } from '../utils/ui.js';
 import { openProfileScreen } from './profileService.js';
 import { isBlocked } from './blockService.js';
 import { searchPeople } from './searchService.js';
@@ -68,14 +68,14 @@ export async function checkCrossedPaths(uidA, uidB) {
 export async function startChat(rawUsername = null) {
   const typed = rawUsername || document.getElementById("chatUser")?.value;
   const handle = normalizeUsername(typed);
-  if (!handle) return alert("Please enter a username.");
-  if (handle === state.username) return alert("You can't start a chat with yourself!");
+  if (!handle) return toast("Type a handle first.");
+  if (handle === state.username) return toast("That's you.");
 
   const otherUid = await resolveUsernameToUid(handle);
-  if (!otherUid) return alert(`User "@${handle}" does not exist on campus.`);
+  if (!otherUid) return toast("No @" + handle + " on campus.");
   // Deliberately the same message as "no such user" — confirming a
   // block would tell the blocked person exactly what happened.
-  if (isBlocked(otherUid)) return alert(`User "@${handle}" does not exist on campus.`);
+  if (isBlocked(otherUid)) return toast("No @" + handle + " on campus.");
 
   const input = document.getElementById("chatUser");
   if (input && !rawUsername) input.value = "";
@@ -243,7 +243,7 @@ export async function sendMessage() {
 
   const text = input.value.trim();
   if (!text || !state.currentChat) return;
-  if (text.length > 2000) return alert("That message is too long.");
+  if (text.length > 2000) return toast("That message is too long.");
 
   const replyData = state.replyingToMessage
     ? {
@@ -329,11 +329,9 @@ export async function sendMessage() {
   } catch (error) {
     console.error("Send failed:", error.code || error.message);
     input.value = text;
-    alert(
-      error.code === "permission-denied"
-        ? "You can't send a message in this chat."
-        : "Message failed to send."
-    );
+    toast(error.code === "permission-denied"
+      ? "Wait for them to reply before sending another."
+      : "Message failed to send.");
   } finally {
     updateChatFooterUI();
   }

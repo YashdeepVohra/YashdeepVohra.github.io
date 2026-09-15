@@ -9,7 +9,8 @@
 import { auth, db } from '../config/firebase.js';
 import { state } from '../state/store.js';
 import { renderAvatar, escapeHtml, safeId } from '../utils/formatters.js';
-import { switchScreen, showTab } from '../utils/ui.js';
+import { switchScreen, showTab, toast } from '../utils/ui.js';
+import { askConfirm } from '../utils/confirm.js';
 import { focusEvent } from './eventsService.js';
 import { openOverlay, closeOverlay } from '../utils/overlays.js';
 import { closeChat, startChatWithUid } from './chatService.js';
@@ -254,7 +255,7 @@ export async function saveProfileData() {
   const btn = document.getElementById("saveProfileBtn");
   const newName = (nameInput?.value || "").trim().slice(0, 20);
 
-  if (!newName) return alert("Display Name cannot be empty!");
+  if (!newName) return toast("Your display name can't be empty.");
   if (!auth.currentUser) return;
 
   const originalText = btn ? btn.innerHTML : "";
@@ -300,11 +301,9 @@ export async function saveProfileData() {
     }
   } catch (e) {
     console.error("Profile save error:", e.code, e.message);
-    alert(
-      e.code === "permission-denied"
-        ? "Firestore rejected the save. Check your security rules."
-        : "Failed to save profile."
-    );
+    toast(e.code === "permission-denied"
+      ? "That change wasn't allowed. Try again."
+      : "Couldn't save your profile.");
     if (btn) {
       btn.innerHTML = originalText;
       btn.disabled = false;
@@ -469,22 +468,33 @@ function renderSafetyActions(targetUid, isSelf) {
        </div>`;
 }
 
-export function confirmBlock(targetUid) {
+export async function confirmBlock(targetUid) {
   const name = displayNameFor(targetUid);
-  if (!window.confirm(`Block ${name}?\n\nYou won't see each other anywhere — not in the feed, not in messages, and neither of you can join the other's events. They are not told.`)) return;
+  const yes = await askConfirm({
+    title: "Block " + name + "?",
+    body: "You won't see each other anywhere — not in the feed, not in messages, and neither of you can join the other's events. They are never told.",
+    confirm: "Block",
+    danger: true
+  });
+  if (!yes) return;
 
   blockUser(targetUid).then((ok) => {
-    if (!ok) return alert("Couldn't block right now. Check your connection.");
+    if (!ok) return toast("Couldn't block right now. Check your connection.");
     // The blocks listener re-renders everything; just leave the profile.
     closeProfileScreen();
   });
 }
 
-export function confirmUnblock(targetUid) {
+export async function confirmUnblock(targetUid) {
   const name = displayNameFor(targetUid);
-  if (!window.confirm(`Unblock ${name}? You'll both be able to see and message each other again.`)) return;
+  const yes = await askConfirm({
+    title: "Unblock " + name + "?",
+    body: "You'll both be able to see and message each other again.",
+    confirm: "Unblock"
+  });
+  if (!yes) return;
   unblockUser(targetUid).then((ok) => {
-    if (!ok) return alert("Couldn't unblock right now.");
+    if (!ok) return toast("Couldn't unblock right now.");
     renderSafetyActions(targetUid, false);
   });
 }
@@ -547,9 +557,15 @@ export async function sendReport() {
   if (btn) { btn.disabled = false; btn.innerHTML = "Send report"; }
   closeReport();
 
-  if (!ok) return alert("Couldn't send the report. Check your connection.");
+  if (!ok) return toast("Couldn't send the report. Check your connection.");
 
-  if (window.confirm("Report sent — thank you. Do you also want to block this person?")) {
+  if (await askConfirm({
+        title: "Report sent",
+        body: "Thanks — the admin will take a look. Do you want to block this person as well?",
+        confirm: "Block them too",
+        cancel: "No thanks",
+        danger: true
+      })) {
     confirmBlock(targetUid);
   }
 }

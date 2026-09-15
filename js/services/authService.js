@@ -14,7 +14,7 @@
 
 import { auth, db, isLocalhost } from '../config/firebase.js';
 import { state, resetState } from '../state/store.js';
-import { switchScreen, setLoading } from '../utils/ui.js';
+import { switchScreen, setLoading, toast } from '../utils/ui.js';
 import { clearOverlays } from '../utils/overlays.js';
 import { renderAvatar } from '../utils/formatters.js';
 import { normalizeUsername, hydrateProfileCache, rememberUser, clearProfileCache } from './userService.js';
@@ -209,7 +209,7 @@ export function initAuthListener() {
       const data = doc.data() || {};
 
       if (data.banned === true) {
-        alert("Your livesociya account has been suspended.");
+        toast("Your livesociya account has been suspended.");
         await auth.signOut();
         return;
       }
@@ -406,6 +406,6 @@ export function logout() {
     })
     .catch(() => {
       setLoading(false);
-      alert("Error logging out.");
+      toast("Error logging out.");
     });
 }

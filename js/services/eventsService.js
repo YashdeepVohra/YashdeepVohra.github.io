@@ -15,11 +15,12 @@
 import { auth, db, FieldValue } from '../config/firebase.js';
 import { state } from '../state/store.js';
 import { renderAvatar, escapeHtml, safeId } from '../utils/formatters.js';
-import { showTab } from '../utils/ui.js';
+import { showTab, toast } from '../utils/ui.js';
 import { openOverlay, closeOverlay, replaceOverlay, isOverlayTop } from '../utils/overlays.js';
 import { primeUsers, displayNameFor, usernameFor, avatarFor } from './userService.js';
 import { isBlocked, withoutBlocked } from './blockService.js';
 import { stampEvent, readLimits, limitMessage } from './limitsService.js';
+import { askConfirm } from '../utils/confirm.js';
 import { inOrbit, vouchersYouKnow } from './orbitService.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -221,15 +222,15 @@ export async function addEvent(e) {
   const maxCapacity = capacityRaw ? parseInt(capacityRaw, 10) : null;
 
   if (!title || !place || !startTimeStr || !endTimeStr) {
-    return alert("Please fill out all event details.");
+    return toast("Please fill out all event details.");
   }
 
   const startTime = new Date(startTimeStr).getTime();
   const expiresAt = new Date(endTimeStr).getTime();
 
-  if (!Number.isFinite(startTime) || !Number.isFinite(expiresAt)) return alert("Those dates don't look right.");
-  if (expiresAt <= startTime) return alert("Your event end time must be AFTER the start time.");
-  if (expiresAt - startTime > 7 * DAY_MS) return alert("Events can run for at most a week.");
+  if (!Number.isFinite(startTime) || !Number.isFinite(expiresAt)) return toast("Those dates don't look right.");
+  if (expiresAt <= startTime) return toast("Your event end time must be AFTER the start time.");
+  if (expiresAt - startTime > 7 * DAY_MS) return toast("Events can run for at most a week.");
 
   const restore = () => {
     if (btn) {
@@ -281,7 +282,7 @@ export async function addEvent(e) {
     console.error("Publish failed:", error.code || error.message);
     // A rules rejection arrives as a flat permission-denied, so the
     // only honest guess at the reason is the limit we just checked.
-    alert(error.code === "permission-denied"
+    toast(error.code === "permission-denied"
       ? limitMessage("event")
       : "Failed to publish. Try again.");
   } finally {
@@ -722,7 +723,17 @@ export function renderEvents() {
          </div>`
       : "";
 
-    const hypeBtn = `<button class="act ${hasHyped ? "hyped" : ""}" onclick="window.toggleHype('${id}', ${hasHyped})"><i class='bx ${hasHyped ? "bxs-hot" : "bx-hot"}'></i> ${hypeCount || "Hype"}</button>`;
+    // THE FLAME IS DRAWN, not set in the icon font, because `bx-hot`
+    // does not exist in Boxicons — only the solid `bxs-hot` does. So
+    // the one person who had hyped saw a flame and everybody else saw
+    // an empty space where it should have been. One path, filled when
+    // it's yours and outlined when it isn't.
+    const flame = `<svg class="hype-flame" viewBox="0 0 24 24" width="17" height="17"
+      fill="${hasHyped ? "currentColor" : "none"}" stroke="currentColor"
+      stroke-width="${hasHyped ? 0 : 1.7}" stroke-linejoin="round" aria-hidden="true">
+      <path d="M12 22a6.5 6.5 0 0 0 6.5-6.5c0-2-1-3.8-2.9-5.3 0 0 .2 2.4-1.5 2.9.1-2.9-1.8-5.8-4.7-7.6.5 3.8-1.9 4.8-2.9 6.7a6.5 6.5 0 0 0-1 3.3A6.5 6.5 0 0 0 12 22Z"/>
+    </svg>`;
+    const hypeBtn = `<button class="act ${hasHyped ? "hyped" : ""}" aria-label="Hype" onclick="window.toggleHype('${id}', ${hasHyped})">${flame} ${hypeCount || "Hype"}</button>`;
     const chatBtn = `<button class="act" onclick="window.openEventChat('${id}')"><i class='bx bx-message-rounded-dots'></i> Chat</button>`;
 
     const pending = e.pendingUids || [];
@@ -884,7 +895,7 @@ export function renderEvents() {
 export function joinEvent(id) {
   const e = state.eventCache[id];
   if (e && e.maxCapacity && (e.participantUids || []).length >= e.maxCapacity) {
-    return alert("This event is already full.");
+    return toast("This event is already full.");
   }
   db.collection("events").doc(id)
     .update({ participantUids: FieldValue.arrayUnion(state.uid) })
@@ -896,7 +907,7 @@ export function requestJoin(id) {
     .update({ pendingUids: FieldValue.arrayUnion(state.uid) })
     .catch((err) => {
       console.error("Request failed:", err.code || err.message);
-      alert("Couldn't send the request. Try again.");
+      toast("Couldn't send the request. Try again.");
     });
 }
 
@@ -997,7 +1008,7 @@ export function approveRequest(uid) {
 
   const e = state.eventCache[id];
   if (e && e.maxCapacity && (e.participantUids || []).length >= e.maxCapacity) {
-    return alert("This event is already full. Remove someone first, or raise the capacity.");
+    return toast("This event is already full. Remove someone first, or raise the capacity.");
   }
 
   db.collection("events").doc(id).update({
@@ -1006,7 +1017,7 @@ export function approveRequest(uid) {
   }).then(renderPeople)
     .catch((err) => {
       console.error("Approve failed:", err.code || err.message);
-      alert("Couldn't approve right now.");
+      toast("Couldn't approve right now.");
     });
 }
 
@@ -1034,7 +1045,7 @@ export function confirmAttendance(id) {
     .update({ unconfirmedUids: FieldValue.arrayRemove(state.uid) })
     .catch((err) => {
       console.error("Confirm failed:", err.code || err.message);
-      alert("Couldn't confirm right now. Try again.");
+      toast("Couldn't confirm right now. Try again.");
     });
 }
 
@@ -1113,7 +1124,7 @@ export function confirmDeletePermanently() {
 
   db.collection("events").doc(id).delete().catch((error) => {
     console.error("Delete failed:", error.code, error.message);
-    alert(
+    toast(
       error.code === "permission-denied"
         ? "You don't have permission to delete this event."
         : "Could not delete. Check your connection."
@@ -1204,13 +1215,13 @@ async function saveEventEdits(e) {
   const capacityRaw = document.getElementById("maxCapacity")?.value;
   const maxCapacity = capacityRaw ? parseInt(capacityRaw, 10) : null;
 
-  if (!title || !place) return alert("Title and location can't be empty.");
-  if (!Number.isFinite(startTime) || !Number.isFinite(expiresAt)) return alert("Those dates don't look right.");
-  if (expiresAt <= startTime) return alert("The end time must be after the start time.");
+  if (!title || !place) return toast("Title and location can't be empty.");
+  if (!Number.isFinite(startTime) || !Number.isFinite(expiresAt)) return toast("Those dates don't look right.");
+  if (expiresAt <= startTime) return toast("The end time must be after the start time.");
 
   const going = (existing.participantUids || []).length;
   if (maxCapacity !== null && maxCapacity < going) {
-    return alert(`${going} people are already going — capacity can't be lower than that.`);
+    return toast(`${going} people are already going — capacity can't be lower than that.`);
   }
 
   const next = {
@@ -1230,10 +1241,12 @@ async function saveEventEdits(e) {
 
   if (changes.length && others.length) {
     const summary = changes.join(", ");
-    const ok = window.confirm(
-      `This ${summary}.\n\n${others.length} ${others.length === 1 ? "person has" : "people have"} already said they're going. ` +
-      `They'll be asked to confirm they're still in, and will show as unconfirmed until they do.`
-    );
+    const ok = await askConfirm({
+      title: "This " + summary,
+      body: others.length + (others.length === 1 ? " person has" : " people have")
+        + " already said they're going. They'll be asked to confirm they're still in, and will show as unconfirmed until they do.",
+      confirm: "Save the change"
+    });
     if (!ok) return;
 
     next.unconfirmedUids = others;
@@ -1248,20 +1261,26 @@ async function saveEventEdits(e) {
     setTimeout(() => focusEvent(eventId), 300);
   } catch (error) {
     console.error("Edit failed:", error.code || error.message);
-    alert("Couldn't save those changes. Try again.");
+    toast("Couldn't save those changes. Try again.");
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = "Save"; }
   }
 }
 
 /** Host removes someone already going. */
-export function removeAttendee(uid) {
+export async function removeAttendee(uid) {
   const id = state.eventIdToManage;
   if (!id || !safeId(uid)) return;
   if (uid === state.uid) return;
 
   const name = displayNameFor(uid);
-  if (!window.confirm(`Remove ${name} from this event? They can ask to join again.`)) return;
+  const ok = await askConfirm({
+    title: "Remove " + name + "?",
+    body: "They can ask to join again.",
+    confirm: "Remove",
+    danger: true
+  });
+  if (!ok) return;
 
   db.collection("events").doc(id)
     .update({
@@ -1271,7 +1290,7 @@ export function removeAttendee(uid) {
     .then(renderPeople)
     .catch((err) => {
       console.error("Remove failed:", err.code || err.message);
-      alert("Couldn't remove them right now.");
+      toast("Couldn't remove them right now.");
     });
 }
 

@@ -1455,6 +1455,12 @@ html:not(.kb-open) .chat-footer {
   z-index: 3;
   width: 58px;
   height: 58px;
+  /* The base button rule is padding: 13px 24px. Left alone, that gives
+     this 58px circle a 10px-wide content box, and renderAvatar's <img>
+     — which is width:100% — was being squeezed into a sliver. Emoji
+     avatars hid it; a Google profile photo did not. */
+  padding: 0;
+  overflow: hidden;
   border-radius: 50%;
   display: grid;
   place-items: center;
@@ -1464,6 +1470,22 @@ html:not(.kb-open) .chat-footer {
   transition: transform 0.18s var(--ease);
 }
 .orbit-core:active { transform: scale(0.94); }
+
+/* A photo avatar is pinned to the circle rather than left to work its
+   own size out. Both of these centre their contents with place-items,
+   which shrink-wraps the column to the image's intrinsic width — so an
+   <img> sized at width:100% has nothing to resolve against and collapses
+   to whatever the file happens to be. Emoji avatars hid this; a Google
+   profile photo came out as a sliver. */
+.orbit-core > img,
+.orbit-face > img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
 
 /* The overflow count, once five rings are full. */
 .orbit-more {
@@ -2089,3 +2111,40 @@ html:not(.kb-open) .chat-footer {
 
 
 
+
+/* =====================================================================
+   THE HYPE FLAME
+   ---------------------------------------------------------------------
+   Drawn rather than set in the icon font: Boxicons has no `bx-hot`, so
+   the outline state — which is what everyone who had NOT hyped saw —
+   rendered as nothing at all.
+   ===================================================================== */
+.hype-flame {
+  flex-shrink: 0;
+  transition: transform 0.2s var(--spring);
+}
+.act.hyped { color: var(--vibe-food); }
+.act.hyped .hype-flame { animation: flameIn 0.34s var(--spring); }
+.act:active .hype-flame { transform: scale(0.88); }
+
+@keyframes flameIn {
+  0%   { transform: scale(0.6) rotate(-12deg); }
+  60%  { transform: scale(1.18) rotate(6deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .act.hyped .hype-flame { animation: none; }
+}
+
+/* =====================================================================
+   THE CONFIRM SHEET
+   ---------------------------------------------------------------------
+   Same job window.confirm did, in the app's own voice. The destructive
+   answer is never the quiet one — if a button is going to block or
+   remove somebody, it says so and looks like it.
+   ===================================================================== */
+.confirm-sheet { max-width: 340px; padding: var(--s-24) var(--s-20) var(--s-20); }
+.confirm-sheet h3 { font-size: 18px; margin-bottom: 6px; }
+.confirm-sheet p { font-size: 14px; line-height: 1.5; margin-bottom: var(--s-20); }
+.confirm-sheet button { font-size: 15px; }
+.confirm-sheet .danger-btn { background: var(--rose); }

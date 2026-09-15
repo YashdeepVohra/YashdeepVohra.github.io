@@ -109,6 +109,8 @@ import {
   syncPrivacyUI
 } from './services/followService.js';
 
+import { confirmYes, confirmNo } from './utils/confirm.js';
+
 import { initSwipeListeners } from './interactions/swipeReply.js';
 import { initViewportFit } from './utils/viewport.js';
 import { popOverlay, anyOverlayOpen, clearOverlays } from './utils/overlays.js';
@@ -166,6 +168,10 @@ function goToTab(tab) {
 }
 
 Object.assign(window, {
+  // The in-app replacement for window.confirm
+  confirmYes,
+  confirmNo,
+
   // Navigation
   switchScreen,
   showTab: goToTab,

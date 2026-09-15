@@ -100,19 +100,33 @@ export function myFollowRequests() {
   return (state.followRequests || []).filter((u) => u && !isBlocked(u));
 }
 
+/**
+ * Blocking is total everywhere else in the app — their events are gone,
+ * their messages are gone, they are filtered out of every list. The
+ * numbers above those lists were the one place they lingered, so
+ * following somebody and then blocking them left a count that did not
+ * match the list underneath it.
+ *
+ * Only the array can be filtered. The stored number is a fallback for a
+ * profile whose full document has not been read this session, and by
+ * the time anybody is looking at a count the profile has been read.
+ */
+function countOf(list, fallback) {
+  if (Array.isArray(list)) return list.filter((u) => !isBlocked(u)).length;
+  return typeof fallback === "number" ? fallback : 0;
+}
+
 export function followerCount(uid) {
   const u = state.userCache[uid];
   if (!u) return 0;
-  if (typeof u.followerCount === "number") return u.followerCount;
-  return Array.isArray(u.followers) ? u.followers.length : 0;
+  return countOf(u.followers, u.followerCount);
 }
 
 export function followingCount(uid) {
-  if (uid === state.uid) return state.following.length;
+  if (uid === state.uid) return countOf(state.following);
   const u = state.userCache[uid];
   if (!u) return 0;
-  if (typeof u.followingCount === "number") return u.followingCount;
-  return Array.isArray(u.following) ? u.following.length : 0;
+  return countOf(u.following, u.followingCount);
 }
 
 /**
