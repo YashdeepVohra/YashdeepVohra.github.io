@@ -2590,11 +2590,14 @@ html:not(.kb-open) .chat-footer {
    MOBILE — zoom and the keyboard
    ===================================================================== */
 
-/* Double-tapping a button (Hype twice, say) zoomed iOS Safari in.
-   `manipulation` keeps pinch-zoom — which people need — and drops
-   only the double-tap gesture. Text also stops inflating in landscape. */
+/* NO ZOOM, by decision: this is an app, and zooming only ever happened
+   by accident — a double tap on Hype, a pinch while scrolling. Panning
+   is the only gesture the page itself answers to; everything else is
+   refused here, in the viewport meta, and in utils/viewport.js for the
+   browsers (iOS Safari) that ignore both. Text also stops inflating in
+   landscape. */
 html {
-  touch-action: manipulation;
+  touch-action: pan-x pan-y;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }

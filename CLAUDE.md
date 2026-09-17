@@ -139,8 +139,11 @@ something breaks.
   load leaves an invisible control.
 - **Specificity beats source order.** `.empty-state p { margin: 0 }` quietly
   outranked a later `.starter-foot` rule.
-- **Inputs under 16px make iOS Safari zoom on focus.** They are 16px on
-  `(pointer: coarse)`. Don't "fix" it with `maximum-scale=1`.
+- **Zoom is switched off on purpose** (the user's call): viewport meta
+  `maximum-scale=1, user-scalable=no`, `touch-action: pan-x pan-y` on
+  `html`, and `lockZoom()` in `utils/viewport.js` for iOS, which ignores
+  both. Inputs stay 16px on `(pointer: coarse)` anyway — belt and braces
+  against iOS focus-zoom.
 - **The feed is diffed, not rebuilt.** `syncList` replaces only cards whose
   markup changed. Rebuilding replayed the entry animation on every card,
   which read as the card vanishing. Don't reintroduce `innerHTML =` there.
@@ -173,8 +176,7 @@ something breaks.
 - **The keyboard is handled by the visual viewport, not `innerHeight`.**
   `utils/viewport.js` publishes `--vvt` / `--vvh`; full-screen layers sit
   at exactly that box while `html.kb-open`. A keyboard only counts with a
-  text field focused and no pinch-zoom. `touch-action: manipulation` on
-  `html` stops double-tap zoom and keeps pinch. The smoke suite fakes a
+  text field focused. The smoke suite fakes a
   visual viewport to test this; a real phone is still the final word.
 - **Bio and interests** are `bio` (160) and `interests` (≤5, fixed list
   in `js/services/aboutRules.js`, mirrored in the rules). They ride on

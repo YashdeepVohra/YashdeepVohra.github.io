@@ -642,6 +642,23 @@ group('mobile keyboard and zoom');
     window.__vv({ height: 844, scale: 1 }); await wait(300);
 
     out.touchAction = getComputedStyle(document.documentElement).touchAction;
+    out.meta = document.querySelector('meta[name=viewport]').content;
+    const fire = (ev) => { document.body.dispatchEvent(ev); return ev.defaultPrevented; };
+    const gesture = new Event('gesturestart', { bubbles: true, cancelable: true });
+    const wheel = new WheelEvent('wheel', { bubbles: true, cancelable: true, ctrlKey: true, deltaY: -10 });
+    const key = new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ctrlKey: true, key: '+' });
+    let pinch = false;
+    try {
+      const t = (id, x) => new Touch({ identifier: id, target: document.body, clientX: x, clientY: 100 });
+      pinch = fire(new TouchEvent('touchmove', { bubbles: true, cancelable: true, touches: [t(1, 50), t(2, 150)] }));
+    } catch (e) { pinch = 'no TouchEvent: ' + e.message; }
+    const oneFinger = (() => {
+      try {
+        const t = new Touch({ identifier: 1, target: document.body, clientX: 50, clientY: 100 });
+        return !fire(new TouchEvent('touchmove', { bubbles: true, cancelable: true, touches: [t] }));
+      } catch (e) { return true; }
+    })();
+    out.blocked = [fire(gesture), fire(wheel), fire(key), pinch === true, oneFinger];
     out.smallFields = [...document.querySelectorAll('input, textarea, select')]
       .filter((el) => !['hidden', 'file', 'checkbox', 'radio'].includes(el.type))
       .filter((el) => parseFloat(getComputedStyle(el).fontSize) < 16).map((el) => el.id || el.className);
@@ -651,7 +668,9 @@ group('mobile keyboard and zoom');
   ok('and follows the page when iOS pans it', kb.pannedTop === 200 && kb.pannedBottom === 700, JSON.stringify(kb));
   ok('and goes back down when the keyboard closes', kb.closed);
   ok('pinch-zoom is not mistaken for a keyboard', kb.pinchNotKeyboard);
-  ok('double-tap zoom is off, pinch-zoom is not', kb.touchAction === 'manipulation');
+  ok('zoom is off: only panning is allowed', kb.touchAction === 'pan-x pan-y', kb.touchAction);
+  ok('viewport meta refuses scaling', /maximum-scale=1(\.0)?/.test(kb.meta) && /user-scalable=no/.test(kb.meta), kb.meta);
+  ok('pinch, gesture and ctrl-zoom events are cancelled', kb.blocked.every(Boolean), JSON.stringify(kb.blocked));
   ok('no text field under 16px on a phone (iOS zooms on those)', kb.smallFields.length === 0, kb.smallFields.join());
   ok('phone page has no errors', phoneErrors.length === 0, phoneErrors.join(' | '));
   await ctx.close();

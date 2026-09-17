@@ -46,6 +46,35 @@ function typingInField() {
   return el.matches("input") && !/^(button|checkbox|radio|range|submit|reset|file|color|hidden)$/i.test(el.type || "");
 }
 
+/**
+ * No zooming, anywhere. iOS Safari has ignored `user-scalable=no` since
+ * iOS 10 and still pinches, so its gesture events are cancelled here;
+ * a second finger on the screen is refused for the same reason. On a
+ * desktop, ctrl/cmd + wheel and ctrl/cmd + plus/minus/zero are caught.
+ * (The browser's own menu can still zoom a desktop page — no page can
+ * stop that.)
+ */
+export function lockZoom() {
+  const stop = (e) => { if (e.cancelable) e.preventDefault(); };
+
+  ["gesturestart", "gesturechange", "gestureend"].forEach((type) =>
+    document.addEventListener(type, stop, { passive: false }));
+
+  document.addEventListener("touchmove", (e) => {
+    if (e.touches && e.touches.length > 1) stop(e);
+  }, { passive: false });
+
+  // Double-tap zoom is handled by `touch-action: pan-x pan-y` in the
+  // stylesheet. Cancelling a quick second touchend here would also have
+  // swallowed the second of two fast taps on a real button.
+
+  window.addEventListener("wheel", (e) => { if (e.ctrlKey || e.metaKey) stop(e); }, { passive: false });
+
+  window.addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && ["+", "=", "-", "_", "0"].includes(e.key)) stop(e);
+  });
+}
+
 export function initViewportFit() {
   const root = document.documentElement;
   const vv = window.visualViewport;

@@ -119,7 +119,7 @@ import { pickAccountType } from './services/authService.js';
 import { confirmYes, confirmNo } from './utils/confirm.js';
 
 import { initSwipeListeners } from './interactions/swipeReply.js';
-import { initViewportFit } from './utils/viewport.js';
+import { initViewportFit, lockZoom } from './utils/viewport.js';
 import { popOverlay, anyOverlayOpen, clearOverlays } from './utils/overlays.js';
 import { openSearch, closeSearch, onSearchInput, searchOpenProfile, searchOpenEvent, refreshSearchResults } from './interactions/searchUI.js';
 
@@ -307,6 +307,7 @@ function boot() {
   checkRedirectLock();
   initAuthListener();
   initSwipeListeners();
+  lockZoom();
   initViewportFit();
 
   document.getElementById("login-btn")?.addEventListener("click", () => loginWithGoogle());
