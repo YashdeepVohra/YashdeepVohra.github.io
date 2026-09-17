@@ -463,8 +463,13 @@ export function logout() {
 
   auth.signOut()
     .then(() => {
+      // Everything goes except how the screen looks — that belongs to
+      // the device, not the account that just signed out.
+      let theme = null;
+      try { theme = localStorage.getItem("livesociya.theme"); } catch (e) {}
       localStorage.clear();
       sessionStorage.clear();
+      try { if (theme) localStorage.setItem("livesociya.theme", theme); } catch (e) {}
       window.location.href = window.location.origin + "?refresh=" + Date.now();
     })
     .catch(() => {

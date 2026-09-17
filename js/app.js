@@ -116,6 +116,7 @@ import {
 
 import { chooseAccountType } from './services/followService.js';
 import { pickAccountType } from './services/authService.js';
+import { initTheme, setThemeChoice, syncThemeUI } from './utils/theme.js';
 import { confirmYes, confirmNo } from './utils/confirm.js';
 
 import { initSwipeListeners } from './interactions/swipeReply.js';
@@ -261,6 +262,7 @@ Object.assign(window, {
   closeFollowList,
   answerFollowRequest: answerRequest,
   togglePrivateAccount,
+  setThemeChoice,
   onBioInput,
   toggleInterest,
   removeFollower: (uid) => removeFollower(uid),
@@ -307,6 +309,7 @@ function boot() {
   checkRedirectLock();
   initAuthListener();
   initSwipeListeners();
+  initTheme();
   lockZoom();
   initViewportFit();
 

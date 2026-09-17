@@ -677,6 +677,61 @@ group('mobile keyboard and zoom');
 }
 
 /* ------------------------------------------------------------------ */
+group('dark mode');
+{
+  const themeRun = async (scheme, stored) => {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: scheme });
+    const p = await ctx.newPage();
+    const errs = [];
+    p.on('pageerror', (e) => errs.push(e.message));
+    if (stored) await p.addInitScript((v) => { try { localStorage.setItem('livesociya.theme', v); } catch (e) {} }, stored);
+    await p.addInitScript({ path: fileURLToPath(new URL('./stub.js', import.meta.url)) });
+    await p.goto(APP_URL, { waitUntil: 'domcontentloaded' });
+    const firstPaint = await p.evaluate(() => document.documentElement.dataset.theme);
+    await p.waitForTimeout(1200);
+    const out = await p.evaluate(() => ({
+      theme: document.documentElement.dataset.theme,
+      bg: getComputedStyle(document.body).backgroundColor,
+      bar: document.querySelector('meta[name=theme-color]').content,
+    }));
+    return { p, ctx, errs, firstPaint, ...out };
+  };
+
+  const sysDark = await themeRun('dark');
+  ok('a dark-mode device gets dark from the first paint', sysDark.firstPaint === 'dark' && sysDark.theme === 'dark'
+     && sysDark.bg === 'rgb(15, 13, 22)' && sysDark.bar === '#0f0d16', JSON.stringify({ ...sysDark, p: 0, ctx: 0 }));
+
+  // Picking Light in Settings wins over the device, and sticks.
+  const picked = await sysDark.p.evaluate(async () => {
+    window.openSettingsScreen?.();
+    await new Promise((r) => setTimeout(r, 200));
+    window.setThemeChoice('light');
+    const now = document.documentElement.dataset.theme;
+    const marked = document.querySelector('#themePicker .theme-opt.on')?.dataset.theme;
+    return { now, marked, stored: localStorage.getItem('livesociya.theme') };
+  });
+  ok('choosing Light in Settings overrides a dark device', picked.now === 'light' && picked.marked === 'light' && picked.stored === 'light',
+     JSON.stringify(picked));
+  ok('no errors switching themes', sysDark.errs.length === 0, sysDark.errs.join(' | '));
+  await sysDark.ctx.close();
+
+  const sysLight = await themeRun('light');
+  ok('a light device stays light', sysLight.theme === 'light' && sysLight.bg === 'rgb(250, 249, 253)', sysLight.bg);
+  await sysLight.ctx.close();
+
+  const forced = await themeRun('light', 'dark');
+  ok('a saved Dark choice applies before the app loads', forced.firstPaint === 'dark' && forced.theme === 'dark');
+  // Following the device live: only in System.
+  await forced.ctx.close();
+
+  const live = await themeRun('light');
+  await live.p.emulateMedia({ colorScheme: 'dark' });
+  await live.p.waitForTimeout(150);
+  ok('on System, the app follows the device when it changes', await live.p.evaluate(() => document.documentElement.dataset.theme) === 'dark');
+  await live.ctx.close();
+}
+
+/* ------------------------------------------------------------------ */
 group('overall');
 ok('no errors, no native dialogs, all the way through', errors.length === 0, errors.join(' | '));
 

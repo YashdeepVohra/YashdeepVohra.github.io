@@ -881,7 +881,7 @@ export function loadChatList() {
           if (isUnread) hasGlobalUnread = true;
 
           html += `
-            <div class="chat-item" onclick="window.openChat('${id}', '${otherId}')" style="${isUnread ? "background: #e0e7ff; border-left: 4px solid var(--primary);" : ""}">
+            <div class="chat-item" onclick="window.openChat('${id}', '${otherId}')" style="${isUnread ? "background: var(--unread-bg); border-left: 4px solid var(--primary);" : ""}">
               <div class="chat-avatar" style="background: transparent; border: 1px solid var(--border); padding: 0; overflow: hidden;">
                   ${renderAvatar(avatarFor(otherUid))}
               </div>

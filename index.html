@@ -42,6 +42,22 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
+  <!-- Theme before first paint, so a dark-mode phone never flashes white.
+       utils/theme.js takes over once the app has loaded. -->
+  <script>
+    (function () {
+      var t = "light";
+      try {
+        var c = localStorage.getItem("livesociya.theme") || "system";
+        t = c === "dark" || (c !== "light" && window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light";
+      } catch (e) {}
+      var r = document.documentElement;
+      r.setAttribute("data-theme", t);
+      r.style.colorScheme = t;
+      var m = document.querySelector('meta[name="theme-color"]');
+      if (m) m.setAttribute("content", t === "dark" ? "#0f0d16" : "#fdfcfe");
+    })();
+  </script>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -363,6 +379,25 @@
       <div class="interest-grid" id="settingsInterests"></div>
 
       <button id="saveProfileBtn" onclick="saveProfileData()" class="save-settings-btn" style="margin-bottom:0;">Save Changes</button>
+    </div>
+
+    <div class="card" style="margin-top:20px;">
+      <label class="settings-label" style="margin-top:0;">Appearance</label>
+      <div class="theme-picker" id="themePicker" role="radiogroup" aria-label="Theme">
+        <button type="button" class="theme-opt" data-theme="system" role="radio" aria-checked="false" onclick="setThemeChoice('system')">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true"><rect x="3" y="4.5" width="18" height="12" rx="2.5" stroke="currentColor" stroke-width="1.9"/><path d="M9 20h6M12 16.5V20" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+          <span>System</span>
+        </button>
+        <button type="button" class="theme-opt" data-theme="light" role="radio" aria-checked="false" onclick="setThemeChoice('light')">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="4.2" stroke="currentColor" stroke-width="1.9"/><path d="M12 2.8v2.1M12 19.1v2.1M2.8 12h2.1M19.1 12h2.1M5.5 5.5l1.5 1.5M17 17l1.5 1.5M5.5 18.5 7 17M17 7l1.5-1.5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+          <span>Light</span>
+        </button>
+        <button type="button" class="theme-opt" data-theme="dark" role="radio" aria-checked="false" onclick="setThemeChoice('dark')">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5Z" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/></svg>
+          <span>Dark</span>
+        </button>
+      </div>
+      <p class="settings-hint theme-note" id="themeNote"></p>
     </div>
 
     <div class="card" style="margin-top:20px;">

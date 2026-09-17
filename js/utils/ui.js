@@ -128,7 +128,7 @@ export function toast(text, icon) {
 
   const el = document.createElement("div");
   el.style.cssText =
-    "background: #3c315b; color: #fdfcfe; padding: 13px 20px; border-radius: 100px; font-size: 14.5px; font-weight: 350; letter-spacing: -0.025em; transform: translateY(-150%); transition: transform 0.4s cubic-bezier(0.175,0.885,0.32,1.275); display: flex; align-items: center; gap: 9px; width: 100%; pointer-events: none;";
+    "background: var(--toast-bg); color: var(--toast-ink); padding: 13px 20px; border-radius: 100px; font-size: 14.5px; font-weight: 350; letter-spacing: -0.025em; transform: translateY(-150%); transition: transform 0.4s cubic-bezier(0.175,0.885,0.32,1.275); display: flex; align-items: center; gap: 9px; width: 100%; pointer-events: none;";
 
   if (icon) {
     const i = document.createElement("i");
@@ -159,7 +159,7 @@ export function showNotification(senderUid, chatId, openChatCallback) {
 
   const toast = document.createElement("div");
   toast.style.cssText =
-    "background: #3c315b; color: #fdfcfe; padding: 14px 22px; border-radius: 100px; font-size: 15px; font-weight: 350; letter-spacing: -0.025em; cursor: pointer; transform: translateY(-150%); transition: transform 0.4s cubic-bezier(0.175,0.885,0.32,1.275); display: flex; align-items: center; gap: 10px; width: 100%; pointer-events: auto;";
+    "background: var(--toast-bg); color: var(--toast-ink); padding: 14px 22px; border-radius: 100px; font-size: 15px; font-weight: 350; letter-spacing: -0.025em; cursor: pointer; transform: translateY(-150%); transition: transform 0.4s cubic-bezier(0.175,0.885,0.32,1.275); display: flex; align-items: center; gap: 10px; width: 100%; pointer-events: auto;";
   toast.innerHTML = `<i class='bx bxs-message-rounded-dots' style="font-size:20px;"></i> New message from ${escapeHtml(displayName)}`;
 
   toast.onclick = () => {

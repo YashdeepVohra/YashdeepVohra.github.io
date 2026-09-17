@@ -11,6 +11,7 @@ import { state } from '../state/store.js';
 import { renderAvatar, escapeHtml, safeId } from '../utils/formatters.js';
 import { switchScreen, showTab, toast } from '../utils/ui.js';
 import { askConfirm } from '../utils/confirm.js';
+import { syncThemeUI } from '../utils/theme.js';
 import { focusEvent, loadRecap, renderEvents, vibeColor } from './eventsService.js';
 import { inRecap, wasCalledOff } from './recapRules.js';
 import { INTERESTS, INTERESTS_MAX, BIO_MAX, cleanBio, cleanInterests } from './aboutRules.js';
@@ -457,6 +458,7 @@ export async function loadProfileUI(targetUid) {
 // ---------- Settings ----------
 export function openSettingsScreen() {
   openOverlay("settingsScreen");
+  syncThemeUI();
   refreshBlockedList();
   syncPrivacyUI();
 

@@ -73,6 +73,37 @@
   --lift-3: 0 12px 32px rgba(60, 49, 91, 0.14);
   --glow:   0 0 0 4px rgba(171, 159, 242, 0.22);
 
+  /* ---- Roles (so dark mode can swap them) ---- */
+  --on-accent:    #ffffff;             /* text on violet / gradient fills */
+  --ink-fill:     var(--aubergine);    /* a strong neutral fill: active pill */
+  --on-ink-fill:  #ffffff;
+  --deep-a:       #3c315b;             /* the dark rail card, both themes */
+  --deep-b:       #2a2140;
+  --chip-ink:     #2a2140;             /* mixed with a vibe for chip text */
+  --mint-ink:     #17765a;
+  --butter-ink:   #6b5200;
+  --rose-ink:     #9b2c3e;
+  --blush-hover:  #ffcace;
+  --butter-hover: #fff6a8;
+  --shimmer-hi:   #eceafa;
+  --glass:        rgba(255, 255, 255, 0.97);
+  --glass-canvas: rgba(250, 249, 253, 0.97);
+  --glass-edge:   rgba(255, 255, 255, 0.7);
+  --glass-soft:   rgba(255, 255, 255, 0.7);
+  --backdrop:     rgba(28, 28, 34, 0.5);
+  --amb-1: rgba(171, 159, 242, 0.34);
+  --amb-2: rgba(255, 201, 222, 0.32);
+  --amb-3: rgba(185, 220, 255, 0.24);
+  --aura-1: rgba(171, 159, 242, 0.5);
+  --aura-2: rgba(255, 214, 232, 0.5);
+  --aura-3: rgba(207, 230, 255, 0.42);
+  --grid-dot: rgba(60, 49, 91, 0.10);
+  --toast-bg:  #3c315b;
+  --toast-ink: #fdfcfe;
+  --unread-bg: #e0e7ff;
+  --knob:        #ffffff;              /* switch thumbs */
+  --danger-fill: var(--rose);          /* destructive buttons, white text */
+
   /* ---- Motion ---- */
   /* Height the phone keyboard is covering; set by utils/viewport.js */
   --kb: 0px;
@@ -163,7 +194,7 @@ a { color: inherit; }
 
 /* Skeletons: the shape of the content that's coming, not a spinner */
 .skel {
-  background: linear-gradient(90deg, var(--bone) 25%, #eceafa 50%, var(--bone) 75%);
+  background: linear-gradient(90deg, var(--bone) 25%, var(--shimmer-hi) 50%, var(--bone) 75%);
   background-size: 420px 100%;
   animation: shimmer 1.25s linear infinite;
   border-radius: var(--r-sm);
@@ -193,7 +224,7 @@ button {
   font-weight: 600;
   font-size: 15px;
   letter-spacing: var(--track);
-  color: var(--paper);
+  color: var(--on-accent);
   background: var(--violet);
   border: none;
   border-radius: var(--r-pill);
@@ -219,8 +250,8 @@ button:disabled { cursor: not-allowed; opacity: 0.5; box-shadow: none; }
   box-shadow: none;
 }
 .btn-ghost:hover, .back-btn:hover, .read-more-btn:hover, .leave-btn:hover { background: var(--ash); filter: none; }
-.delete-btn, .logoutBtn { background: var(--blush); color: #9b2c3e; box-shadow: none; }
-.delete-btn:hover, .logoutBtn:hover { background: #ffcace; filter: none; }
+.delete-btn, .logoutBtn { background: var(--blush); color: var(--rose-ink); box-shadow: none; }
+.delete-btn:hover, .logoutBtn:hover { background: var(--blush-hover); filter: none; }
 
 input, textarea, select {
   font-family: var(--font);
@@ -273,9 +304,9 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 .login-aura { position: absolute; inset: 0; pointer-events: none; }
 .login-aura.a1 {
   background:
-    radial-gradient(460px 400px at 14% 8%,  rgba(171, 159, 242, 0.5), transparent 66%),
-    radial-gradient(420px 380px at 88% 96%, rgba(255, 214, 232, 0.5), transparent 66%),
-    radial-gradient(360px 340px at 8% 78%,  rgba(207, 230, 255, 0.42), transparent 68%);
+    radial-gradient(460px 400px at 14% 8%,  var(--aura-1), transparent 66%),
+    radial-gradient(420px 380px at 88% 96%, var(--aura-2), transparent 66%),
+    radial-gradient(360px 340px at 8% 78%,  var(--aura-3), transparent 68%);
 }
 
 .login-card {
@@ -284,8 +315,8 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   width: 100%;
   max-width: 380px;
   padding: var(--s-48) var(--s-32);
-  background: rgba(255, 255, 255, 0.94);
-  border: 1px solid rgba(255, 255, 255, 0.7);
+  background: var(--glass);
+  border: 1px solid var(--glass-edge);
   border-radius: 30px;
   box-shadow: var(--lift-3);
   text-align: center;
@@ -299,7 +330,7 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   background: linear-gradient(140deg, var(--violet), var(--periwinkle) 55%, #f9a8d4);
   box-shadow: 0 10px 24px rgba(124, 107, 240, 0.34);
   display: flex; align-items: center; justify-content: center;
-  color: #fff; font-size: 30px;
+  color: var(--on-accent); font-size: 30px;
   animation: float 5.5s var(--ease) infinite;
 }
 .login-title { font-size: 27px; font-weight: 700; letter-spacing: -0.035em; margin-bottom: 6px; }
@@ -329,7 +360,7 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   position: sticky; top: 0; z-index: 40;
   display: flex; align-items: center; justify-content: space-between; gap: var(--s-12);
   padding: var(--s-12) var(--s-16);
-  background: rgba(250, 249, 253, 0.97);
+  background: var(--glass-canvas);
   border-bottom: 1px solid var(--ash);
 }
 .brand-lockup { display: flex; align-items: center; gap: var(--s-8); }
@@ -338,7 +369,7 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   border-radius: 10px;
   background: linear-gradient(140deg, var(--violet), var(--periwinkle) 55%, #f9a8d4);
   display: flex; align-items: center; justify-content: center;
-  color: #fff; font-size: 15px;
+  color: var(--on-accent); font-size: 15px;
 }
 .title { font-size: 18px; font-weight: 700; letter-spacing: -0.035em; color: var(--aubergine); }
 
@@ -364,7 +395,7 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   display: flex; gap: var(--s-4);
   width: calc(100% - 28px); max-width: 390px;
   padding: 7px;
-  background: rgba(255, 255, 255, 0.97);
+  background: var(--glass);
   border: 1px solid var(--ash);
   border-radius: var(--r-pill);
   box-shadow: var(--lift-2);
@@ -534,7 +565,7 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   border-radius: var(--r-pill);
   font-size: 11.5px; font-weight: 700; letter-spacing: 0.01em;
 }
-.status-chip.live { background: rgba(46, 192, 139, 0.12); color: #17966a; }
+.status-chip.live { background: rgba(46, 192, 139, 0.12); color: var(--mint-ink); }
 .status-chip.live .live-dot { width: 6px; height: 6px; }
 .status-chip.soon { background: var(--bone); color: var(--fog); }
 
@@ -563,7 +594,7 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   background: var(--bone);
   color: var(--aubergine);
   background: color-mix(in srgb, var(--vibe, var(--periwinkle)) 15%, transparent);
-  color: color-mix(in srgb, var(--vibe, var(--periwinkle)) 72%, #2a2140);
+  color: color-mix(in srgb, var(--vibe, var(--periwinkle)) 72%, var(--chip-ink));
 }
 
 /* ---- Who's going: overlapping stack, the pattern every social app uses ---- */
@@ -613,11 +644,11 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 .act.hyped i { animation: hypePop 0.42s var(--spring); }
 .act.grow { flex: 1; }
 .act.primary {
-  background: var(--violet); color: var(--paper);
+  background: var(--violet); color: var(--on-accent);
   padding: 10px 20px;
   box-shadow: var(--lift-1);
 }
-.act.primary:hover { background: var(--violet); filter: brightness(1.06); color: var(--paper); transform: translateY(-1px); box-shadow: var(--lift-2); }
+.act.primary:hover { background: var(--violet); filter: brightness(1.06); color: var(--on-accent); transform: translateY(-1px); box-shadow: var(--lift-2); }
 .act.joined { background: var(--lavender); color: var(--aubergine); }
 .act.joined:hover { background: var(--lavender); color: var(--aubergine); }
 .act.full { background: var(--bone); color: var(--fog); }
@@ -646,7 +677,7 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 }
 .filter-pill:hover, .tag:hover { border-color: var(--periwinkle); color: var(--aubergine); transform: translateY(-1px); }
 .filter-pill.active, .tag.active {
-  background: var(--aubergine); border-color: var(--aubergine); color: var(--paper);
+  background: var(--ink-fill); border-color: var(--ink-fill); color: var(--on-ink-fill);
 }
 
 .empty-state {
@@ -688,7 +719,7 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 .chat-header {
   display: flex; align-items: center; gap: var(--s-12);
   padding: var(--s-12) var(--s-16);
-  background: rgba(255, 255, 255, 0.97);
+  background: var(--glass);
   border-bottom: 1px solid var(--ash);
   flex-shrink: 0;
 }
@@ -704,7 +735,7 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   transform: translateX(-50%) translateY(-10px);
   z-index: 20;
   padding: 6px 16px; border-radius: var(--r-pill);
-  background: rgba(42, 33, 64, 0.9); color: #fff;
+  background: rgba(42, 33, 64, 0.9); color: var(--on-accent);
   font-size: 12px; font-weight: 600;
   opacity: 0; pointer-events: none;
   transition: opacity var(--base) var(--ease), transform var(--base) var(--ease);
@@ -721,7 +752,7 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   outline: none !important;
 }
 .msg-bubble.media-only { padding: 5px; background: var(--bone); }
-.msg-sent { background: var(--violet); color: #fff; align-self: flex-end; box-shadow: 0 2px 8px rgba(124, 107, 240, 0.28); }
+.msg-sent { background: var(--violet); color: var(--on-accent); align-self: flex-end; box-shadow: 0 2px 8px rgba(124, 107, 240, 0.28); }
 .msg-received { background: var(--paper); color: var(--obsidian); align-self: flex-start; box-shadow: var(--lift-1); }
 
 .msg-sent.single, .msg-sent.first { border-radius: 20px 20px 6px 20px; }
@@ -732,7 +763,7 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 .msg-received.last { border-radius: 6px 20px 20px 20px; }
 .msg-wrapper + .msg-wrapper { margin-top: 3px; }
 
-.flash-sent, .flash-received { background: var(--periwinkle) !important; color: #fff !important; }
+.flash-sent, .flash-received { background: var(--periwinkle) !important; color: var(--on-accent) !important; }
 
 .msg-time { font-size: 11.5px; color: var(--fog); max-height: 0; opacity: 0; overflow: hidden; padding: 0 6px; transition: max-height var(--base) var(--ease), opacity var(--base) var(--ease), margin var(--base) var(--ease); }
 .msg-wrapper.show-time .msg-time { max-height: 24px; opacity: 1; margin-top: 4px; }
@@ -776,7 +807,7 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 .chat-footer {
   flex-shrink: 0; display: flex; flex-direction: column;
   padding: var(--s-12) var(--s-16) calc(var(--s-12) + env(safe-area-inset-bottom, 0px));
-  background: rgba(255, 255, 255, 0.97);
+  background: var(--glass);
   border-top: 1px solid var(--ash);
 }
 .input-wrapper { display: flex; gap: var(--s-8); width: 100%; align-items: center; }
@@ -829,7 +860,7 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   position: fixed; inset: 0; z-index: 2000;
   display: flex; align-items: center; justify-content: center;
   padding: var(--s-20);
-  background: rgba(28, 28, 34, 0.5);
+  background: var(--backdrop);
   animation: fadeIn 0.2s var(--ease);
 }
 .modal-content {
@@ -960,15 +991,15 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   .rail-card:nth-child(2) { animation-delay: 0.06s; }
   .rail-card:nth-child(3) { animation-delay: 0.12s; }
   .rail-card:nth-child(4) { animation-delay: 0.18s; }
-  .rail-card.accent-dark { background: linear-gradient(150deg, var(--aubergine), var(--plum)); color: var(--paper); box-shadow: 0 8px 22px rgba(60, 49, 91, 0.28); }
+  .rail-card.accent-dark { background: linear-gradient(150deg, var(--deep-a), var(--deep-b)); color: var(--on-accent); box-shadow: 0 8px 22px rgba(60, 49, 91, 0.28); }
   .rail-card.accent-dark .rail-title, .rail-card.accent-dark .rail-note { color: rgba(255, 255, 255, 0.68); }
-  .rail-card.accent-dark .rail-stat { color: var(--paper); }
+  .rail-card.accent-dark .rail-stat { color: var(--on-accent); }
   .rail-card.accent-lavender { background: var(--lavender); }
   .rail-title { display: flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fog); margin-bottom: var(--s-8); }
   .rail-stat { font-size: 40px; font-weight: 700; letter-spacing: -0.04em; line-height: 1; color: var(--aubergine); font-variant-numeric: tabular-nums; }
   .rail-note { font-size: 13.5px; color: var(--fog); margin: 6px 0 0; }
   .rail-tags { display: flex; flex-wrap: wrap; gap: 6px; }
-  .rail-tags .filter-pill { font-size: 13px; padding: 7px 13px; background: rgba(255, 255, 255, 0.7); border-color: transparent; color: var(--aubergine); }
+  .rail-tags .filter-pill { font-size: 13px; padding: 7px 13px; background: var(--glass-soft); border-color: transparent; color: var(--aubergine); }
   .rail-tags .filter-pill:hover { background: var(--paper); }
 
   .profile-screen-wrapper { position: relative; inset: auto; z-index: 1; min-height: 100dvh; border-right: 1px solid var(--ash); }
@@ -1045,15 +1076,15 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(520px 420px at 92% -6%,  rgba(171, 159, 242, 0.34), transparent 68%),
-    radial-gradient(460px 400px at -8% 104%, rgba(255, 201, 222, 0.32), transparent 68%),
-    radial-gradient(420px 380px at 104% 52%, rgba(185, 220, 255, 0.24), transparent 70%);
+    radial-gradient(520px 420px at 92% -6%,  var(--amb-1), transparent 68%),
+    radial-gradient(460px 400px at -8% 104%, var(--amb-2), transparent 68%),
+    radial-gradient(420px 380px at 104% 52%, var(--amb-3), transparent 70%);
 }
 
 /* A faint dot grid gives the canvas texture instead of dead flat paint */
 .ambient .grid {
   position: absolute; inset: 0;
-  background-image: radial-gradient(circle at 1px 1px, rgba(60, 49, 91, 0.10) 1px, transparent 0);
+  background-image: radial-gradient(circle at 1px 1px, var(--grid-dot) 1px, transparent 0);
   background-size: 26px 26px;
   mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 20%, transparent 78%);
   -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 20%, transparent 78%);
@@ -1235,7 +1266,7 @@ html:not(.kb-open) .chat-footer {
 .profile-safety button { margin-bottom: var(--s-8); }
 .profile-safety .safety-row button { margin-bottom: 0; }
 .danger-text { color: var(--rose); }
-.danger-text:hover { background: var(--blush); color: #9b2c3e; }
+.danger-text:hover { background: var(--blush); color: var(--rose-ink); }
 
 /* =====================================================================
    SEARCH
@@ -1327,8 +1358,8 @@ html:not(.kb-open) .chat-footer {
    REQUEST TO JOIN
    ===================================================================== */
 
-.act.requested { background: var(--buttercream); color: #7a5c00; }
-.act.requested:hover { background: #fff6a8; color: #7a5c00; }
+.act.requested { background: var(--buttercream); color: var(--butter-ink); }
+.act.requested:hover { background: var(--butter-hover); color: var(--butter-ink); }
 
 .approval-note {
   display: flex; align-items: center; gap: 6px;
@@ -1376,7 +1407,7 @@ html:not(.kb-open) .chat-footer {
   position: absolute; top: 3px; left: 3px;
   width: 22px; height: 22px;
   border-radius: 50%;
-  background: var(--paper);
+  background: var(--knob);
   box-shadow: var(--lift-1);
   transition: transform var(--base) var(--spring);
 }
@@ -1398,7 +1429,7 @@ html:not(.kb-open) .chat-footer {
   border-radius: var(--r-sm);
   animation: rise 0.3s var(--ease);
 }
-.changed-text { display: flex; gap: 8px; font-size: 14px; line-height: 1.45; color: #6b5200; }
+.changed-text { display: flex; gap: 8px; font-size: 14px; line-height: 1.45; color: var(--butter-ink); }
 .changed-text i { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
 .changed-text b { font-weight: 700; }
 .changed-actions { display: flex; gap: var(--s-8); margin-top: var(--s-12); }
@@ -1411,7 +1442,7 @@ html:not(.kb-open) .chat-footer {
   padding: 3px 9px;
   border-radius: var(--r-pill);
   background: var(--buttercream);
-  color: #6b5200;
+  color: var(--butter-ink);
   font-size: 11.5px;
   font-weight: 700;
   white-space: nowrap;
@@ -1496,8 +1527,8 @@ html:not(.kb-open) .chat-footer {
   height: 20px;
   padding: 0 6px;
   border-radius: var(--r-pill);
-  background: var(--aubergine);
-  color: #fff;
+  background: var(--ink-fill);
+  color: var(--on-ink-fill);
   font-size: 11.5px;
   font-weight: 500;
   display: grid;
@@ -1599,7 +1630,7 @@ html:not(.kb-open) .chat-footer {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  color: #17765a;
+  color: var(--mint-ink);
 }
 .out-now .live-dot { width: 6px; height: 6px; }
 
@@ -1611,7 +1642,7 @@ html:not(.kb-open) .chat-footer {
   padding: 3px 9px;
   border-radius: var(--r-pill);
   background: color-mix(in srgb, var(--mint) 16%, transparent);
-  color: #17765a;
+  color: var(--mint-ink);
   font-size: 11px;
   text-transform: none;
   letter-spacing: 0;
@@ -1660,8 +1691,8 @@ html:not(.kb-open) .chat-footer {
   transition: transform 0.12s var(--ease);
 }
 .orbit-btn:active { transform: scale(0.97); }
-.orbit-btn.primary { background: var(--violet); color: #fff; }
-.orbit-btn.linked  { background: color-mix(in srgb, var(--mint) 16%, transparent); color: #17765a; }
+.orbit-btn.primary { background: var(--violet); color: var(--on-accent); }
+.orbit-btn.linked  { background: color-mix(in srgb, var(--mint) 16%, transparent); color: var(--mint-ink); }
 .orbit-btn.pending { background: var(--bone); color: var(--text-muted); }
 .orbit-btn.vouched { background: color-mix(in srgb, var(--periwinkle) 26%, transparent); color: var(--plum); }
 .orbit-btn.following { background: var(--bone); color: var(--text); box-shadow: inset 0 0 0 1px var(--ash); }
@@ -1697,7 +1728,7 @@ html:not(.kb-open) .chat-footer {
   padding: 0 6px;
   border-radius: var(--r-pill);
   background: var(--violet);
-  color: #fff;
+  color: var(--on-accent);
   font-size: 11.5px;
   font-weight: 500;
   display: grid;
@@ -1738,7 +1769,7 @@ html:not(.kb-open) .chat-footer {
 .trust-chip i { font-size: 13px; }
 .trust-chip.in-orbit {
   background: color-mix(in srgb, var(--mint) 18%, transparent);
-  color: #17765a;
+  color: var(--mint-ink);
 }
 
 /* ---- Search result chips ---- */
@@ -1750,7 +1781,7 @@ html:not(.kb-open) .chat-footer {
   font-size: 12.5px;
   color: var(--text-muted);
 }
-.row-chip.linked { color: #17765a; }
+.row-chip.linked { color: var(--mint-ink); }
 .row-chip i { font-size: 15px; }
 
 /* The topbar orbit button needs a positioning context for its badge. */
@@ -1813,7 +1844,7 @@ html:not(.kb-open) .chat-footer {
   min-width: 18px;
   padding: 0 5px;
   background: var(--violet);
-  color: #fff;
+  color: var(--on-accent);
   border: 2px solid var(--paper);
   border-radius: var(--r-pill);
   font-size: 10.5px;
@@ -1857,8 +1888,8 @@ html:not(.kb-open) .chat-footer {
    with anything, and it reads as "and these others" rather than as a
    badge stuck on your own face. */
 .orbit-face.orbit-more {
-  background: var(--aubergine);
-  color: #fff;
+  background: var(--ink-fill);
+  color: var(--on-ink-fill);
   font-size: calc(var(--s) * 0.34px);
   font-weight: 600;
   letter-spacing: -0.02em;
@@ -1917,7 +1948,7 @@ html:not(.kb-open) .chat-footer {
   width: 21px;
   height: 21px;
   border-radius: 50%;
-  background: var(--paper);
+  background: var(--knob);
   box-shadow: var(--lift-1);
   transition: transform 0.2s var(--ease);
 }
@@ -1962,7 +1993,7 @@ html:not(.kb-open) .chat-footer {
   display: grid;
   place-items: center;
   margin: 0 auto var(--s-16);
-  color: var(--paper);
+  color: var(--on-accent);
   background: linear-gradient(140deg, var(--violet), var(--periwinkle) 55%, #f9a8d4);
   box-shadow: 0 10px 26px rgba(124, 107, 240, 0.30);
   animation: sparkFloat 4.5s var(--ease) infinite;
@@ -2146,7 +2177,7 @@ html:not(.kb-open) .chat-footer {
 .confirm-sheet h3 { font-size: 18px; margin-bottom: 6px; }
 .confirm-sheet p { font-size: 14px; line-height: 1.5; margin-bottom: var(--s-20); }
 .confirm-sheet button { font-size: 15px; }
-.confirm-sheet .danger-btn { background: var(--rose); }
+.confirm-sheet .danger-btn { background: var(--danger-fill); }
 
 /* =====================================================================
    RECAP CARDS
@@ -2544,7 +2575,7 @@ html:not(.kb-open) .chat-footer {
   line-height: 1.3;
   white-space: nowrap;
   background: color-mix(in srgb, var(--vibe, var(--periwinkle)) 15%, transparent);
-  color: color-mix(in srgb, var(--vibe, var(--periwinkle)) 72%, #2a2140);
+  color: color-mix(in srgb, var(--vibe, var(--periwinkle)) 72%, var(--chip-ink));
 }
 
 .about-add {
@@ -2582,7 +2613,7 @@ html:not(.kb-open) .chat-footer {
 .interest-chip.pick.on {
   background: color-mix(in srgb, var(--vibe, var(--periwinkle)) 18%, var(--paper));
   border-color: color-mix(in srgb, var(--vibe, var(--periwinkle)) 55%, transparent);
-  color: color-mix(in srgb, var(--vibe, var(--periwinkle)) 72%, #2a2140);
+  color: color-mix(in srgb, var(--vibe, var(--periwinkle)) 72%, var(--chip-ink));
 }
 .interest-chip.pick:disabled { opacity: 0.45; }
 
@@ -2616,3 +2647,131 @@ html {
     height: var(--vvh, 100%);
   }
 }
+
+
+/* =====================================================================
+   DARK MODE
+   One set of tokens, swapped. `data-theme` is set on <html> before the
+   stylesheet paints (inline script in index.html, then utils/theme.js),
+   from the Settings choice or, on "System", the device's own setting.
+
+   The palette keeps the app's violet spine: a near-black with a violet
+   cast rather than grey, surfaces lifted by a few steps of lightness
+   instead of shadows (shadows vanish on dark), text off-white rather
+   than #fff so it doesn't glare, and every muted colour checked for
+   contrast on the surface it sits on.
+   ===================================================================== */
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --aubergine:  #d9d1ff;   /* headings, strong violet text */
+  --plum:       #eeeaff;
+  --lavender:   #2c2548;   /* selected / soft violet fills */
+  --periwinkle: #9f93f4;
+  --violet:     #7c6bf0;
+
+  --mint:       #3dd49c;
+  --blush:      #3a1f29;
+  --rose:       #ff7d95;
+  --buttercream:#3a3312;
+  --cornflower: #6aa0ff;
+
+  --paper:      #191724;   /* cards, sheets, inputs */
+  --canvas:     #0f0d16;   /* the page */
+  --obsidian:   #eeecf5;   /* body text */
+  --fog:        #a6a3b5;   /* secondary text: 7:1 on --paper */
+  --ash:        #2e2b3c;   /* borders, dividers */
+  --bone:       #232030;   /* quiet fills */
+
+  --lift-1: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --lift-2: 0 4px 18px rgba(0, 0, 0, 0.45);
+  --lift-3: 0 14px 36px rgba(0, 0, 0, 0.6);
+  --glow:   0 0 0 4px rgba(159, 147, 244, 0.28);
+
+  --ink-fill:     #e6e0ff;
+  --on-ink-fill:  #1a1526;
+  --deep-a:       #2d2549;
+  --deep-b:       #1d1830;
+  --chip-ink:     #f6f3ff;
+  --mint-ink:     #62e0b1;
+  --butter-ink:   #f0d67a;
+  --rose-ink:     #ff9fb0;
+  --blush-hover:  #4a2633;
+  --butter-hover: #4a4218;
+  --shimmer-hi:   #2d2a3b;
+  --glass:        rgba(25, 23, 36, 0.96);
+  --glass-canvas: rgba(15, 13, 22, 0.94);
+  --glass-edge:   rgba(255, 255, 255, 0.06);
+  --glass-soft:   rgba(255, 255, 255, 0.06);
+  --backdrop:     rgba(4, 3, 8, 0.66);
+  --amb-1: rgba(124, 107, 240, 0.20);
+  --amb-2: rgba(244, 114, 182, 0.09);
+  --amb-3: rgba(90, 140, 255, 0.08);
+  --aura-1: rgba(124, 107, 240, 0.32);
+  --aura-2: rgba(244, 114, 182, 0.14);
+  --aura-3: rgba(90, 140, 255, 0.12);
+  --grid-dot: rgba(255, 255, 255, 0.05);
+  --toast-bg:  #ece8ff;
+  --toast-ink: #1a1526;
+  --unread-bg: rgba(124, 107, 240, 0.16);
+  --knob:        #f1eff8;
+  --danger-fill: #d24c66;              /* the lighter rose is text, not a fill */
+}
+
+/* Light text on a dark ground reads heavier than the same weight the
+   other way round, and sub-pixel smoothing makes it fuzzy. Greyscale
+   smoothing thins it back to what it looks like in light mode. */
+:root[data-theme="dark"] body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Shadows barely register on near-black, so surfaces also get a
+   hairline edge to separate them from the page. */
+:root[data-theme="dark"] .card,
+:root[data-theme="dark"] .profile-clean-card,
+:root[data-theme="dark"] .modal-content,
+:root[data-theme="dark"] .rail-card:not(.accent-dark),
+:root[data-theme="dark"] .empty-state,
+:root[data-theme="dark"] .starter:not(.starter-blank),
+:root[data-theme="dark"] .orbit-cta {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.045), var(--lift-1);
+}
+
+/* Photo-like marks keep their colour but stop glowing. */
+:root[data-theme="dark"] .login-mark,
+:root[data-theme="dark"] .fr-spark { box-shadow: 0 10px 26px rgba(0, 0, 0, 0.45); }
+:root[data-theme="dark"] .ambient .grid { opacity: 0.8; }
+
+/* A theme change shouldn't animate every colour on the page at once. */
+:root.theme-switching *, :root.theme-switching *::before, :root.theme-switching *::after {
+  transition: none !important;
+}
+
+/* ---- Appearance picker (Settings) ---- */
+.theme-picker {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.theme-opt {
+  width: 100%;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 6px 10px;
+  border-radius: var(--r-sm);
+  background: var(--bone);
+  color: var(--fog);
+  border: 1.5px solid transparent;
+  box-shadow: none;
+  font-size: 13px;
+  font-weight: 600;
+}
+.theme-opt:hover:not(:disabled) { filter: none; transform: none; box-shadow: none; color: var(--aubergine); }
+.theme-opt.on {
+  background: var(--lavender);
+  color: var(--aubergine);
+  border-color: var(--violet);
+}
+.theme-note { margin: 10px 0 0; }

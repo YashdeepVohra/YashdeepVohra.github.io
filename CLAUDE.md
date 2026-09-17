@@ -181,6 +181,14 @@ something breaks.
 - **Bio and interests** are `bio` (160) and `interests` (≤5, fixed list
   in `js/services/aboutRules.js`, mirrored in the rules). They ride on
   the profile document, so they cost no extra reads.
+- **Dark mode is tokens, not overrides.** Colours come from `:root` in
+  `style.css`; `:root[data-theme="dark"]` swaps them. Never write a
+  literal colour in CSS or a JS template — add a role token (`--on-accent`
+  for text on a violet fill, `--ink-fill` for a strong neutral fill,
+  `--glass`, `--mint-ink`...) with a value in both blocks. `--paper` is a
+  surface, never a text colour. The choice is per device
+  (`livesociya.theme`: system/light/dark, `js/utils/theme.js`), painted
+  before CSS by an inline script in `<head>`, and kept across logout.
 - **Overlays go through `js/utils/overlays.js`**, which backs them with
   history so Android back works. Closing is async — `pendingPops` exists
   because close-then-open in one tick used to tear down the new layer.
