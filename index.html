@@ -260,6 +260,8 @@
             </div>
           </div>
         </div>
+        <!-- Bio and interests: visible on every profile, private or not. -->
+        <div id="profileAbout" class="profile-about hidden"></div>
         <div class="profile-stats-pro no-margin-bottom">
           <button class="stat-box-pro tappable" onclick="openProfileList('followers')">
             <span class="stat-num" id="statFollowers">0</span>
@@ -353,6 +355,12 @@
 
       <label class="settings-label">Display Name</label>
       <input type="text" id="editDisplayNameInput" placeholder="New Display Name" maxlength="20" class="settings-input" autocomplete="off" spellcheck="false">
+
+      <label class="settings-label about-label" for="editBioInput">Bio <span class="about-count" id="bioCount">0/160</span></label>
+      <textarea id="editBioInput" class="bio-input" rows="3" maxlength="160" placeholder="A line or two about you — course, year, what you're always up for." oninput="onBioInput()"></textarea>
+
+      <label class="settings-label about-label">Into <span class="about-count" id="interestCount">0/5</span></label>
+      <div class="interest-grid" id="settingsInterests"></div>
 
       <button id="saveProfileBtn" onclick="saveProfileData()" class="save-settings-btn" style="margin-bottom:0;">Save Changes</button>
     </div>

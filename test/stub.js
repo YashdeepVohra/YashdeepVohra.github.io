@@ -21,7 +21,15 @@ const docRef = (path) => ({
     const fixture = window.__stubDocs[path];
     return Promise.resolve({ exists: !!fixture, data: () => fixture || {} });
   },
-  set: () => { window.__writes++; return Promise.resolve(); },
+  set: (data, opts) => {
+    window.__writes++;
+    // Plain values land for real, so a saved profile can be checked.
+    if (data && typeof data === 'object' && path && path.startsWith('users/') && path.split('/').length === 2) {
+      const clean = Object.fromEntries(Object.entries(data).filter(([, v]) => !(v && v.__op)));
+      window.__stubDocs[path] = (opts && opts.merge) ? Object.assign(window.__stubDocs[path] || {}, clean) : clean;
+    }
+    return Promise.resolve();
+  },
   update: (patch) => {
     // Optional stand-in for firestore.rules: return an error to refuse.
     const refused = window.__rules && window.__rules(path, patch);

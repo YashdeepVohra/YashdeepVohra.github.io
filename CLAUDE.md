@@ -170,6 +170,15 @@ something breaks.
   "locked" (`isProfileLocked`): counts, Follow, Message/Report/Block, and
   nothing else — no lists, vouches, events, or orbit. Public profiles
   show everything except the orbit button until you follow.
+- **The keyboard is handled by the visual viewport, not `innerHeight`.**
+  `utils/viewport.js` publishes `--vvt` / `--vvh`; full-screen layers sit
+  at exactly that box while `html.kb-open`. A keyboard only counts with a
+  text field focused and no pinch-zoom. `touch-action: manipulation` on
+  `html` stops double-tap zoom and keeps pinch. The smoke suite fakes a
+  visual viewport to test this; a real phone is still the final word.
+- **Bio and interests** are `bio` (160) and `interests` (≤5, fixed list
+  in `js/services/aboutRules.js`, mirrored in the rules). They ride on
+  the profile document, so they cost no extra reads.
 - **Overlays go through `js/utils/overlays.js`**, which backs them with
   history so Android back works. Closing is async — `pendingPops` exists
   because close-then-open in one tick used to tear down the new layer.

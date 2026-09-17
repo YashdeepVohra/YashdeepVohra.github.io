@@ -212,7 +212,17 @@ service cloud.firestore {
 
       allow update: if isMe(userId)
         // Fields the client is allowed to touch at all.
-        && changedKeys().hasOnly(['username', 'displayName', 'avatar', 'googlePfp', 'updatedAt', 'following', 'private'])
+        && changedKeys().hasOnly(['username', 'displayName', 'avatar', 'googlePfp', 'updatedAt', 'following', 'private', 'bio', 'interests'])
+        // ABOUT YOU. A short bio, and up to five interests from a fixed
+        // list (js/services/aboutRules.js — keep the two in step).
+        && (!(changedKeys().hasAny(['bio']))
+            // 160 characters in the app; the rule allows more because an
+            // emoji-heavy bio can count several times over here.
+            || (request.resource.data.bio is string && request.resource.data.bio.size() <= 640))
+        && (!(changedKeys().hasAny(['interests']))
+            || (request.resource.data.interests is list
+                && request.resource.data.interests.size() <= 5
+                && request.resource.data.interests.hasOnly(['☕ Chill', '🍕 Food', '🎉 Party', '📚 Study', '🏀 Sports', '🎧 Music', '🎮 Gaming', '🎨 Art', '💻 Coding', '📸 Photos', '🎬 Movies', '🏋️ Gym', '✈️ Travel', '🎭 Theatre', '📖 Books'])))
         && (!(changedKeys().hasAny(['private'])) || request.resource.data.private is bool)
         // You keep your OWN following list, and only ever one name at a
         // time. Note the asymmetry, which is the point of the design:

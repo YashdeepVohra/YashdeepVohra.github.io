@@ -87,6 +87,8 @@ import {
   sendReport,
   messageFromProfile,
   jumpToEvent,
+  onBioInput,
+  toggleInterest,
   setProfileEventsTab
 } from './services/profileService.js';
 
@@ -259,6 +261,8 @@ Object.assign(window, {
   closeFollowList,
   answerFollowRequest: answerRequest,
   togglePrivateAccount,
+  onBioInput,
+  toggleInterest,
   removeFollower: (uid) => removeFollower(uid),
   chooseAccountType,
   pickAccountType,

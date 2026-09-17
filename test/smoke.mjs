@@ -547,6 +547,117 @@ ok('pulling a stranger into orbit is refused before any write', gate.pullRefused
 ok('unfollowing withdraws a waiting orbit request', gate.unfollowWithdrew);
 
 /* ------------------------------------------------------------------ */
+group('bio and interests');
+const about = await page.evaluate(async () => {
+  const { state, prof } = window.__m;
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const docs = window.__stubDocs;
+  const out = {};
+  docs['users/me'] = Object.assign(docs['users/me'] || {}, { uid: 'me', displayName: 'Me', avatar: '\u{1F43C}', banned: false });
+  state.userCache.me = Object.assign(state.userCache.me || {}, { displayName: 'Me', bio: '', interests: [] });
+  state.userDisplayName = 'Me';
+
+  // A private stranger's bio still shows, escaped.
+  docs['users/shy'] = { uid: 'shy', username: 'shy', displayName: 'Shy', avatar: '\u{1F431}', private: true,
+    followers: [], following: [], followRequests: [], bio: 'Hi <img src=x onerror=alert(1)>\nsecond line',
+    interests: ['\u{1F3A7} Music', 'Not a real one', '\u{1F4DA} Study'] };
+  state.following = [];
+  prof.openProfileScreen('shy'); await wait(350);
+  const bioEl = document.querySelector('#profileAbout .profile-bio');
+  out.lockedBio = !!bioEl && document.getElementById('profileScreen').classList.contains('profile-is-locked');
+  out.escaped = !document.querySelector('#profileAbout img') && /<img/.test(bioEl?.textContent || '');
+  out.chips = [...document.querySelectorAll('#profileAbout .interest-chip')].map((c) => c.textContent);
+  prof.closeProfileScreen({ all: true }); await wait(200);
+
+  // Your own empty profile nudges you.
+  prof.openProfileScreen('me'); await wait(350);
+  out.nudge = !!document.querySelector('#profileAbout .about-add');
+
+  // Settings: pick six, get five; save; profile updates in place.
+  window.openSettingsScreen(); await wait(250);
+  for (let i = 0; i < 6; i++) window.toggleInterest(i);
+  document.getElementById('editBioInput').value = '  CS 2027.\n\n\n\nChai > coffee.  ';
+  window.onBioInput();
+  out.picked = document.querySelectorAll('#settingsInterests .interest-chip.on').length;
+  out.sixthDisabled = document.querySelectorAll('#settingsInterests .interest-chip:disabled').length > 0;
+  window.saveProfileData(); await wait(1200);
+  out.saved = docs['users/me'].bio === 'CS 2027.\n\nChai > coffee.' && docs['users/me'].interests.length === 5;
+  out.shownOnOwn = (document.querySelector('#profileAbout .profile-bio')?.textContent || '').startsWith('CS 2027.');
+  prof.closeProfileScreen({ all: true }); await wait(200);
+  return out;
+});
+ok('a private account\'s bio shows even when locked', about.lockedBio);
+ok('a bio is escaped, never markup', about.escaped);
+ok('only known interests are shown', about.chips.join('|') === '\u{1F3A7} Music|\u{1F4DA} Study', about.chips.join('|'));
+ok('an empty own profile offers to add a bio', about.nudge);
+ok('interests stop at five', about.picked === 5 && about.sixthDisabled, JSON.stringify(about));
+ok('saving cleans the bio and updates the profile', about.saved && about.shownOnOwn, JSON.stringify(about));
+
+/* ------------------------------------------------------------------ */
+group('mobile keyboard and zoom');
+{
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  const phone = await ctx.newPage();
+  const phoneErrors = [];
+  phone.on('pageerror', (e) => phoneErrors.push(e.message));
+  // A visual viewport the test can move, standing in for a keyboard.
+  await phone.addInitScript(() => {
+    const vv = new EventTarget();
+    Object.assign(vv, { height: 844, width: 390, offsetTop: 0, offsetLeft: 0, scale: 1 });
+    Object.defineProperty(window, 'visualViewport', { value: vv, configurable: true });
+    window.__vv = (patch) => { Object.assign(vv, patch); vv.dispatchEvent(new Event('resize')); };
+  });
+  await phone.addInitScript({ path: fileURLToPath(new URL('./stub.js', import.meta.url)) });
+  await phone.goto(APP_URL, { waitUntil: 'domcontentloaded' });
+  await phone.waitForTimeout(1800);
+
+  const kb = await phone.evaluate(async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const { state } = await import('/js/state/store.js');
+    state.uid = 'me'; window.__authSingleton.currentUser = { uid: 'me' };
+    document.getElementById('loading-screen').classList.add('hidden');
+    document.querySelector('.app-frame').classList.remove('hidden');
+    window.switchScreen('chatScreen');
+    const input = document.querySelector('#chatScreen .chat-footer input');
+    const rect = (sel) => document.querySelector(sel).getBoundingClientRect();
+    const out = { hasInput: !!input };
+
+    // iOS style: layout viewport unchanged, the visible part shrinks and pans.
+    input.focus();
+    window.__vv({ height: 500, offsetTop: 0 }); await wait(750);
+    out.iosFooterBottom = Math.round(rect('#chatScreen .chat-footer').bottom);
+    out.open = document.documentElement.classList.contains('kb-open');
+    window.__vv({ height: 500, offsetTop: 200 }); await wait(750);
+    out.pannedTop = Math.round(rect('#chatScreen').top);
+    out.pannedBottom = Math.round(rect('#chatScreen .chat-footer').bottom);
+
+    input.blur();
+    window.__vv({ height: 844, offsetTop: 0 }); await wait(750);
+    out.closed = !document.documentElement.classList.contains('kb-open')
+      && Math.round(rect('#chatScreen .chat-footer').bottom) === 844;
+
+    // Pinch-zoom is not a keyboard.
+    window.__vv({ height: 422, scale: 2 }); await wait(750);
+    out.pinchNotKeyboard = !document.documentElement.classList.contains('kb-open');
+    window.__vv({ height: 844, scale: 1 }); await wait(300);
+
+    out.touchAction = getComputedStyle(document.documentElement).touchAction;
+    out.smallFields = [...document.querySelectorAll('input, textarea, select')]
+      .filter((el) => !['hidden', 'file', 'checkbox', 'radio'].includes(el.type))
+      .filter((el) => parseFloat(getComputedStyle(el).fontSize) < 16).map((el) => el.id || el.className);
+    return out;
+  });
+  ok('composer sits on top of the keyboard', kb.hasInput && kb.open && kb.iosFooterBottom <= 500, JSON.stringify(kb));
+  ok('and follows the page when iOS pans it', kb.pannedTop === 200 && kb.pannedBottom === 700, JSON.stringify(kb));
+  ok('and goes back down when the keyboard closes', kb.closed);
+  ok('pinch-zoom is not mistaken for a keyboard', kb.pinchNotKeyboard);
+  ok('double-tap zoom is off, pinch-zoom is not', kb.touchAction === 'manipulation');
+  ok('no text field under 16px on a phone (iOS zooms on those)', kb.smallFields.length === 0, kb.smallFields.join());
+  ok('phone page has no errors', phoneErrors.length === 0, phoneErrors.join(' | '));
+  await ctx.close();
+}
+
+/* ------------------------------------------------------------------ */
 group('overall');
 ok('no errors, no native dialogs, all the way through', errors.length === 0, errors.join(' | '));
 

@@ -13,6 +13,7 @@ import { switchScreen, showTab, toast } from '../utils/ui.js';
 import { askConfirm } from '../utils/confirm.js';
 import { focusEvent, loadRecap, renderEvents, vibeColor } from './eventsService.js';
 import { inRecap, wasCalledOff } from './recapRules.js';
+import { INTERESTS, INTERESTS_MAX, BIO_MAX, cleanBio, cleanInterests } from './aboutRules.js';
 import { openOverlay, closeOverlay } from '../utils/overlays.js';
 import { closeChat, startChatWithUid } from './chatService.js';
 import { fetchUser, displayNameFor, usernameFor, avatarFor, rememberUser } from './userService.js';
@@ -407,6 +408,8 @@ export async function loadProfileUI(targetUid) {
   if (avatarEl) avatarEl.innerHTML = renderAvatar("\u{1F464}");
   if (nameDisplay) nameDisplay.innerText = "Loading...";
   if (usernameDisplay) usernameDisplay.innerText = "";
+  const aboutEl = document.getElementById("profileAbout");
+  if (aboutEl) { aboutEl.innerHTML = ""; aboutEl.classList.add("hidden"); }
   if (statJoined) statJoined.innerText = "-";
   if (statHosted) statHosted.innerText = "-";
   if (statVouches) statVouches.innerText = "-";
@@ -460,10 +463,50 @@ export function openSettingsScreen() {
   const nameInput = document.getElementById("editDisplayNameInput");
   if (nameInput) nameInput.value = state.userDisplayName || displayNameFor(state.uid);
 
+  const me = state.userCache[state.uid] || {};
+  const bioInput = document.getElementById("editBioInput");
+  if (bioInput) bioInput.value = cleanBio(me.bio);
+  pendingInterests = cleanInterests(me.interests);
+  onBioInput();
+  renderInterestPicker();
+
   state.pendingSettingsAvatar = state.userAvatar;
   document.querySelectorAll("#settingsAvatarGrid .avatar-option").forEach((el) => {
     el.classList.toggle("selected", el.innerText === state.userAvatar);
   });
+}
+
+let pendingInterests = [];
+
+export function onBioInput() {
+  const el = document.getElementById("editBioInput");
+  const count = document.getElementById("bioCount");
+  if (!el || !count) return;
+  const n = el.value.length;
+  count.innerText = `${n}/${BIO_MAX}`;
+  count.classList.toggle("near", n > BIO_MAX - 20);
+}
+
+function renderInterestPicker() {
+  const grid = document.getElementById("settingsInterests");
+  const count = document.getElementById("interestCount");
+  if (count) count.innerText = `${pendingInterests.length}/${INTERESTS_MAX}`;
+  if (!grid) return;
+  const full = pendingInterests.length >= INTERESTS_MAX;
+  grid.innerHTML = INTERESTS.map((t, i) => {
+    const on = pendingInterests.includes(t);
+    return `<button type="button" class="interest-chip pick${on ? " on" : ""}" style="--vibe:${vibeColor(t)}"
+      aria-pressed="${on}" ${!on && full ? "disabled" : ""} onclick="window.toggleInterest(${i})">${escapeHtml(t)}</button>`;
+  }).join("");
+}
+
+/** Takes an index, never the label — inline handlers get no text. */
+export function toggleInterest(index) {
+  const t = INTERESTS[index];
+  if (!t) return;
+  if (pendingInterests.includes(t)) pendingInterests = pendingInterests.filter((x) => x !== t);
+  else if (pendingInterests.length < INTERESTS_MAX) pendingInterests = pendingInterests.concat([t]);
+  renderInterestPicker();
 }
 
 export function closeSettingsScreen() {
@@ -505,19 +548,24 @@ export async function saveProfileData() {
 
     // Note: `username` is deliberately absent. Handles are immutable —
     // the rules reject any attempt to change one after it is claimed.
+    const bio = cleanBio(document.getElementById("editBioInput")?.value);
+    const interests = cleanInterests(pendingInterests);
+
     await db.collection("users").doc(state.uid).set({
       displayName: newName,
       avatar,
+      bio,
+      interests,
       updatedAt: Date.now()
     }, { merge: true });
 
     state.userDisplayName = newName;
     state.userAvatar = avatar;
     if (state.userCache[state.uid]) {
-      state.userCache[state.uid].displayName = newName;
-      state.userCache[state.uid].avatar = avatar;
+      Object.assign(state.userCache[state.uid], { displayName: newName, avatar, bio, interests });
       rememberUser(state.uid, state.userCache[state.uid]);
     }
+    if (state.currentProfileUid === state.uid) renderAbout(state.uid);
 
     const displayEl = document.getElementById("profileDisplayNameDisplay");
     if (displayEl) displayEl.innerText = newName;
@@ -561,8 +609,41 @@ export async function saveProfileData() {
  * number on a profile that its owner could not have inflated. Vouches
  * sits beside it as the stronger, rarer version of the same idea.
  */
+/**
+ * Bio and interests, under the name. Shown to everyone — a private
+ * account still says who it is. Your own empty profile gets a nudge to
+ * fill it in instead of a blank space.
+ */
+function renderAbout(targetUid) {
+  const host = document.getElementById("profileAbout");
+  if (!host) return;
+  const u = state.userCache[targetUid] || {};
+  const bio = cleanBio(u.bio);
+  const interests = cleanInterests(u.interests);
+  const isSelf = targetUid === state.uid;
+
+  if (!bio && !interests.length) {
+    host.classList.toggle("hidden", !isSelf);
+    host.innerHTML = isSelf
+      ? `<button class="about-add" onclick="window.openSettingsScreen()">
+           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+           Add a bio and what you're into
+         </button>`
+      : "";
+    return;
+  }
+
+  host.classList.remove("hidden");
+  host.innerHTML = `
+    ${bio ? `<p class="profile-bio">${escapeHtml(bio)}</p>` : ""}
+    ${interests.length ? `<div class="interest-row">${interests.map((t) =>
+      `<span class="interest-chip" style="--vibe:${vibeColor(t)}">${escapeHtml(t)}</span>`).join("")}</div>` : ""}`;
+}
+
 export function refreshProfileSocial(targetUid) {
   if (!targetUid || state.currentProfileUid !== targetUid) return;
+
+  renderAbout(targetUid);
 
   const followers = document.getElementById("statFollowers");
   const following = document.getElementById("statFollowing");

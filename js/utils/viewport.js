@@ -10,62 +10,110 @@
 //
 //   1. `interactive-widget=resizes-content` in the viewport meta, which
 //      asks modern Chrome/Android to resize the layout viewport itself.
-//   2. This module, which measures the overlap with the VisualViewport
-//      API and publishes it as `--kb`. iOS Safari ignores (1), so the
-//      measurement is what actually saves it there.
+//   2. This module, which reads the VisualViewport — the part of the
+//      page actually on screen — and publishes it as CSS variables.
 //
-// Anything that must stay above the keyboard sets `bottom: var(--kb)`.
+// WHAT CHANGED, AND WHY
+// ---------------------
+// This used to publish only `--kb`, the keyboard's height worked out as
+// `innerHeight - visualViewport.height - offsetTop`, and lift the
+// bottom edge of each full-screen layer by it. That leans on
+// `innerHeight`, which iOS Safari, iOS home-screen apps and in-app
+// browsers each report their own way while a keyboard is up — so on
+// some phones the composer landed under the keyboard.
+//
+// Now the layers are placed by the visual viewport directly:
+//
+//   --vvt   its top, relative to the layout viewport   (offsetTop)
+//   --vvh   its height                                 (height)
+//
+// A fixed element at `top: --vvt; height: --vvh` covers exactly what
+// can be seen, whatever innerHeight claims. `--kb` is still published
+// for anything else that uses it.
+//
+// Keyboard vs. pinch-zoom: both shrink the visual viewport. A keyboard
+// only counts when a text field has focus and the page isn't zoomed,
+// so pinching no longer hid the bottom nav or squeezed the chat.
 // =====================================================================
 
 const KEYBOARD_THRESHOLD = 90; // px — below this it's browser chrome, not a keyboard
+
+function typingInField() {
+  const el = document.activeElement;
+  if (!el || !(el instanceof HTMLElement)) return false;
+  if (el.isContentEditable) return true;
+  if (el.matches("textarea, select")) return true;
+  return el.matches("input") && !/^(button|checkbox|radio|range|submit|reset|file|color|hidden)$/i.test(el.type || "");
+}
 
 export function initViewportFit() {
   const root = document.documentElement;
   const vv = window.visualViewport;
 
   // No VisualViewport (older browsers): the meta tag is the only
-  // defence, and --kb stays 0, which is the current behaviour.
+  // defence, and the variables stay unset.
   if (!vv) return;
 
   let frame = 0;
+  let wasOpen = false;
+
+  const measure = () => {
+    const zoomed = (vv.scale || 1) > 1.05;
+    const overlap = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+    // Some browsers resize innerHeight along with the keyboard, which
+    // makes `overlap` zero; the visual viewport is still shorter than
+    // the screen, so compare against the tallest height seen as well.
+    const shrunk = Math.max(0, tallest - vv.height);
+    const open = typingInField() && !zoomed && Math.max(overlap, shrunk) > KEYBOARD_THRESHOLD;
+
+    root.style.setProperty("--kb", `${Math.round(open ? overlap : 0)}px`);
+    root.style.setProperty("--vvt", `${Math.round(vv.offsetTop)}px`);
+    root.style.setProperty("--vvh", `${Math.round(vv.height)}px`);
+    root.classList.toggle("kb-open", open);
+
+    // Keep the newest message visible as the composer rises.
+    if (open && !wasOpen) {
+      const box = document.getElementById("messages");
+      if (box) box.scrollTop = box.scrollHeight;
+    }
+    wasOpen = open;
+  };
+
+  // The tallest the visible area has been with no keyboard up: the
+  // screen height as far as this page is concerned. Rotating resets it.
+  let tallest = vv.height;
+  const noteTallest = () => {
+    if (!typingInField()) tallest = Math.max(vv.height, window.innerHeight * 0.6);
+  };
 
   const apply = () => {
     cancelAnimationFrame(frame);
-    frame = requestAnimationFrame(() => {
-      // How much of the layout viewport the keyboard is covering.
-      const overlap = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-      const open = overlap > KEYBOARD_THRESHOLD;
-
-      root.style.setProperty("--kb", `${Math.round(overlap)}px`);
-      root.classList.toggle("kb-open", open);
-
-      // Keep the newest message visible as the composer rises.
-      if (open) {
-        const box = document.getElementById("messages");
-        if (box) box.scrollTop = box.scrollHeight;
-      }
-    });
+    frame = requestAnimationFrame(() => { noteTallest(); measure(); });
   };
 
   vv.addEventListener("resize", apply);
   vv.addEventListener("scroll", apply);
+  window.addEventListener("resize", apply);
+  window.addEventListener("orientationchange", () => { tallest = 0; setTimeout(apply, 350); });
   apply();
 
-  // The keyboard animates in, so measure again once it has settled.
+  // The keyboard animates in over a few hundred milliseconds, and not
+  // every browser fires a resize at the end of it. Measure through it.
+  const settle = () => [60, 180, 360, 650].forEach((ms) => setTimeout(apply, ms));
+
   document.addEventListener("focusin", (event) => {
     const el = event.target;
-    if (!(el instanceof HTMLElement)) return;
-    if (!el.matches("input, textarea, select")) return;
+    if (!(el instanceof HTMLElement) || !typingInField()) return;
+    settle();
 
     setTimeout(() => {
-      apply();
       // Scrolling fields into view only makes sense inside a scrolling
       // panel. The chat composer is pinned to the bottom instead.
       if (el.closest(".screen-body, .profile-scroll-body, .container")) {
         el.scrollIntoView({ block: "center", behavior: "smooth" });
       }
-    }, 300);
+    }, 380);
   });
 
-  document.addEventListener("focusout", () => setTimeout(apply, 300));
+  document.addEventListener("focusout", settle);
 }
