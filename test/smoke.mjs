@@ -593,6 +593,23 @@ ok('an empty own profile offers to add a bio', about.nudge);
 ok('interests stop at five', about.picked === 5 && about.sixthDisabled, JSON.stringify(about));
 ok('saving cleans the bio and updates the profile', about.saved && about.shownOnOwn, JSON.stringify(about));
 
+const partial = await page.evaluate(async () => {
+  const { prof } = window.__m;
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const docs = window.__stubDocs;
+  // Stand-in for rules that predate bios: any write with `bio` is refused.
+  window.__denyBio = true;
+  docs['users/me'].displayName = 'Me';
+  window.openSettingsScreen(); await wait(250);
+  document.getElementById('editDisplayNameInput').value = 'Renamed';
+  document.getElementById('editBioInput').value = 'new bio';
+  window.saveProfileData(); await wait(1400);
+  window.__denyBio = false;
+  return { name: docs['users/me'].displayName, bio: docs['users/me'].bio };
+});
+ok('a refused bio no longer loses the rest of the save', partial.name === 'Renamed' && partial.bio !== 'new bio',
+   JSON.stringify(partial));
+
 /* ------------------------------------------------------------------ */
 group('mobile keyboard and zoom');
 {

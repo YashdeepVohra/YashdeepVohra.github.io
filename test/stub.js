@@ -22,6 +22,7 @@ const docRef = (path) => ({
     return Promise.resolve({ exists: !!fixture, data: () => fixture || {} });
   },
   set: (data, opts) => {
+    if (window.__denyBio && data && 'bio' in data) return Promise.reject({ code: 'permission-denied' });
     window.__writes++;
     // Plain values land for real, so a saved profile can be checked.
     if (data && typeof data === 'object' && path && path.startsWith('users/') && path.split('/').length === 2) {

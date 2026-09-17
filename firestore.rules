@@ -240,8 +240,13 @@ service cloud.firestore {
                 )
            )
         // Nobody promotes or un-bans themselves.
-        && request.resource.data.uid == resource.data.uid
-        && request.resource.data.banned == resource.data.banned
+        // get() with a default, because a profile made before these two
+        // fields existed doesn't have them — and a plain comparison with
+        // a missing field is an error, which refused EVERY edit to that
+        // profile: bio, name, avatar, privacy, following. Still nobody
+        // can add, change or remove either one.
+        && request.resource.data.get('uid', null) == resource.data.get('uid', null)
+        && request.resource.data.get('banned', null) == resource.data.get('banned', null)
         && (!(changedKeys().hasAny(['displayName'])) || isString(request.resource.data.displayName, 20))
         && (!(changedKeys().hasAny(['avatar'])) || request.resource.data.avatar.size() <= 300)
         // HANDLES ARE PERMANENT. Once set, it can never change; and it

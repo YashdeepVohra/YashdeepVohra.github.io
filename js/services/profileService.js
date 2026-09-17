@@ -548,16 +548,37 @@ export async function saveProfileData() {
 
     // Note: `username` is deliberately absent. Handles are immutable —
     // the rules reject any attempt to change one after it is claimed.
-    const bio = cleanBio(document.getElementById("editBioInput")?.value);
-    const interests = cleanInterests(pendingInterests);
+    let bio = cleanBio(document.getElementById("editBioInput")?.value);
+    let interests = cleanInterests(pendingInterests);
 
-    await db.collection("users").doc(state.uid).set({
-      displayName: newName,
-      avatar,
-      bio,
-      interests,
-      updatedAt: Date.now()
-    }, { merge: true });
+    const ref = db.collection("users").doc(state.uid);
+    const now = Date.now();
+    try {
+      await ref.set({ displayName: newName, avatar, bio, interests, updatedAt: now }, { merge: true });
+    } catch (e) {
+      if (e.code !== "permission-denied") throw e;
+      // One refused field used to lose the whole save, with nothing to
+      // say which. Save what the rules accept, one part at a time, and
+      // say exactly what didn't make it.
+      const parts = [
+        ["your name and picture", { displayName: newName, avatar, updatedAt: now }],
+        ["your bio", { bio }],
+        ["your interests", { interests }],
+      ];
+      const refused = [];
+      for (const [label, patch] of parts) {
+        try { await ref.set(patch, { merge: true }); }
+        catch (err) {
+          if (err.code !== "permission-denied") throw err;
+          refused.push(label);
+          console.warn("Profile save refused by the rules:", Object.keys(patch).join(", "));
+        }
+      }
+      if (refused.length === parts.length) throw e;
+      toast("Saved, except " + refused.join(" and ") + ". The database rules may be out of date.");
+      if (refused.includes("your bio")) bio = cleanBio(state.userCache[state.uid]?.bio);
+      if (refused.includes("your interests")) interests = cleanInterests(state.userCache[state.uid]?.interests);
+    }
 
     state.userDisplayName = newName;
     state.userAvatar = avatar;
@@ -586,7 +607,7 @@ export async function saveProfileData() {
   } catch (e) {
     console.error("Profile save error:", e.code, e.message);
     toast(e.code === "permission-denied"
-      ? "That change wasn't allowed. Try again."
+      ? "The database refused that save. Your profile may need the latest rules."
       : "Couldn't save your profile.");
     if (btn) {
       btn.innerHTML = originalText;
