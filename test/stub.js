@@ -23,7 +23,12 @@ const docRef = (path) => ({
   },
   set: () => { window.__writes++; return Promise.resolve(); },
   update: (patch) => {
+    // Optional stand-in for firestore.rules: return an error to refuse.
+    const refused = window.__rules && window.__rules(path, patch);
+    if (refused) return Promise.reject(refused);
     window.__writes++;
+    window.__updates = window.__updates || [];
+    window.__updates.push({ path, keys: Object.keys(patch || {}), patch, at: Date.now() });
     const cur = window.__stubDocs[path];
     if (cur && patch) Object.keys(patch).forEach((k) => {
       const v = patch[k];
@@ -179,6 +184,9 @@ window.firebase = {
       return {
         set: rec('set'), update: rec('update'), delete: rec('delete'),
         commit: () => {
+          // All or nothing, like the real thing.
+          const refused = window.__rules && ops.map((o) => o.kind === 'update' && window.__rules(o.path, o.data)).find(Boolean);
+          if (refused) return Promise.reject(refused);
           window.__batches = window.__batches || [];
           window.__batches.push(ops.map(o => o.kind + ' ' + o.path));
           // Apply for real, so a batched write is observable like any other.

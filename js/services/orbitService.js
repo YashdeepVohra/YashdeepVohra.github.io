@@ -43,7 +43,7 @@ import { fetchUser, primeUsers, displayNameFor, usernameFor, avatarFor } from '.
 import { openOverlay, closeOverlay } from '../utils/overlays.js';
 import { toast, refreshSocialUI } from '../utils/ui.js';
 import { askConfirm } from '../utils/confirm.js';
-import { stampAsk, limitMessage } from './limitsService.js';
+import { stampAsk, msUntilAskAllowed, limitMessage } from './limitsService.js';
 
 const MAX_VOUCHES = 500;
 
@@ -199,6 +199,11 @@ export async function pullIn(targetUid) {
 
   const before = orbitStatus(uid);
   setLocalOrbit(uid, "outgoing");
+
+  // Shares a gap with follow requests: asking to follow someone and
+  // then pulling them into orbit straight away used to fail the second.
+  const gap = msUntilAskAllowed();
+  if (gap) await new Promise((r) => setTimeout(r, gap));
 
   try {
     // Batched with the rate-limit stamp, which the rule checks for.

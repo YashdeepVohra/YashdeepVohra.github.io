@@ -32,6 +32,7 @@ export const state = {
   following: [],           // uids I follow — my own list, from my user doc
   followRequests: [],      // uids waiting on me, when my account is private
   isPrivate: false,        // do I approve my followers?
+  privacyChosen: false,    // has this account ever picked public or private?
   orbitUids: [],           // linked — both of you accepted
   orbitIncoming: [],       // uids who asked to join your orbit
   orbitOutgoing: [],       // uids you asked, still waiting
@@ -112,6 +113,7 @@ export function resetState() {
   state.following = [];
   state.followRequests = [];
   state.isPrivate = false;
+  state.privacyChosen = false;
   state.orbitUids = [];
   state.orbitIncoming = [];
   state.orbitOutgoing = [];

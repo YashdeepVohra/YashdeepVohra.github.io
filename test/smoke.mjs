@@ -324,6 +324,156 @@ ok('a blocked host disappears from joined and its count', prof.afterBlock.n === 
 ok('profile has no horizontal scroll', prof.noScroll);
 
 /* ------------------------------------------------------------------ */
+group('private accounts and following');
+
+// A small model of the users rules that matter here, so the client is
+// tested against refusals and not just against a database that says yes.
+await page.evaluate(() => {
+  window.__rules = (path, patch) => {
+    const m = /^users\/(.+)$/.exec(path);
+    if (!m || !patch) return null;
+    const target = m[1];
+    const doc = window.__stubDocs[path] || {};
+    const me = window.__authSingleton.currentUser?.uid;
+    const deny = { code: 'permission-denied' };
+    const f = patch.followers, r = patch.followRequests;
+    if (target !== me && f && f.__op === 'union' && doc.private === true) return deny;
+    if (target !== me && r && r.__op === 'union') {
+      if (doc.private !== true) return deny;
+      if ((doc.followers || []).includes(me)) return deny;
+      const last = (window.__updates || []).filter((u) => u.patch?.followRequests?.__op === 'union').pop();
+      if (last && Date.now() - last.at < 3000) return deny;
+    }
+    return null;
+  };
+});
+
+const priv = await page.evaluate(async () => {
+  const { state, follow, prof } = window.__m;
+  const users = await import('/js/services/userService.js');
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const docs = window.__stubDocs;
+  const person = (u, extra = {}) => Object.assign({ uid: u, username: u, displayName: u.toUpperCase(), avatar: '\u{1F98A}',
+    banned: false, followers: [], following: [], followRequests: [] }, extra);
+  docs['users/me'] = person('me');
+  docs['users/p1'] = person('p1', { private: true });
+  docs['users/p2'] = person('p2', { private: true });
+  docs['users/pub'] = person('pub');
+  state.following = []; state.followRequests = [];
+  window.__updates = [];
+  const out = {};
+
+  // 1. A stale copy says "open"; the account went private since.
+  state.userCache.p1 = { uid: 'p1', username: 'p1', displayName: 'P1', avatar: '', private: false };
+  await follow.toggleFollow('p1');
+  out.wentPrivateBecameAsk = docs['users/p1'].followRequests.includes('me')
+    && !docs['users/p1'].followers.includes('me') && !state.following.includes('p1');
+
+  // 2. Straight away, ask a second private account. Both must stand.
+  const t0 = Date.now();
+  await follow.toggleFollow('p2');
+  out.secondAsk = docs['users/p2'].followRequests.includes('me');
+  out.firstStillThere = docs['users/p1'].followRequests.includes('me');
+  out.waitedItsTurn = Date.now() - t0 >= 2500;
+
+  // 3. Reload: cache comes back from localStorage only.
+  users.rememberUser('p1', docs['users/p1']);
+  state.userCache = { me: state.userCache.me };
+  users.hydrateProfileCache();
+  out.afterReloadStillAsked = follow.hasAskedToFollow('p1') && follow.isPrivateAccount('p1');
+
+  // 4. Tapping "Requested" asks before withdrawing; No keeps it.
+  const p = follow.toggleFollow('p1'); await wait(150);
+  out.withdrawAsks = !document.getElementById('confirmSheet').classList.contains('hidden');
+  window.confirmNo(); await p;
+  out.noKeepsRequest = docs['users/p1'].followRequests.includes('me');
+
+  // 5. p2 approves me. My app notices the next time it reads p2.
+  docs['users/p2'].followRequests = []; docs['users/p2'].followers = ['me'];
+  await users.fetchUser('p2', { force: true }); await wait(50);
+  out.approvalHealed = state.following.includes('p2') && docs['users/me'].following.includes('p2');
+
+  // 6. Unfollowing a private account asks first.
+  const q = follow.toggleFollow('p2'); await wait(150);
+  out.unfollowPrivateAsks = !document.getElementById('confirmSheet').classList.contains('hidden');
+  window.confirmYes(); await q;
+  out.unfollowed = !state.following.includes('p2') && !docs['users/p2'].followers.includes('me');
+
+  // 7. A public account: one tap, one atomic batch, a double tap is ignored.
+  window.__batches = [];
+  const a1 = follow.toggleFollow('pub'); const a2 = follow.toggleFollow('pub');
+  await a1; await a2;
+  out.publicFollow = state.following.includes('pub') && docs['users/pub'].followers.includes('me');
+  out.oneBatch = window.__batches.filter((b) => b.join().includes('users/pub')).length === 1;
+
+  // 8. Private lists are locked to non-followers.
+  state.currentProfileUid = 'p1';
+  await follow.openFollowList('p1', 'followers'); await wait(100);
+  out.listLocked = !!document.querySelector('#followListBody .locked-list');
+  follow.closeFollowList(); await wait(200);
+  return out;
+});
+ok('following an account that went private sends a request instead', priv.wentPrivateBecameAsk);
+ok('asking two people back to back keeps both requests', priv.secondAsk && priv.firstStillThere,
+   JSON.stringify({ second: priv.secondAsk, first: priv.firstStillThere }));
+ok('the second ask waits instead of failing', priv.waitedItsTurn);
+ok('after a reload a request still reads as Requested, on a private account', priv.afterReloadStillAsked);
+ok('withdrawing asks first, and No keeps the request', priv.withdrawAsks && priv.noKeepsRequest);
+ok('an approved request turns into following on your side', priv.approvalHealed);
+ok('unfollowing a private account asks first', priv.unfollowPrivateAsks && priv.unfollowed);
+ok('following a public account is one batch, and a double tap is one write', priv.publicFollow && priv.oneBatch);
+ok('a private account\'s followers are locked to non-followers', priv.listLocked);
+
+const owner = await page.evaluate(async () => {
+  const { state, follow } = window.__m;
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const docs = window.__stubDocs;
+  docs['users/me'] = { uid: 'me', banned: false, private: true, followRequests: ['a', 'b'], following: [] };
+  state.userCache.me = Object.assign(state.userCache.me || {}, { followers: [] });
+  state.isPrivate = true; state.privacyChosen = true; state.followRequests = ['a', 'b'];
+  const out = {};
+
+  // Going public lets the people waiting in.
+  const p = follow.setPrivateAccount(false); await wait(150);
+  out.asked = !document.getElementById('confirmSheet').classList.contains('hidden');
+  window.confirmYes(); await p;
+  out.letIn = docs['users/me'].private === false
+    && (docs['users/me'].followers || []).join() === 'a,b'
+    && docs['users/me'].followRequests.length === 0;
+
+  // Removing a follower.
+  state.userCache.me.followers = ['a', 'b'];
+  const r = follow.removeFollower('a'); await wait(150);
+  window.confirmYes(); await r;
+  out.removed = docs['users/me'].followers.join() === 'b';
+  return out;
+});
+ok('going public asks, then lets everyone waiting in', owner.asked && owner.letIn, JSON.stringify(owner));
+ok('you can remove a follower', owner.removed);
+
+const onboarding = await page.evaluate(async () => {
+  const auth = await import('/js/services/authService.js');
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const screen = document.getElementById('usernameScreen');
+  screen.classList.remove('hidden');
+  const input = document.getElementById('newUsername');
+  const btn = document.getElementById('claimBtn');
+  input.value = 'fresh_one';
+  auth.checkUsernameAvailability(); await wait(600);
+  const beforePick = btn.disabled;
+  window.pickAccountType(document.querySelector('#claimTypePicker [data-type="private"]'), 'private');
+  const afterPick = btn.disabled;
+  const cards = [...document.querySelectorAll('#claimTypePicker .type-card')].map((c) => Math.round(c.getBoundingClientRect().height));
+  screen.classList.add('hidden');
+  return { beforePick, afterPick, cards, selected: document.querySelector('#claimTypePicker .selected')?.dataset.type };
+});
+ok('join stays off until public or private is picked', onboarding.beforePick === true && onboarding.afterPick === false,
+   JSON.stringify(onboarding));
+ok('the two choices render as cards', onboarding.cards.length === 2 && onboarding.cards.every((h) => h > 50), JSON.stringify(onboarding.cards));
+
+await page.evaluate(() => { window.__rules = null; });
+
+/* ------------------------------------------------------------------ */
 group('overall');
 ok('no errors, no native dialogs, all the way through', errors.length === 0, errors.join(' | '));
 

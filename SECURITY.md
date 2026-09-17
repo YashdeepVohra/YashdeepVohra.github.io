@@ -173,6 +173,16 @@ private to the blocker — would mean the blocked person still sees your
 events and therefore your location, which is the worse risk of the two.
 Every major platform lets a blocked user work it out.
 
+**Private accounts hide lists in the app, not in the database.** A
+private account decides who may follow it, and that IS enforced by the
+rules. But any signed-in student can still read any profile document,
+which includes `followers`, `following` and `followRequests`. The app
+shows a lock instead of those lists (and the Joined tab) to anyone who
+doesn't follow a private account, but someone using the console could
+read them. Closing that properly means moving the lists into a
+subcollection with a follower-only read rule, at one read per name.
+Events stay public whatever the account type — that is the product.
+
 **Banning is still manual.** `banned` exists on the profile but nothing
 enforces it; the quickest real ban is Firebase console → Authentication
 → disable the account, which invalidates their token everywhere.

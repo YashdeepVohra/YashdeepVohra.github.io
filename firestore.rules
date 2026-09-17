@@ -276,20 +276,24 @@ service cloud.firestore {
       allow update: if signedIn()
         && !isMe(userId)
         && changedKeys().hasOnly(['followers'])
-        && request.resource.data.followers is list
-        && request.resource.data.followers.size() <= 5000
+        && listOr(request.resource.data, 'followers') is list
+        && listOr(request.resource.data, 'followers').size() <= 5000
         && selfToggleOnly(
              listOr(resource.data, 'followers'),
-             request.resource.data.followers
+             listOr(request.resource.data, 'followers')
            )
-        && !blockedWith(userId)
-        // A PRIVATE account cannot be followed directly — you may only
-        // ask, below, and wait for them to move you across. Note this
-        // guards ADDING yourself only: leaving somebody's followers has
-        // to work whatever their settings say.
+        // Everything below guards ADDING yourself only. Leaving somebody's
+        // followers has to work whatever their settings say — and it
+        // used to be refused once a block existed, so blocking someone
+        // left you stuck in their follower list for good.
         && (
-             !added(listOr(resource.data, 'followers'), request.resource.data.followers).hasAny([uid()])
-             || listOr(resource.data, 'private') != true
+             !added(listOr(resource.data, 'followers'), listOr(request.resource.data, 'followers')).hasAny([uid()])
+             || (
+                  // A PRIVATE account cannot be followed directly — you
+                  // may only ask, below, and wait to be moved across.
+                  resource.data.get('private', false) != true
+                  && !blockedWith(userId)
+                )
            );
 
       // ASKING TO FOLLOW a private account. Same shape as the rule
@@ -299,22 +303,25 @@ service cloud.firestore {
       allow update: if signedIn()
         && !isMe(userId)
         && changedKeys().hasOnly(['followRequests'])
-        && request.resource.data.followRequests is list
-        && request.resource.data.followRequests.size() <= 5000
+        && listOr(request.resource.data, 'followRequests') is list
+        && listOr(request.resource.data, 'followRequests').size() <= 5000
         && selfToggleOnly(
              listOr(resource.data, 'followRequests'),
-             request.resource.data.followRequests
+             listOr(request.resource.data, 'followRequests')
            )
-        && !blockedWith(userId)
-        // Withdrawing always works; asking only makes sense while the
-        // account is actually private, and not faster than one every
-        // ten seconds.
+        // Withdrawing always works, block or no block. Asking only makes
+        // sense while the account is actually private, from someone who
+        // isn't already a follower, and not faster than one every three
+        // seconds. (Ten seconds made asking two people back to back fail
+        // the second one, which looked like a request vanishing.)
         && (
-             !added(listOr(resource.data, 'followRequests'), request.resource.data.followRequests).hasAny([uid()])
+             !added(listOr(resource.data, 'followRequests'), listOr(request.resource.data, 'followRequests')).hasAny([uid()])
              || (
-                  resource.data.private == true
+                  resource.data.get('private', false) == true
+                  && !(uid() in listOr(resource.data, 'followers'))
+                  && !blockedWith(userId)
                   && stampedAsk()
-                  && lastAskAt() < request.time - duration.value(10, 's')
+                  && lastAskAt() < request.time - duration.value(3, 's')
                 )
            );
 
@@ -326,14 +333,28 @@ service cloud.firestore {
       // nothing can be removed from the followers along the way.
       allow update: if isMe(userId)
         && changedKeys().hasOnly(['followers', 'followRequests'])
-        && request.resource.data.followers is list
-        && request.resource.data.followRequests is list
-        && removed(listOr(resource.data, 'followRequests'), request.resource.data.followRequests).size() == 1
-        && added(listOr(resource.data, 'followRequests'), request.resource.data.followRequests).size() == 0
-        && removed(listOr(resource.data, 'followers'), request.resource.data.followers).size() == 0
-        && added(listOr(resource.data, 'followers'), request.resource.data.followers).size() <= 1
-        && removed(listOr(resource.data, 'followRequests'), request.resource.data.followRequests)
-             .hasAll(added(listOr(resource.data, 'followers'), request.resource.data.followers));
+        // listOr on the AFTER side too. Declining writes only
+        // followRequests, so on an account that had never had a follower
+        // there was no `followers` field at all, `followers is list`
+        // failed, and every decline was refused.
+        && listOr(request.resource.data, 'followers') is list
+        && listOr(request.resource.data, 'followRequests') is list
+        && removed(listOr(resource.data, 'followRequests'), listOr(request.resource.data, 'followRequests')).size() == 1
+        && added(listOr(resource.data, 'followRequests'), listOr(request.resource.data, 'followRequests')).size() == 0
+        && removed(listOr(resource.data, 'followers'), listOr(request.resource.data, 'followers')).size() == 0
+        && added(listOr(resource.data, 'followers'), listOr(request.resource.data, 'followers')).size() <= 1
+        && removed(listOr(resource.data, 'followRequests'), listOr(request.resource.data, 'followRequests'))
+             .hasAll(added(listOr(resource.data, 'followers'), listOr(request.resource.data, 'followers')));
+
+      // REMOVING A FOLLOWER, by the owner. One name out, nobody in, and
+      // nothing else touched — so it can shrink a follower count but
+      // never grow one. Without it there was no way to take someone out
+      // of your followers at all, not even somebody you had blocked.
+      allow update: if isMe(userId)
+        && changedKeys().hasOnly(['followers'])
+        && listOr(request.resource.data, 'followers') is list
+        && removed(listOr(resource.data, 'followers'), listOr(request.resource.data, 'followers')).size() == 1
+        && added(listOr(resource.data, 'followers'), listOr(request.resource.data, 'followers')).size() == 0;
 
       // Accounts are never deleted from the client — that would free a
       // handle and orphan every event and message it owns.
@@ -761,10 +782,10 @@ service cloud.firestore {
         && request.resource.data.status == 'pending'
         && request.resource.data.at is number
         && !blockedWith(theOther())
-        // Same ten-second gate as asking to follow, off the same
+        // Same three-second gate as asking to follow, off the same
         // ledger — one person cannot paper the campus in requests.
         && stampedAsk()
-        && lastAskAt() < request.time - duration.value(10, 's');
+        && lastAskAt() < request.time - duration.value(3, 's');
 
       // Accepting is the only edit, it only goes one way, and only the
       // person who RECEIVED the request can do it.

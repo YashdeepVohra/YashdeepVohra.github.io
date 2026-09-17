@@ -157,6 +157,14 @@ something breaks.
   `js/utils/confirm.js` and `toast()` from `js/utils/ui.js`.
 - **An ended event is not live.** `now >= startTime` is also true after
   it ends; that put a Live chip on every Recap card. Check `expiresAt`.
+- **The localStorage profile cache is partial.** It keeps names, counts,
+  `private`, and whether YOU are in their request queue — nothing else.
+  Leaving `private` and `followRequests` out made every private account
+  look open after a reload and every sent request look cancelled.
+- **A new follow decides from a fresh read, never the cache**
+  (`refreshUser`), and every fresh read runs `onUserFetched` hooks —
+  that's how an approved request becomes `following` on the asker's
+  side, since only the asker can write their own list.
 - **Overlays go through `js/utils/overlays.js`**, which backs them with
   history so Android back works. Closing is async — `pendingPops` exists
   because close-then-open in one tick used to tear down the new layer.
@@ -166,7 +174,9 @@ something breaks.
 Built and working: UID migration, full rules, responsive layout, blocking
 and reporting, request-to-join, host moderation, search, Orbit (mutual
 connections + vouches), follow/followers with private accounts and
-approval, rate limits, the icebreaker, the day-one empty state.
+approval, rate limits, the icebreaker, the day-one empty state, public /
+private chosen at sign-up (and asked once of older accounts), remove a
+follower, going public lets waiting requests in.
 
 Not built, roughly in the order I'd do them: push notifications (needs
 Blaze), share links for an event, report triage for the admin.

@@ -108,9 +108,12 @@ import {
   closeFollowList,
   answerFollowRequest,
   setPrivateAccount,
-  syncPrivacyUI
+  syncPrivacyUI,
+  removeFollower
 } from './services/followService.js';
 
+import { chooseAccountType } from './services/followService.js';
+import { pickAccountType } from './services/authService.js';
 import { confirmYes, confirmNo } from './utils/confirm.js';
 
 import { initSwipeListeners } from './interactions/swipeReply.js';
@@ -256,6 +259,9 @@ Object.assign(window, {
   closeFollowList,
   answerFollowRequest: answerRequest,
   togglePrivateAccount,
+  removeFollower: (uid) => removeFollower(uid),
+  chooseAccountType,
+  pickAccountType,
 
   // Orbit
   openOrbitScreen,

@@ -255,6 +255,7 @@
             <div id="profileDisplayNameDisplay" class="profile-name-pro">Display Name</div>
             <div class="profile-handle-pro" id="profileUsernameDisplay">@username</div>
             <div class="profile-track" id="profileTrack">
+              <span id="profilePrivate" class="private-badge hidden"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2.5" stroke="currentColor" stroke-width="2.2"/><path d="M8 11V8a4 4 0 0 1 8 0v3" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg> Private</span>
               <span id="statEventsJoined">0</span> joined · <span id="statEventsHosted">0</span> hosted
             </div>
           </div>
@@ -388,6 +389,21 @@
 
   <div id="usernameStatus" style="font-size:13px; font-weight:700; margin-bottom:20px; min-height:18px;"></div>
 
+  <div class="type-picker" id="claimTypePicker" role="radiogroup" aria-label="Account type">
+    <div class="type-heading">Who can follow you?</div>
+    <button type="button" class="type-card" data-type="public" role="radio" aria-checked="false" onclick="pickAccountType(this, 'public')">
+      <span class="type-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><path d="M3 12h18M12 3c2.6 2.5 3.8 5.5 3.8 9s-1.2 6.5-3.8 9c-2.6-2.5-3.8-5.5-3.8-9S9.4 5.5 12 3Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg></span>
+      <span class="type-text"><b>Public</b><small>Anyone on campus can follow you</small></span>
+      <span class="type-tick" aria-hidden="true"></span>
+    </button>
+    <button type="button" class="type-card" data-type="private" role="radio" aria-checked="false" onclick="pickAccountType(this, 'private')">
+      <span class="type-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2.5" stroke="currentColor" stroke-width="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span>
+      <span class="type-text"><b>Private</b><small>You approve everyone who follows you</small></span>
+      <span class="type-tick" aria-hidden="true"></span>
+    </button>
+    <p class="type-note">You can change this any time in Settings. Events you start are public either way.</p>
+  </div>
+
   <button id="claimBtn" style="max-width:340px;" disabled>Join Campus</button>
 </div>
 
@@ -504,6 +520,26 @@
     <span class="header-spacer" aria-hidden="true"></span>
   </div>
   <div class="screen-body" id="followListBody"></div>
+</div>
+
+<!-- Asked once, of accounts made before there was a choice. -->
+<div id="accountTypeSheet" class="modal-overlay hidden">
+  <div class="modal-content type-sheet">
+    <h3>Public or private?</h3>
+    <p>Pick who can follow you. You can change it any time in Settings.</p>
+    <div class="type-picker" role="radiogroup" aria-label="Account type">
+    <button type="button" class="type-card" data-type="public" role="radio" aria-checked="false" onclick="chooseAccountType(this, 'public')">
+      <span class="type-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/><path d="M3 12h18M12 3c2.6 2.5 3.8 5.5 3.8 9s-1.2 6.5-3.8 9c-2.6-2.5-3.8-5.5-3.8-9S9.4 5.5 12 3Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg></span>
+      <span class="type-text"><b>Public</b><small>Anyone on campus can follow you</small></span>
+      <span class="type-tick" aria-hidden="true"></span>
+    </button>
+    <button type="button" class="type-card" data-type="private" role="radio" aria-checked="false" onclick="chooseAccountType(this, 'private')">
+      <span class="type-icon"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2.5" stroke="currentColor" stroke-width="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span>
+      <span class="type-text"><b>Private</b><small>You approve everyone who follows you</small></span>
+      <span class="type-tick" aria-hidden="true"></span>
+    </button>
+    </div>
+  </div>
 </div>
 
 <!-- The app asking, rather than the browser interrupting. -->

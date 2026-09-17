@@ -15,7 +15,7 @@
 import { auth, db, isLocalhost } from '../config/firebase.js';
 import { state, resetState } from '../state/store.js';
 import { switchScreen, setLoading, toast } from '../utils/ui.js';
-import { clearOverlays } from '../utils/overlays.js';
+import { clearOverlays, openOverlay } from '../utils/overlays.js';
 import { renderAvatar } from '../utils/formatters.js';
 import { normalizeUsername, hydrateProfileCache, rememberUser, clearProfileCache } from './userService.js';
 import { loadEvents, renderEvents } from './eventsService.js';
@@ -244,6 +244,7 @@ export function initializeUserApp(userData) {
   state.following = Array.isArray(userData.following) ? userData.following : [];
   state.followRequests = Array.isArray(userData.followRequests) ? userData.followRequests : [];
   state.isPrivate = userData.private === true;
+  state.privacyChosen = typeof userData.private === "boolean";
 
   // Names and avatars saved on a previous visit go back into the cache
   // before anything renders, so the first paint costs zero reads.
@@ -271,6 +272,12 @@ export function initializeUserApp(userData) {
 
   history.pushState({ screen: "home" }, "", window.location.pathname);
   switchScreen("home");
+
+  // Accounts made before sign-up asked are asked once, after the feed
+  // has had a moment to appear. Dismissing it just asks again next time.
+  if (!state.privacyChosen) {
+    setTimeout(() => { if (state.uid && !state.privacyChosen) openOverlay("accountTypeSheet"); }, 1200);
+  }
 
   // Blocks first: everything else filters against this list, and a
   // block must take effect the moment it changes, not on next load.
@@ -300,12 +307,40 @@ export function initializeUserApp(userData) {
 // Typing "yashdeep" fired eight document reads, one per keystroke, with
 // nothing between the keyboard and Firestore. Wait for them to stop.
 let handleCheck = 0;
+/* ---------------------------------------------------------------------
+   Public or private, chosen at sign-up
+   ---------------------------------------------------------------------
+   Every account used to start public with the choice buried in
+   Settings, so most people never knew there was one. It is asked on
+   the same screen as the handle now, and Join stays off until both are
+   answered. It goes into the same write that claims the handle.
+   ------------------------------------------------------------------- */
+
+let chosenType = "";
+let handleIsFree = false;
+
+function syncClaimButton() {
+  const btn = document.getElementById("claimBtn");
+  if (btn) btn.disabled = !(handleIsFree && chosenType);
+}
+
+export function pickAccountType(el, type) {
+  if (type !== "public" && type !== "private") return;
+  chosenType = type;
+  document.querySelectorAll("#claimTypePicker .type-card").forEach((card) => {
+    const on = card.dataset.type === type;
+    card.classList.toggle("selected", on);
+    card.setAttribute("aria-checked", on ? "true" : "false");
+  });
+  syncClaimButton();
+}
+
 export function checkUsernameAvailability() {
   clearTimeout(handleCheck);
   const input = document.getElementById("newUsername");
   if (input) input.value = normalizeUsername(input.value);
-  const btn = document.getElementById("claimBtn");
-  if (btn) btn.disabled = true;
+  handleIsFree = false;
+  syncClaimButton();
   handleCheck = setTimeout(runHandleCheck, 350);
 }
 
@@ -325,7 +360,8 @@ async function runHandleCheck() {
   const say = (text, tone) => {
     status.innerText = text;
     status.className = "handle-status " + (tone || "");
-    btn.disabled = true;
+    handleIsFree = false;
+    syncClaimButton();
   };
 
   if (val.length === 0) return say("");
@@ -341,7 +377,11 @@ async function runHandleCheck() {
     if (doc.exists) return say("@" + val + " is taken", "taken");
 
     say("@" + val + " is yours", "free");
-    btn.disabled = false;
+    handleIsFree = true;
+    syncClaimButton();
+    if (!chosenType) {
+      status.innerText = "@" + val + " is yours \u2014 now pick who can follow you";
+    }
   } catch (e) {
     say("Couldn't check just now", "waiting");
   }
@@ -354,6 +394,11 @@ export async function claimUsername() {
 
   if (handle.length < 3) return;
   if (!auth.currentUser) return;
+  if (!chosenType) {
+    // setLoading(true) was already called by the click handler.
+    setLoading(false);
+    return;
+  }
 
   if (btn) {
     btn.disabled = true;
@@ -381,7 +426,7 @@ export async function claimUsername() {
     // usernames/{handle} and refuse this write unless it points at us,
     // so nobody can display a handle they never reserved.
     await db.collection("users").doc(uid).set(
-      { username: handle, updatedAt: Date.now() },
+      { username: handle, private: chosenType === "private", updatedAt: Date.now() },
       { merge: true }
     );
 
@@ -401,8 +446,10 @@ export async function claimUsername() {
     }
 
     if (btn) {
-      btn.disabled = false;
       btn.innerHTML = "Join Campus";
+      handleIsFree = false;
+      syncClaimButton();
+      checkUsernameAvailability();
     }
   }
 }

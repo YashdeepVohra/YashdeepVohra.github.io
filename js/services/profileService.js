@@ -21,7 +21,7 @@ import {
 } from './orbitService.js';
 import {
   isFollowing, followerCount, followingCount,
-  isPrivateAccount, hasAskedToFollow, myFollowRequests, syncPrivacyUI
+  isPrivateAccount, hasAskedToFollow, myFollowRequests, syncPrivacyUI, severFollow
 } from './followService.js';
 import { isBlocked, withoutBlocked, blockUser, unblockUser, submitReport, myBlockList } from './blockService.js';
 
@@ -272,7 +272,7 @@ function paintProfileEvents() {
   if (kind === "joined" && profileEvents.joinedLocked) {
     list.innerHTML = `
       <div class="pe-empty">
-        <span class="pe-empty-icon"><i class='bx bx-lock-alt'></i></span>
+        <span class="pe-empty-icon"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2.5" stroke="currentColor" stroke-width="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span>
         <b>This account is private</b>
         <span>Follow them to see what they've been going to.</span>
       </div>`;
@@ -568,6 +568,16 @@ export function refreshProfileSocial(targetUid) {
   if (vouches) vouches.innerText = vouchCount(targetUid);
 
   renderOrbitActions(targetUid, targetUid === state.uid);
+
+  const badge = document.getElementById("profilePrivate");
+  if (badge) badge.classList.toggle("hidden", !isPrivateAccount(targetUid));
+
+  // Following somebody private (or being let in) opens their Joined
+  // tab; unfollowing closes it again. Only refetch when that changed.
+  const locked = targetUid !== state.uid && isPrivateAccount(targetUid) && !isFollowing(targetUid);
+  if (profileEvents.uid === targetUid && profileEvents.loaded && profileEvents.joinedLocked !== locked) {
+    loadUserEvents(targetUid);
+  }
 }
 
 /**
@@ -655,7 +665,10 @@ export function renderOrbitActions(targetUid, isSelf) {
   if (status === "linked") {
     action = `<button class="orbit-btn linked" onclick="window.confirmLeaveOrbit('${id}')"><i class='bx bx-check-circle'></i> In your orbit</button>`;
   } else if (status === "outgoing") {
-    action = `<button class="orbit-btn pending" onclick="window.declineOrbit('${id}')"><i class='bx bx-time-five'></i> Requested</button>`;
+    // Not "Requested": that is the follow button's word, and the two sat
+    // side by side looking identical, so withdrawing one read as the
+    // other disappearing.
+    action = `<button class="orbit-btn pending" onclick="window.declineOrbit('${id}')"><i class='bx bx-time-five'></i> Orbit asked</button>`;
   } else if (status === "incoming") {
     action = `
       <button class="orbit-btn primary" onclick="window.acceptOrbit('${id}')"><i class='bx bx-user-check'></i> Accept</button>
@@ -715,6 +728,8 @@ export async function confirmBlock(targetUid) {
   });
   if (!yes) return;
 
+  // Undo the follow graph first, while the rules still see no block.
+  await severFollow(targetUid);
   blockUser(targetUid).then((ok) => {
     if (!ok) return toast("Couldn't block right now. Check your connection.");
     // The blocks listener re-renders everything; just leave the profile.

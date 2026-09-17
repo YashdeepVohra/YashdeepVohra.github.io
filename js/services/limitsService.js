@@ -53,8 +53,22 @@ export function stampEvent(batch, current) {
       }, { merge: true });
 }
 
+/**
+ * The gap the rules insist on between two asks (follow requests and
+ * orbit requests share it). Kept a little above the rule's 3 seconds so
+ * the client never loses a race with the server's clock.
+ */
+export const ASK_GAP_MS = 3500;
+let lastAskLocal = 0;
+
+/** How long until another ask would be accepted. 0 means now. */
+export function msUntilAskAllowed() {
+  return Math.max(0, lastAskLocal + ASK_GAP_MS - Date.now());
+}
+
 /** Add the stamp for asking to follow, or asking into an orbit. */
 export function stampAsk(batch) {
+  lastAskLocal = Date.now();
   batch.set(limitsRef(), { askAt: FieldValue.serverTimestamp() }, { merge: true });
 }
 

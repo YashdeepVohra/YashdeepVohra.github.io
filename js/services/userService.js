@@ -91,7 +91,17 @@ export function rememberUser(uid, data) {
       // are kept here — nothing on screen needs the list itself, since
       // whether YOU follow someone is answered by your own list.
       followerCount: Array.isArray(data.followers) ? data.followers.length : 0,
-      followingCount: Array.isArray(data.following) ? data.following.length : 0
+      followingCount: Array.isArray(data.following) ? data.following.length : 0,
+      // THESE TWO WERE MISSING, and it was the root of most follow bugs.
+      // A profile painted from this cache had no `private` flag and no
+      // request queue, so after a reload every private account looked
+      // open — the button said Follow, not Ask — and every request you
+      // had sent looked as if it had been cancelled. Only whether YOU
+      // are in the queue is kept, not the queue itself.
+      private: data.private === true,
+      followRequests: Array.isArray(data.followRequests) && state.uid && data.followRequests.includes(state.uid)
+        ? [state.uid]
+        : []
     }
   };
   writeStore(store);
@@ -126,14 +136,37 @@ export function normalizeUsername(raw) {
   return String(raw || "").toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 20);
 }
 
+// Anything that wants to see every fresh profile as it arrives — the
+// follow graph uses this to notice an approved request. Registered by
+// the listener rather than imported, so this file stays a leaf.
+const fetchedListeners = [];
+export function onUserFetched(fn) {
+  if (typeof fn === "function") fetchedListeners.push(fn);
+}
+
 /** The one place that actually spends a read. */
 async function readFromServer(uid) {
   const doc = await db.collection("users").doc(uid).get();
   const data = doc.exists ? { uid, ...doc.data() } : { uid, ...PLACEHOLDER };
   state.userCache[uid] = data;
   freshness[uid] = Date.now();
-  if (doc.exists) rememberUser(uid, data);
+  if (doc.exists) {
+    rememberUser(uid, data);
+    // Only a real server answer is worth acting on. With offline
+    // persistence a get() can quietly return an old cached copy.
+    const fromCache = !!(doc.metadata && doc.metadata.fromCache);
+    fetchedListeners.forEach((fn) => { try { fn(uid, data, { fromCache }); } catch (e) {} });
+  }
   return data;
+}
+
+/**
+ * Always the server, and it throws if the server can't be reached —
+ * for callers that must not act on a stale copy (following someone).
+ */
+export async function refreshUser(uid) {
+  if (!safeId(uid)) throw new Error("bad uid");
+  return readFromServer(uid);
 }
 
 /** Fetch and cache one user profile by uid. */
