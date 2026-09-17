@@ -86,7 +86,8 @@ import {
   pickReason,
   sendReport,
   messageFromProfile,
-  jumpToEvent
+  jumpToEvent,
+  setProfileEventsTab
 } from './services/profileService.js';
 
 import {
@@ -275,7 +276,8 @@ Object.assign(window, {
   pickReason,
   sendReport,
   messageFromProfile,
-  jumpToEvent
+  jumpToEvent,
+  setProfileEventsTab
 });
 
 // ==========================================

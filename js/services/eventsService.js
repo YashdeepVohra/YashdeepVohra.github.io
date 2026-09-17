@@ -22,6 +22,7 @@ import { isBlocked, withoutBlocked } from './blockService.js';
 import { stampEvent, readLimits, limitMessage } from './limitsService.js';
 import { askConfirm } from '../utils/confirm.js';
 import { inOrbit, vouchersYouKnow } from './orbitService.js';
+import { RECAP_MAX_MS, inRecap, recapUntil, wasCalledOff } from './recapRules.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -370,7 +371,7 @@ const VIBE = {
   "📚 Study":  "var(--vibe-study)",
   "🏀 Sports": "var(--vibe-sports)"
 };
-const vibeColor = (tag) => VIBE[tag] || "var(--periwinkle)";
+export const vibeColor = (tag) => VIBE[tag] || "var(--periwinkle)";
 
 // Drawn rather than an icon font: it carries the palette and can move.
 const EMPTY_ART = `
@@ -648,7 +649,6 @@ export function renderEvents() {
 
   const order = state.eventOrder || [];
   const now = Date.now();
-  const oneDayAgo = now - DAY_MS;
 
   renderLiveRail(order, now);
 
@@ -675,7 +675,10 @@ export function renderEvents() {
 
     const participants = e.participantUids || [];
     const attendees = participants.length || 1;
-    const isLive = now >= e.startTime;
+    // An ended event had started too, so `now >= startTime` alone put a
+    // green Live chip and a live ring on every card in Recap.
+    const ended = e.expiresAt <= now;
+    const isLive = !ended && now >= e.startTime;
     const hasHyped = (e.hypedUids || []).includes(state.uid);
     const hypeCount = (e.hypedUids || []).length;
     const hasJoined = participants.includes(state.uid);
@@ -718,9 +721,11 @@ export function renderEvents() {
           <div class="who-place"><i class='bx bx-map-pin'></i> ${escapeHtml(e.place)}</div>
           ${trust}
         </div>
-        ${isLive
-          ? `<span class="status-chip live"><span class="live-dot"></span> Live</span>`
-          : `<span class="status-chip soon">Soon</span>`}
+        ${ended
+          ? `<span class="status-chip ended">${wasCalledOff(e) ? "Called off" : `Ended ${escapeHtml(relTime(e.expiresAt, now))}`}</span>`
+          : isLive
+            ? `<span class="status-chip live"><span class="live-dot"></span> Live</span>`
+            : `<span class="status-chip soon">Soon</span>`}
       </div>`;
 
     const desc = e.description
@@ -819,17 +824,33 @@ export function renderEvents() {
           <span class="vibe-watermark">${escapeHtml(glyph)}</span>
           ${header}${body}${actions}
         </article>` });
-    } else if (e.expiresAt > oneDayAgo) {
+    } else if (inRecap(e, now, state.uid)) {
+      // What it earned, said plainly — see recapRules.js for the sums.
+      const guests = participants.filter((u) => u !== e.hostUid);
+      const shownGuests = withoutBlocked(guests);
+      let wentText;
+      if (wasCalledOff(e)) wentText = "Called off before it started";
+      else if (!shownGuests.length) wentText = "Nobody else made it";
+      else wentText = `${shownGuests.length} ${shownGuests.length === 1 ? "person" : "people"} went`;
+
+      // Only warn once it is close; a countdown on every card is noise.
+      const left = recapUntil(e, state.uid) - now;
+      const fading = left < 2 * 60 * 60 * 1000;
+      const leaves = fading
+        ? `<div class="recap-leaves"><i class='bx bx-time-five'></i> Leaves recap ${escapeHtml(relTime(now + left, now))}</div>`
+        : "";
+
       recapCards.push({ id, html: `
-        <article class="event card recap" id="event-${id}"${tagAttr} style="--vibe:${vibe}">
+        <article class="event card recap${fading ? " fading" : ""}" id="event-${id}"${tagAttr} style="--vibe:${vibe}">
           <span class="vibe-watermark">${escapeHtml((e.tag || "").trim().split(" ")[0])}</span>
           ${header}
           <div class="event-title">${escapeHtml(e.title)}</div>
           ${e.tag ? `<div class="vibe-chip">${escapeHtml(e.tag)}</div>` : ""}
           <div class="going-row">
-            ${avatarStack(participants)}
-            <span class="going-text">${attendees} ${attendees === 1 ? "person" : "people"} went</span>
+            ${shownGuests.length ? avatarStack(shownGuests) : ""}
+            <span class="going-text">${wentText}${hypeCount ? ` · ${hypeCount} hyped` : ""}</span>
           </div>
+          ${leaves}
         </article>` });
     }
   });
@@ -888,7 +909,7 @@ export function renderEvents() {
     state.recapDone ? "" : `<button class="btn-ghost" style="margin-top:8px;" onclick="window.loadRecap()">Load more</button>`,
     state.recapLoading
       ? skeletonFeed(2)
-      : `<div class="empty-state">${EMPTY_ART}<h4>Nothing here yet</h4><p>Nothing has wrapped up in the last day.</p></div>`
+      : `<div class="empty-state">${EMPTY_ART}<h4>Nothing here yet</h4><p>Nothing has wrapped up recently. Busy events stay here for up to two days, quiet ones for a few hours.</p></div>`
   );
 
   applyFilter(liveList, state.currentLiveFilter);
@@ -1401,10 +1422,23 @@ export async function removeAttendee(uid) {
    ------------------------------------------------------------------- */
 
 /**
- * One page of finished events. A plain get(), not a listener: these
- * have already happened and will not change, so watching them would
- * bill reads for nothing.
+ * Finished events, a page at a time. A plain get(), not a listener:
+ * these have already happened, so watching them would bill reads for
+ * nothing.
+ *
+ * The query asks for everything that ended inside the LONGEST window
+ * anything can earn (48h), newest ending first, and recapRules decides
+ * per event whether it is still in. Firestore can't filter on a value
+ * worked out from three fields, and storing one would need somebody to
+ * write it when the event ends — there is no server to do that.
+ *
+ * So a page can come back with nothing left in it: a run of quiet
+ * events from yesterday. Rather than show an empty page and a Load
+ * more button, it keeps going — but at most three pages per call, so a
+ * dead stretch costs 36 reads, not the whole two days.
  */
+const RECAP_PAGES_PER_CALL = 3;
+
 export async function loadRecap({ reset = false } = {}) {
   if (state.recapLoading) return;
   if (reset) {
@@ -1419,35 +1453,44 @@ export async function loadRecap({ reset = false } = {}) {
   if (list && !state.recapOrder.length) list.innerHTML = skeletonFeed(2);
 
   try {
-    const now = Date.now();
-    let q = db.collection("events")
-      .where("expiresAt", "<=", now)
-      .where("expiresAt", ">", now - DAY_MS)
-      .orderBy("expiresAt", "desc")
-      .limit(RECAP_PAGE);
-
-    if (state.recapCursor) q = q.startAfter(state.recapCursor);
-
-    const snap = await q.get();
-
-    if (snap.size < RECAP_PAGE) state.recapDone = true;
-    if (snap.size) state.recapCursor = snap.docs[snap.docs.length - 1];
-
     const uids = new Set();
-    snap.forEach((doc) => {
-      const data = { id: doc.id, ...doc.data() };
-      state.eventCache[doc.id] = data;
-      if (!state.recapOrder.includes(doc.id)) state.recapOrder.push(doc.id);
-      if (data.hostUid) uids.add(data.hostUid);
-      (data.participantUids || []).forEach((u) => uids.add(u));
-    });
+    let added = 0;
+
+    for (let pages = 0; pages < RECAP_PAGES_PER_CALL && !added && !state.recapDone; pages++) {
+      const now = Date.now();
+      let q = db.collection("events")
+        .where("expiresAt", "<=", now)
+        .where("expiresAt", ">", now - RECAP_MAX_MS)
+        .orderBy("expiresAt", "desc")
+        .limit(RECAP_PAGE);
+
+      if (state.recapCursor) q = q.startAfter(state.recapCursor);
+
+      const snap = await q.get();
+
+      if (snap.size < RECAP_PAGE) state.recapDone = true;
+      if (snap.size) state.recapCursor = snap.docs[snap.docs.length - 1];
+
+      snap.forEach((doc) => {
+        const data = { id: doc.id, ...doc.data() };
+        state.eventCache[doc.id] = data;
+        if (!inRecap(data, now, state.uid) || isBlocked(data.hostUid)) return;
+        if (state.recapOrder.includes(doc.id)) return;
+        state.recapOrder.push(doc.id);
+        added++;
+        if (data.hostUid) uids.add(data.hostUid);
+        (data.participantUids || []).forEach((u) => uids.add(u));
+      });
+    }
 
     await primeUsers([...uids]);
-    renderEvents();
   } catch (e) {
     console.error("Recap load failed:", e.code || e.message);
   } finally {
     state.recapLoading = false;
+    // After the flag drops, so the empty state is the real one and not
+    // a skeleton left behind.
+    renderEvents();
   }
 }
 

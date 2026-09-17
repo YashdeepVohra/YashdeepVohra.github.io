@@ -55,6 +55,10 @@ test/               stub.js + smoke.mjs
 - **`allow get` and `allow list` are different.** A list rule is checked
   against the *query*, before documents are read, so it must mirror the
   query's own constraint. Splitting these is what fixed chats not appearing.
+- **How long Recap keeps an event is `js/services/recapRules.js`.** Pure
+  functions, no imports: 6h + 8h x log2(1 + guests + hype/2), capped at
+  48h; your own events stay 24h for you. Change the numbers there and in
+  the smoke cases, nowhere else.
 - **Blocking is total.** Filter `isBlocked` everywhere — lists, counts,
   the feed, vouches. A count that disagrees with the list under it is a bug.
 
@@ -76,6 +80,8 @@ Decisions already made, with the reason, so they don't get undone:
 | Firestore offline persistence on | resume tokens: only changed docs bill |
 | Hype writes debounced 900ms | a misclick costs nothing; a burst is one write |
 | Counts live as arrays on the profile | `followers.length` is free; a subcollection is a read per follower |
+| Recap query spans 48h, filtered client-side, max 3 pages per load | retention is computed from three fields; no server to store it |
+| Profile Hosted/Joined: two `get()`s, counts from the same docs | was a listener + two duplicate count queries |
 
 The remaining lever, if reads ever bite: drop `LIVE_LIMIT` to ~30. It cuts
 fan-out on everything at once.
@@ -99,7 +105,8 @@ true, and it can never go back.
 
 No emulator, no network, no credentials. `test/stub.js` is a hand-written
 stand-in for the Firebase compat SDK with working `orbit` and `events`
-collections, batches that really apply, and counters on `window.__reads` /
+collections (events `get()` really applies where / orderBy / limit /
+startAfter), batches that really apply, and counters on `window.__reads` /
 `window.__writes`.
 
 ```
@@ -146,6 +153,8 @@ something breaks.
   round trip reads as broken.
 - **No `window.confirm` or `alert` anywhere.** Use `askConfirm()` from
   `js/utils/confirm.js` and `toast()` from `js/utils/ui.js`.
+- **An ended event is not live.** `now >= startTime` is also true after
+  it ends; that put a Live chip on every Recap card. Check `expiresAt`.
 - **Overlays go through `js/utils/overlays.js`**, which backs them with
   history so Android back works. Closing is async — `pendingPops` exists
   because close-then-open in one tick used to tear down the new layer.
@@ -158,5 +167,4 @@ connections + vouches), follow/followers with private accounts and
 approval, rate limits, the icebreaker, the day-one empty state.
 
 Not built, roughly in the order I'd do them: push notifications (needs
-Blaze), share links for an event, report triage for the admin, a periodic
-re-render so an event that ends while you watch slides to Recap on its own.
+Blaze), share links for an event, report triage for the admin.

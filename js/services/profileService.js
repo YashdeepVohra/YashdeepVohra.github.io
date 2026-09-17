@@ -11,7 +11,8 @@ import { state } from '../state/store.js';
 import { renderAvatar, escapeHtml, safeId } from '../utils/formatters.js';
 import { switchScreen, showTab, toast } from '../utils/ui.js';
 import { askConfirm } from '../utils/confirm.js';
-import { focusEvent } from './eventsService.js';
+import { focusEvent, loadRecap, renderEvents, vibeColor } from './eventsService.js';
+import { inRecap, wasCalledOff } from './recapRules.js';
 import { openOverlay, closeOverlay } from '../utils/overlays.js';
 import { closeChat, startChatWithUid } from './chatService.js';
 import { fetchUser, displayNameFor, usernameFor, avatarFor, rememberUser } from './userService.js';
@@ -22,7 +23,7 @@ import {
   isFollowing, followerCount, followingCount,
   isPrivateAccount, hasAskedToFollow, myFollowRequests, syncPrivacyUI
 } from './followService.js';
-import { isBlocked, blockUser, unblockUser, submitReport, myBlockList } from './blockService.js';
+import { isBlocked, withoutBlocked, blockUser, unblockUser, submitReport, myBlockList } from './blockService.js';
 
 // The avatar picker only ever writes one of these, or the Google photo.
 const ALLOWED_AVATARS = ["\u{1F98A}", "\u{1F43C}", "\u{1F42F}", "\u{1F438}", "\u{1F436}", "\u{1F431}", "\u{1F984}", "\u{1F47D}", "\u{1F47B}"];
@@ -109,45 +110,282 @@ export function closeProfileScreen({ all = false } = {}) {
   switchScreen("home");
 }
 
-export function loadUserEvents(targetUid) {
+/* ---------------------------------------------------------------------
+   HOSTED / JOINED
+   ---------------------------------------------------------------------
+   This used to be a flat list of titles under "Hosted Events", and it
+   cost more than it showed: a live listener over every event the person
+   ever hosted, PLUS a second get() of the same documents just to count
+   them, PLUS a get() of everything they joined — whose number also
+   counted the events they hosted, because a host is in their own
+   participant list.
+
+   Now it is two plain get()s, once per profile open. The lists and the
+   numbers above them come from the same documents, so they can't
+   disagree. Nothing here needs to be realtime; you are looking at a
+   history.
+   ------------------------------------------------------------------- */
+
+const profileEvents = { uid: "", tab: "hosted", hosted: [], joined: [], joinedLocked: false, loaded: false };
+
+const DAY = 24 * 60 * 60 * 1000;
+
+function startOfDay(ms) {
+  const d = new Date(ms);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+function clock(ms) {
+  return new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+}
+
+/** "Today", "Tomorrow", "Yesterday", "Sat", "12 Sep", "12 Sep 2025". */
+function dayLabel(ms, now) {
+  const days = Math.round((startOfDay(ms) - startOfDay(now)) / DAY);
+  if (days === 0) return "Today";
+  if (days === 1) return "Tomorrow";
+  if (days === -1) return "Yesterday";
+  const d = new Date(ms);
+  if (days > 1 && days < 7) return d.toLocaleDateString([], { weekday: "short" });
+  const sameYear = d.getFullYear() === new Date(now).getFullYear();
+  return d.toLocaleDateString([], sameYear
+    ? { day: "numeric", month: "short" }
+    : { day: "numeric", month: "short", year: "numeric" });
+}
+
+function sinceLabel(ms, now) {
+  const mins = Math.max(1, Math.round((now - ms) / 60000));
+  if (mins < 60) return `Started ${mins}m ago`;
+  return `Started ${Math.round(mins / 60)}h ago`;
+}
+
+function phaseOf(e, now) {
+  if (e.expiresAt <= now) return "past";
+  return now >= e.startTime ? "live" : "soon";
+}
+
+/** Live first, then soonest upcoming, then most recently ended. */
+function sortForProfile(events, now) {
+  const rank = { live: 0, soon: 1, past: 2 };
+  return events.slice().sort((a, b) => {
+    const pa = phaseOf(a, now), pb = phaseOf(b, now);
+    if (pa !== pb) return rank[pa] - rank[pb];
+    if (pa === "soon") return a.startTime - b.startTime;
+    if (pa === "live") return b.startTime - a.startTime;
+    return b.expiresAt - a.expiresAt;
+  });
+}
+
+function profileEventRow(e, now, kind) {
+  const id = safeId(e.id);
+  const phase = phaseOf(e, now);
+  const vibe = vibeColor(e.tag);
+  const glyph = escapeHtml((e.tag || "").trim().split(" ")[0] || "✨");
+  const guests = withoutBlocked((e.participantUids || []).filter((u) => u !== e.hostUid)).length;
+
+  let when;
+  let chip;
+  if (phase === "live") {
+    when = sinceLabel(e.startTime, now);
+    chip = `<span class="status-chip live"><span class="live-dot"></span> Live</span>`;
+  } else if (phase === "soon") {
+    when = `${dayLabel(e.startTime, now)}, ${clock(e.startTime)}`;
+    chip = `<span class="status-chip soon">Soon</span>`;
+  } else {
+    const hoursAgo = Math.round((now - e.expiresAt) / 3600e3);
+    const ago = hoursAgo < 1 ? "Just ended"
+      : hoursAgo < 12 ? `Ended ${hoursAgo}h ago`
+      : dayLabel(e.startTime, now);
+    when = wasCalledOff(e) ? `Called off · ${dayLabel(e.expiresAt, now)}` : ago;
+    chip = "";
+  }
+
+  // Who it involved, in the words that fit the tab.
+  let people;
+  if (kind === "joined") {
+    people = `<i class='bx bx-user'></i> ${escapeHtml(displayNameFor(e.hostUid))}`;
+  } else if (phase === "past") {
+    people = guests ? `<i class='bx bx-group'></i> ${guests} went` : `<i class='bx bx-group'></i> Nobody else`;
+  } else {
+    people = `<i class='bx bx-group'></i> ${guests} going`;
+  }
+
+  // Live and upcoming open in the feed; a finished one opens in Recap
+  // while it is still there. After that there is nowhere to take you,
+  // so it isn't a button pretending to be one.
+  const reachable = id && (phase !== "past" || inRecap(e, now, state.uid));
+  const tag = reachable ? "button" : "div";
+  const tap = reachable ? ` onclick="window.jumpToEvent('${id}')"` : "";
+
+  return `
+    <${tag} class="pe-row ${phase}${reachable ? " tappable" : ""}" style="--vibe:${vibe}"${tap}>
+      <span class="pe-glyph">${glyph}</span>
+      <span class="pe-body">
+        <span class="pe-title">${escapeHtml(e.title)}</span>
+        <span class="pe-sub">
+          <span class="pe-when">${escapeHtml(when)}</span>
+          <span class="pe-dot">·</span>
+          <span class="pe-place"><i class='bx bx-map-pin'></i> ${escapeHtml(e.place)}</span>
+        </span>
+        <span class="pe-people">${people}</span>
+      </span>
+      <span class="pe-side">
+        ${chip}
+        ${reachable ? `<i class='bx bx-chevron-right pe-go'></i>` : ""}
+      </span>
+    </${tag}>`;
+}
+
+function paintProfileTabs() {
+  const hostedCount = profileEvents.hosted.length;
+  const joinedCount = profileEvents.joined.length;
+  const loaded = profileEvents.loaded;
+
+  document.querySelectorAll("#profileEventTabs .pe-tab").forEach((t) => {
+    const on = t.dataset.pe === profileEvents.tab;
+    t.classList.toggle("active", on);
+    t.setAttribute("aria-selected", on ? "true" : "false");
+  });
+
+  const hc = document.getElementById("peHostedCount");
+  const jc = document.getElementById("peJoinedCount");
+  if (hc) hc.innerText = loaded ? hostedCount : "";
+  if (jc) jc.innerText = loaded && !profileEvents.joinedLocked ? joinedCount : "";
+
+  const statHosted = document.getElementById("statEventsHosted");
+  const statJoined = document.getElementById("statEventsJoined");
+  if (statHosted) statHosted.innerText = loaded ? hostedCount : "-";
+  if (statJoined) statJoined.innerText = !loaded ? "-" : profileEvents.joinedLocked ? "–" : joinedCount;
+}
+
+function paintProfileEvents() {
+  const list = document.getElementById("myProfileEvents");
+  if (!list) return;
+  paintProfileTabs();
+  if (!profileEvents.loaded) return;
+
+  const now = Date.now();
+  const isSelf = profileEvents.uid === state.uid;
+  const kind = profileEvents.tab;
+
+  if (kind === "joined" && profileEvents.joinedLocked) {
+    list.innerHTML = `
+      <div class="pe-empty">
+        <span class="pe-empty-icon"><i class='bx bx-lock-alt'></i></span>
+        <b>This account is private</b>
+        <span>Follow them to see what they've been going to.</span>
+      </div>`;
+    return;
+  }
+
+  const events = sortForProfile(profileEvents[kind], now);
+
+  if (!events.length) {
+    const copy = kind === "hosted"
+      ? (isSelf
+          ? { title: "You haven't hosted anything yet", sub: "Start something and it'll live here after it ends.", cta: true }
+          : { title: "Nothing hosted yet", sub: "When they start something, it shows up here." })
+      : (isSelf
+          ? { title: "You haven't joined anything yet", sub: "Events you join from the feed collect here." }
+          : { title: "Hasn't joined anything yet", sub: "Events they go to will show up here." });
+    list.innerHTML = `
+      <div class="pe-empty">
+        <span class="pe-empty-icon"><i class='bx ${kind === "hosted" ? "bx-calendar-star" : "bx-calendar-check"}'></i></span>
+        <b>${copy.title}</b>
+        <span>${copy.sub}</span>
+        ${copy.cta ? `<button class="pe-empty-cta" onclick="window.closeProfileScreen({ all: true }); window.openCreateScreen()"><i class='bx bx-plus'></i> Start an event</button>` : ""}
+      </div>`;
+    return;
+  }
+
+  let lastGroup = "";
+  const labels = { live: "Happening now", soon: "Coming up", past: "Earlier" };
+  list.innerHTML = events.map((e) => {
+    const g = phaseOf(e, now);
+    const head = g !== lastGroup ? `<div class="pe-group">${labels[g]}</div>` : "";
+    lastGroup = g;
+    return head + profileEventRow(e, now, kind);
+  }).join("");
+}
+
+export function setProfileEventsTab(tab) {
+  if (tab !== "hosted" && tab !== "joined") return;
+  profileEvents.tab = tab;
+  paintProfileEvents();
+}
+
+export async function loadUserEvents(targetUid) {
   const list = document.getElementById("myProfileEvents");
   if (!list) return;
 
-  if (state.profileEventsUnsubscribe) state.profileEventsUnsubscribe();
+  if (state.profileEventsUnsubscribe) {
+    state.profileEventsUnsubscribe();
+    state.profileEventsUnsubscribe = null;
+  }
 
-  state.profileEventsUnsubscribe = db
-    .collection("events")
-    .where("hostUid", "==", targetUid)
-    .onSnapshot(
-      (snapshot) => {
-        if (state.currentProfileUid !== targetUid) return;
+  const isSelf = targetUid === state.uid;
+  // Where someone has been is more personal than what they host. On a
+  // private account it is for followers — and not even fetched for
+  // anyone else, so it costs nothing either.
+  const joinedLocked = !isSelf && isPrivateAccount(targetUid) && !isFollowing(targetUid);
 
-        const events = [];
-        snapshot.forEach((doc) => events.push({ id: doc.id, ...doc.data() }));
-        events.sort((a, b) => (b.startTime || 0) - (a.startTime || 0));
+  const fresh = profileEvents.uid !== targetUid;
+  Object.assign(profileEvents, {
+    uid: targetUid,
+    tab: fresh ? "hosted" : profileEvents.tab,
+    hosted: [], joined: [], joinedLocked, loaded: false,
+  });
+  paintProfileTabs();
+  list.innerHTML = `<div class="pe-skeleton"></div><div class="pe-skeleton"></div>`;
 
-        if (!events.length) {
-          list.innerHTML = `<div class="empty-state" style="padding: 20px;"><i class='bx bx-ghost'></i><p>No hosted events yet.</p></div>`;
-          return;
-        }
+  const toEvents = (snap) => {
+    const out = [];
+    snap.forEach((doc) => out.push({ id: doc.id, ...doc.data() }));
+    return out;
+  };
 
-        // Tapping one takes you to it in the feed — these used to be
-        // inert, which made the profile a dead end.
-        list.innerHTML = events.map((e) => {
-          const id = safeId(e.id);
-          const live = e.expiresAt > Date.now();
-          return `
-          <button class="card profile-event-row${id ? " tappable" : ""}" ${id ? `onclick="window.jumpToEvent('${id}')"` : ""}>
-            <div class="result-text">
-              <div class="result-title">${escapeHtml(e.title)}</div>
-              <div class="result-sub"><i class='bx bx-map-pin'></i> ${escapeHtml(e.place)}</div>
-            </div>
-            ${live ? `<span class="status-chip live"><span class="live-dot"></span> Live</span>` : `<span class="status-chip soon">Ended</span>`}
-          </button>`;
-        }).join("");
-      },
-      (error) => console.error("Profile events error:", error.code || error.message)
-    );
+  try {
+    const [hostedSnap, joinedSnap] = await Promise.all([
+      db.collection("events").where("hostUid", "==", targetUid).get(),
+      joinedLocked
+        ? Promise.resolve(null)
+        : db.collection("events").where("participantUids", "array-contains", targetUid).get(),
+    ]);
+    if (state.currentProfileUid !== targetUid) return;
+
+    const hosted = toEvents(hostedSnap).filter((e) => e.hostUid === targetUid);
+    const joined = joinedSnap
+      ? toEvents(joinedSnap).filter((e) =>
+          e.hostUid !== targetUid                              // hosting isn't going
+          && (e.participantUids || []).includes(targetUid)
+          && !isBlocked(e.hostUid))                          // blocking is total
+      : [];
+
+    // Anything you can reach from here should already be in the cache
+    // the feed and Recap draw from.
+    hosted.concat(joined).forEach((e) => {
+      if (!state.eventCache[e.id]) state.eventCache[e.id] = e;
+    });
+
+    Object.assign(profileEvents, { hosted, joined, loaded: true });
+    if (joined.length) primeHosts(joined);
+    paintProfileEvents();
+  } catch (error) {
+    console.error("Profile events error:", error.code || error.message);
+    if (state.currentProfileUid !== targetUid) return;
+    Object.assign(profileEvents, { loaded: true });
+    list.innerHTML = `<div class="pe-empty"><b>Couldn't load events</b><span>Check your connection and reopen the profile.</span></div>`;
+    paintProfileTabs();
+  }
+}
+
+/** Host names on the Joined tab come from the profile cache. */
+async function primeHosts(events) {
+  const missing = [...new Set(events.map((e) => e.hostUid))].filter((u) => u && !state.userCache[u]);
+  if (!missing.length) return;
+  await Promise.all(missing.map((u) => fetchUser(u).catch(() => null)));
+  if (state.currentProfileUid === profileEvents.uid) paintProfileEvents();
 }
 
 export async function loadProfileUI(targetUid) {
@@ -175,7 +413,7 @@ export async function loadProfileUI(targetUid) {
   if (statFollowers) statFollowers.innerText = "-";
   if (statFollowing) statFollowing.innerText = "-";
   if (eventsList) {
-    eventsList.innerHTML = `<div style="text-align:center; padding:20px; color:var(--text-muted); font-size: 13px;"><i class='bx bx-loader-alt bx-spin'></i> Loading...</div>`;
+    eventsList.innerHTML = `<div class="pe-skeleton"></div><div class="pe-skeleton"></div>`;
   }
 
   const isSelf = targetUid === state.uid;
@@ -200,14 +438,7 @@ export async function loadProfileUI(targetUid) {
       if (editInput) editInput.value = state.userDisplayName;
     }
 
-    db.collection("events").where("hostUid", "==", targetUid).get()
-      .then((snap) => { if (statHosted) statHosted.innerText = snap.size || 0; })
-      .catch(() => { if (statHosted) statHosted.innerText = "0"; });
-
-    db.collection("events").where("participantUids", "array-contains", targetUid).get()
-      .then((snap) => { if (statJoined) statJoined.innerText = snap.size || 0; })
-      .catch(() => { if (statJoined) statJoined.innerText = "0"; });
-
+    // Counts come from the same two queries as the lists below them.
     loadUserEvents(targetUid);
   } catch (e) {
     console.error("Profile load error:", e.code || e.message);
@@ -617,11 +848,38 @@ export function messageFromProfile(targetUid) {
 }
 
 
-/** From a profile, jump to one of their events in the feed. */
+/**
+ * From a profile, jump to one of their events: the feed if it's on or
+ * coming up, Recap if it has finished and is still there.
+ */
 export function jumpToEvent(eventId) {
-  closeProfileScreen();
-  setTimeout(() => {
-    showTab("events");
-    focusEvent(eventId);
+  const e = state.eventCache[eventId];
+  const now = Date.now();
+  const toRecap = !!e && e.expiresAt <= now;
+
+  // `all`: from three profiles deep, this used to step back one profile
+  // and never reach the feed at all.
+  closeProfileScreen({ all: true });
+
+  setTimeout(async () => {
+    if (!toRecap) {
+      showTab("events");
+      focusEvent(eventId);
+      return;
+    }
+    if (!inRecap(e, now, state.uid)) return;
+
+    showTab("recap");
+    if (!state.recapOrder.length && !state.recapDone) await loadRecap({ reset: true });
+
+    // Not paged in yet: slot it in where it belongs by end time. The
+    // pager skips ids it already has, so it won't turn up twice.
+    if (!state.recapOrder.includes(eventId)) {
+      const at = state.recapOrder.findIndex((id) => (state.eventCache[id]?.expiresAt || 0) < e.expiresAt);
+      if (at === -1) state.recapOrder.push(eventId);
+      else state.recapOrder.splice(at, 0, eventId);
+      renderEvents();
+    }
+    setTimeout(() => focusEvent(eventId), 60);
   }, 80);
 }

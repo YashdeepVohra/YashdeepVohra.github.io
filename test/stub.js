@@ -89,11 +89,41 @@ window.__eventCbs = [];
 const eventDocs = () => window.__events.map((d) => ({ id: d.id, data: () => d }));
 window.__fireEvents = () => { window.__eventCbs.forEach((cb) => cb(snap(eventDocs()))); };
 
+// Events queries really filter, order, page and limit — the recap and
+// the profile both depend on the query shape, and a stub that returned
+// every event for every query hid exactly those bugs.
 const eventsColl = () => {
+  const spec = { wheres: [], order: null, lim: 0, after: null };
+  const run = () => {
+    let rows = window.__events.slice().filter((d) => spec.wheres.every(([f, op, v]) => {
+      const x = d[f];
+      switch (op) {
+        case '==': return x === v;
+        case '<': return x < v;
+        case '<=': return x <= v;
+        case '>': return x > v;
+        case '>=': return x >= v;
+        case 'array-contains': return Array.isArray(x) && x.includes(v);
+        default: return true;
+      }
+    }));
+    if (spec.order) {
+      const [f, dir] = spec.order;
+      rows.sort((a, b) => (dir === 'desc' ? -1 : 1) * ((a[f] || 0) - (b[f] || 0)));
+    }
+    if (spec.after) {
+      const i = rows.findIndex((d) => d.id === spec.after.id);
+      if (i !== -1) rows = rows.slice(i + 1);
+    }
+    if (spec.lim) rows = rows.slice(0, spec.lim);
+    return rows.map((d) => ({ id: d.id, data: () => d }));
+  };
   const q = {
-    where: () => q, orderBy: () => q, limit: () => q, limitToLast: () => q,
-    startAt: () => q, endAt: () => q, startAfter: () => q, endBefore: () => q,
-    get: () => Promise.resolve(snap(eventDocs())),
+    where: (f, op, v) => { spec.wheres.push([f, op, v]); return q; },
+    orderBy: (f, dir = 'asc') => { spec.order = [f, dir]; return q; },
+    limit: (n) => { spec.lim = n; return q; }, limitToLast: () => q,
+    startAt: () => q, endAt: () => q, startAfter: (d) => { spec.after = d; return q; }, endBefore: () => q,
+    get: () => Promise.resolve(snap(run())),
     onSnapshot: (cb) => {
       window.__eventCbs.push(cb);
       setTimeout(() => cb(snap(eventDocs())), 0);

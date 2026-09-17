@@ -2148,3 +2148,207 @@ html:not(.kb-open) .chat-footer {
 .confirm-sheet p { font-size: 14px; line-height: 1.5; margin-bottom: var(--s-20); }
 .confirm-sheet button { font-size: 15px; }
 .confirm-sheet .danger-btn { background: var(--rose); }
+
+/* =====================================================================
+   RECAP CARDS
+   A live card has an edge all the way round; a recap card only had
+   the 3px leading hairline, so it read as a card with a stripe down
+   one side. It gets the whole outline now — quieter than the live
+   one, in the event's own colour, and it doesn't swell on hover
+   because there is nothing left to do with it.
+   ===================================================================== */
+
+.event.recap::before,
+.event.recap:hover::before {
+  inset: 0;
+  width: auto;
+  background: none;
+  border: 1.5px solid color-mix(in srgb, var(--vibe, var(--periwinkle)) 42%, var(--ash));
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.status-chip.ended { background: var(--bone); color: var(--fog); font-weight: 600; }
+
+/* The last two hours: the outline thins out and it says so. */
+.event.recap.fading { opacity: 0.74; }
+.event.recap.fading::before { border-style: dashed; }
+.recap-leaves {
+  display: flex; align-items: center; gap: 5px;
+  margin-top: var(--s-12);
+  font-size: 12px; font-weight: 500;
+  color: var(--fog);
+}
+.recap-leaves i { font-size: 14px; }
+
+/* =====================================================================
+   PROFILE — HOSTED / JOINED
+   A segmented switch over one list. Rows carry the event's own vibe,
+   so a profile reads like a history of the feed rather than a
+   spreadsheet of titles. Everything here is a button in the base
+   sheet's eyes, so width, padding and flex are reset on purpose.
+   ===================================================================== */
+
+.pe-section { margin-top: var(--s-24); }
+
+.pe-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: var(--s-16);
+  background: var(--bone);
+  border-radius: var(--r-pill);
+}
+.pe-tab {
+  width: auto;
+  padding: 9px 12px;
+  gap: 6px;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fog);
+  background: transparent;
+  box-shadow: none;
+  transition: background 0.18s var(--ease), color 0.18s var(--ease), box-shadow 0.18s var(--ease);
+}
+.pe-tab:hover:not(:disabled) { filter: none; transform: none; box-shadow: none; color: var(--aubergine); }
+.pe-tab.active {
+  background: var(--paper);
+  color: var(--aubergine);
+  box-shadow: var(--lift-2);
+}
+.pe-tab.active:hover:not(:disabled) { box-shadow: var(--lift-2); }
+.pe-count {
+  min-width: 20px;
+  padding: 1px 7px;
+  border-radius: var(--r-pill);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+  background: color-mix(in srgb, var(--periwinkle) 22%, transparent);
+  color: var(--violet);
+}
+.pe-count:empty { display: none; }
+.pe-tab:not(.active) .pe-count { background: var(--ash); color: var(--fog); }
+
+.pe-group {
+  margin: var(--s-16) 4px var(--s-8);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fog);
+}
+.pe-group:first-child { margin-top: 0; }
+
+.pe-row {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  width: 100%;
+  padding: 13px 14px;
+  margin-bottom: var(--s-8);
+  border-radius: 18px;
+  background: var(--paper);
+  border: 1px solid color-mix(in srgb, var(--vibe, var(--periwinkle)) 18%, var(--ash));
+  box-shadow: var(--lift-1);
+  color: var(--text);
+  text-align: left;
+  font-weight: 400;
+  letter-spacing: normal;
+  cursor: default;
+  animation: riseIn 0.32s var(--ease) both;
+}
+.pe-row::after {
+  /* The same wash an event card has, turned sideways for a row. */
+  content: "";
+  position: absolute; inset: 0 auto 0 0;
+  width: 120px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--vibe, var(--periwinkle)) 10%, transparent), transparent);
+  pointer-events: none;
+}
+.pe-row > * { position: relative; z-index: 1; }
+.pe-row.tappable { cursor: pointer; }
+.pe-row.tappable:hover:not(:disabled) {
+  filter: none;
+  transform: translateY(-1px);
+  box-shadow: var(--lift-2);
+  border-color: color-mix(in srgb, var(--vibe, var(--periwinkle)) 45%, var(--ash));
+}
+.pe-row.tappable:active:not(:disabled) { transform: scale(0.99); }
+.pe-row.live { border-color: color-mix(in srgb, var(--mint) 45%, var(--ash)); }
+
+.pe-glyph {
+  width: 46px; height: 46px;
+  flex-shrink: 0;
+  display: grid; place-items: center;
+  border-radius: 14px;
+  font-size: 22px;
+  background: color-mix(in srgb, var(--vibe, var(--periwinkle)) 20%, var(--paper));
+}
+.pe-row.past .pe-glyph { filter: saturate(0.7); }
+
+.pe-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.pe-title {
+  font-size: 15px; font-weight: 650; letter-spacing: -0.015em;
+  color: var(--obsidian);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pe-row.past .pe-title { color: color-mix(in srgb, var(--obsidian) 78%, var(--fog)); }
+.pe-sub, .pe-people {
+  display: flex; align-items: center; gap: 5px;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--fog);
+  white-space: nowrap;
+}
+.pe-when { flex-shrink: 0; color: var(--aubergine); font-weight: 500; }
+.pe-row.past .pe-when { color: var(--fog); font-weight: 400; }
+.pe-dot { flex-shrink: 0; opacity: 0.6; }
+.pe-place { display: inline-flex; align-items: center; gap: 2px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.pe-place i, .pe-people i { font-size: 13px; flex-shrink: 0; }
+.pe-people { font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+
+.pe-side { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.pe-go { font-size: 20px; color: color-mix(in srgb, var(--vibe, var(--periwinkle)) 70%, var(--fog)); transition: transform 0.18s var(--ease); }
+.pe-row.tappable:hover .pe-go { transform: translateX(2px); }
+
+.pe-empty {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: var(--s-32) var(--s-20);
+  text-align: center;
+  border: 1.5px dashed var(--ash);
+  border-radius: var(--r-card);
+  color: var(--fog);
+  font-size: 13.5px;
+}
+.pe-empty b { color: var(--aubergine); font-size: 15px; font-weight: 650; }
+.pe-empty-icon {
+  width: 48px; height: 48px;
+  display: grid; place-items: center;
+  margin-bottom: 6px;
+  border-radius: 16px;
+  font-size: 24px;
+  color: var(--violet);
+  background: color-mix(in srgb, var(--periwinkle) 20%, var(--paper));
+}
+.pe-empty-cta {
+  width: auto;
+  margin-top: var(--s-12);
+  padding: 9px 18px;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.pe-skeleton {
+  height: 74px;
+  margin-bottom: var(--s-8);
+  border-radius: 18px;
+  background: linear-gradient(90deg, var(--bone) 0%, var(--ash) 50%, var(--bone) 100%);
+  background-size: 840px 100%;
+  animation: shimmer 1.25s linear infinite;
+}

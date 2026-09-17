@@ -230,6 +230,100 @@ ok('a destructive answer looks like one', sheet.danger);
 ok('cancel is false, confirm is true', sheet.no === false && sheet.yes === true);
 
 /* ------------------------------------------------------------------ */
+group('recap');
+const H = 3600e3;
+const past = (id, host, endedAgo, extra = {}) => Object.assign(mkEvent(id, host, 'Past ' + id, '\u{1F389} Party'), {
+  startTime: now - endedAgo - 2 * H, expiresAt: now - endedAgo }, extra);
+const rules = await page.evaluate(async () => {
+  const r = await import('/js/services/recapRules.js');
+  const H = 3600e3, t = Date.now();
+  const e = (guests, extra = {}) => Object.assign({ hostUid: 'h', startTime: t - 3 * H, expiresAt: t - H,
+    participantUids: ['h', ...Array.from({ length: guests }, (_, i) => 'g' + i)], hypedUids: [] }, extra);
+  const hrs = (ev, v) => Math.round(r.recapWindow(ev, v) / H);
+  return {
+    nobody: hrs(e(0)), one: hrs(e(1)), seven: hrs(e(7)), huge: hrs(e(500)),
+    mine: hrs(e(0), 'h'), calledOff: hrs(e(9, { expiresAt: t - 4 * H })),
+    blip: hrs(e(3, { startTime: t - H - 10 * 60e3 })),
+  };
+});
+ok('a quiet event stays 6h', rules.nobody === 6, String(rules.nobody));
+ok('each doubling of guests buys 8h', rules.one === 14 && rules.seven === 30, rules.one + '/' + rules.seven);
+ok('nothing stays past 48h', rules.huge === 48, String(rules.huge));
+ok('your own stays at least a day', rules.mine === 24, String(rules.mine));
+ok('called off stays the minimum', rules.calledOff === 6, String(rules.calledOff));
+ok('a ten-minute blip earns half', rules.blip < 22, String(rules.blip));
+
+await seed({});
+const recap = await page.evaluate(async ({ events }) => {
+  const { state, ev } = window.__m;
+  window.__events = events;
+  state.recapDone = false;
+  await ev.loadRecap({ reset: true });
+  const ids = [...document.querySelectorAll('#recapEvents .event')].map((n) => n.id.replace('event-', ''));
+  const card = document.querySelector('#event-busy');
+  const cs = card && getComputedStyle(card, '::before');
+  return {
+    ids,
+    chip: card?.querySelector('.status-chip')?.innerText.trim(),
+    liveRing: !!card?.querySelector('.av-ring.live'),
+    border: cs && [cs.borderTopWidth, cs.borderRightWidth, cs.borderBottomWidth, cs.borderLeftWidth],
+    fading: !!document.querySelector('#event-quiet.fading'),
+  };
+}, { events: [
+  past('quiet', 'a', 5 * H),                                        // 6h window, 1h left
+  past('stale', 'a', 7 * H),                                        // 6h window, gone
+  past('busy', 'b', 20 * H, { participantUids: ['b','a','c','x','y','z','w','v'] }), // 30h
+  past('mine', 'me', 20 * H),                                       // yours: 24h
+  mkEvent('live', 'c', 'Still on', '☕ Chill'),
+]});
+ok('recap holds what earned its time and drops what did not',
+   recap.ids.join() === 'quiet,busy,mine', recap.ids.join());
+ok('a recap card says Ended, not Live', /^Ended/.test(recap.chip || '') && !recap.liveRing, recap.chip);
+ok('the recap outline goes all the way round',
+   recap.border && recap.border.every((w) => parseFloat(w) >= 1), JSON.stringify(recap.border));
+ok('one about to leave says so', recap.fading);
+
+/* ------------------------------------------------------------------ */
+group('profile events');
+const prof = await page.evaluate(async ({ events }) => {
+  const { state, prof } = window.__m;
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  window.__events = events;
+  window.__stubDocs['users/me'] = { username:'me_h', displayName:'Me', avatar:'\u{1F43C}', followers:[], following:[] };
+  window.__stubDocs['users/b'] = { username:'b', displayName:'B', avatar:'\u{1F98A}', followers:[], following:[] };
+  prof.openProfileScreen('me');
+  await wait(300);
+  const text = (id) => document.getElementById(id)?.innerText.trim();
+  const rows = () => [...document.querySelectorAll('#myProfileEvents .pe-row')];
+  const hosted = { n: rows().length, stat: text('statEventsHosted'), tab: text('peHostedCount'),
+                   first: rows()[0]?.classList.contains('live') };
+  prof.setProfileEventsTab('joined');
+  const joined = { n: rows().length, stat: text('statEventsJoined'), tab: text('peJoinedCount'),
+                   titles: rows().map((r) => r.querySelector('.pe-title').innerText) };
+  state.blockedUids = ['b'];
+  prof.openProfileScreen('me'); await wait(300);
+  prof.setProfileEventsTab('joined');
+  const afterBlock = { n: rows().length, stat: text('statEventsJoined') };
+  state.blockedUids = [];
+  const noScroll = document.body.scrollWidth <= document.documentElement.clientWidth;
+  prof.closeProfileScreen({ all: true });
+  return { hosted, joined, afterBlock, noScroll };
+}, { events: [
+  past('h1', 'me', 30 * H),
+  mkEvent('h2', 'me', 'On now', '\u{1F355} Food'),
+  past('j1', 'b', 3 * H, { participantUids: ['b', 'me'] }),
+  mkEvent('j2', 'a', 'Going later', '\u{1F4DA} Study'),
+].map((e) => (e.id === 'j2' ? Object.assign(e, { participantUids: ['a', 'me'], startTime: now + 2 * H }) : e)) });
+ok('hosted list, tab count and stat agree', prof.hosted.n === 2 && prof.hosted.stat === '2' && prof.hosted.tab === '2',
+   JSON.stringify(prof.hosted));
+ok('what is live sorts first', prof.hosted.first);
+ok('joined does not count events you hosted', prof.joined.n === 2 && prof.joined.stat === '2' && prof.joined.tab === '2',
+   JSON.stringify(prof.joined));
+ok('a blocked host disappears from joined and its count', prof.afterBlock.n === 1 && prof.afterBlock.stat === '1',
+   JSON.stringify(prof.afterBlock));
+ok('profile has no horizontal scroll', prof.noScroll);
+
+/* ------------------------------------------------------------------ */
 group('overall');
 ok('no errors, no native dialogs, all the way through', errors.length === 0, errors.join(' | '));
 

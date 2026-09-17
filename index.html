@@ -149,7 +149,7 @@
 
     <div id="recapTab" class="hidden">
       <div class="section-head"><h3>Campus Recap</h3></div>
-      <p class="section-sub">Everything that went down in the last 24 hours.</p>
+      <p class="section-sub">What just wrapped up. The more people went, the longer it stays.</p>
 
       <div class="feed-filters" id="recapFilters">
         <div class="filter-pill active" data-tag="All" onclick="setRecapFilter(this, 'All')">All</div>
@@ -198,7 +198,7 @@
     </div>
     <div class="rail-card">
       <div class="rail-title">Reminder</div>
-      <p class="rail-note">Events vanish when they end. The recap holds them for a day, then they're gone for good.</p>
+      <p class="rail-note">Events vanish when they end. Recap keeps them a while longer: a few hours for a quiet one, up to two days for one everybody went to.</p>
       <svg class="rail-art" viewBox="0 0 200 64" fill="none" aria-hidden="true">
         <circle cx="34" cy="34" r="17" fill="var(--periwinkle)" opacity="0.45"/>
         <circle cx="34" cy="34" r="17" stroke="var(--violet)" stroke-width="1.5" stroke-dasharray="4 5">
@@ -281,8 +281,17 @@
 
       <div id="profileSafety" class="profile-safety hidden"></div>
 
-      <h3 class="hosted-events-title">Hosted Events</h3>
-      <div id="myProfileEvents" class="profile-events-scroll"></div>
+      <section class="pe-section">
+        <div class="pe-tabs" id="profileEventTabs" role="tablist">
+          <button class="pe-tab active" data-pe="hosted" role="tab" aria-selected="true" onclick="setProfileEventsTab('hosted')">
+            Hosted <span class="pe-count" id="peHostedCount"></span>
+          </button>
+          <button class="pe-tab" data-pe="joined" role="tab" aria-selected="false" onclick="setProfileEventsTab('joined')">
+            Joined <span class="pe-count" id="peJoinedCount"></span>
+          </button>
+        </div>
+        <div id="myProfileEvents" class="profile-events-scroll"></div>
+      </section>
     </div>
   </div>
 
