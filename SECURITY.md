@@ -179,7 +179,9 @@ rules. But any signed-in student can still read any profile document,
 which includes `followers`, `following` and `followRequests`. The app
 shows a lock instead of those lists (and the Joined tab) to anyone who
 doesn't follow a private account, but someone using the console could
-read them. Closing that properly means moving the lists into a
+read them. The same goes for a locked profile's hosted events, which
+are hidden on the profile but were always public in the feed. Closing
+that properly means moving the lists into a
 subcollection with a follower-only read rule, at one read per name.
 Events stay public whatever the account type — that is the product.
 

@@ -164,6 +164,7 @@ const social = await page.evaluate(async () => {
   const { state, orbit, follow, prof } = window.__m;
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   window.__stubDocs['users/a'] = { username:'a', displayName:'A', avatar:'\u{1F98A}', followers:[], following:[] };
+  state.following = ['a'];                          // orbit comes after following
   await orbit.pullIn('a'); await wait(120);
   const asked = orbit.orbitStatus('a');
   const id = ['me','a'].sort().join('_');
@@ -472,6 +473,78 @@ ok('join stays off until public or private is picked', onboarding.beforePick ===
 ok('the two choices render as cards', onboarding.cards.length === 2 && onboarding.cards.every((h) => h > 50), JSON.stringify(onboarding.cards));
 
 await page.evaluate(() => { window.__rules = null; });
+
+/* ------------------------------------------------------------------ */
+group('follow first, orbit later');
+const gate = await page.evaluate(async () => {
+  const { state, follow, prof, orbit, search } = window.__m;
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const docs = window.__stubDocs;
+  const person = (u, extra = {}) => Object.assign({ uid: u, username: u, displayName: u.toUpperCase(), avatar: '\u{1F98A}',
+    banned: false, followers: [], following: [], followRequests: [], vouchedBy: [] }, extra);
+  docs['users/lock'] = person('lock', { private: true, followers: ['x', 'y'], following: ['z'], vouchedBy: ['x'] });
+  docs['users/open'] = person('open', { followers: ['x'] });
+  state.following = []; state.orbitUids = []; state.orbitOutgoing = []; state.orbitIncoming = [];
+  window.__events = [Object.assign({}, { id: 'le1', hostUid: 'lock', title: 'Secret', place: 'Lawn', tag: '',
+    startTime: Date.now() - 6e5, expiresAt: Date.now() + 6e5, participantUids: ['lock'], hypedUids: [] })];
+  const shown = (sel) => { const el = document.querySelector(sel); return !!el && getComputedStyle(el).display !== 'none' && !el.classList.contains('hidden'); };
+  const out = {};
+
+  // A private account you don't follow.
+  window.__readPaths = [];
+  prof.openProfileScreen('lock'); await wait(400);
+  out.locked = {
+    panel: shown('#profileLocked'),
+    events: shown('.pe-section'),
+    vouches: shown('#statVouchesBox'),
+    counts: document.getElementById('statFollowers').innerText + '/' + document.getElementById('statFollowing').innerText,
+    follow: document.querySelector('#profileOrbit .orbit-btn')?.innerText.trim(),
+    orbitBtn: [...document.querySelectorAll('#profileOrbit .orbit-btn')].some((b) => /orbit/i.test(b.innerText)),
+    eventCards: document.querySelectorAll('#myProfileEvents .pe-row').length,
+  };
+
+  // Let in: the rest opens where you are.
+  state.following = ['lock'];
+  prof.refreshProfileSocial('lock'); await wait(300);
+  out.unlocked = { panel: shown('#profileLocked'), events: shown('.pe-section'), vouches: shown('#statVouchesBox'),
+    rows: document.querySelectorAll('#myProfileEvents .pe-row').length,
+    orbitBtn: [...document.querySelectorAll('#profileOrbit .orbit-btn')].some((b) => /orbit/i.test(b.innerText)) };
+  prof.closeProfileScreen({ all: true }); await wait(200);
+
+  // A public account you don't follow: everything visible, no orbit yet.
+  state.following = [];
+  prof.openProfileScreen('open'); await wait(400);
+  out.publicView = { panel: shown('#profileLocked'), events: shown('.pe-section'),
+    orbitBtn: [...document.querySelectorAll('#profileOrbit .orbit-btn')].some((b) => /orbit/i.test(b.innerText)),
+    hint: !!document.querySelector('#profileOrbit .orbit-hint') };
+  await follow.openFollowList('open', 'followers'); await wait(150);
+  out.publicListOpen = !document.querySelector('#followListBody .locked-list');
+  follow.closeFollowList(); await wait(200);
+  prof.closeProfileScreen({ all: true }); await wait(200);
+
+  // Pulling in a stranger is refused with a reason, and writes nothing.
+  const w0 = window.__writes;
+  await orbit.pullIn('open');
+  out.pullRefused = orbit.orbitStatus('open') === 'none' && window.__writes === w0;
+
+  // Unfollowing takes back a waiting orbit request.
+  state.following = ['open']; state.orbitOutgoing = ['open'];
+  await follow.toggleFollow('open'); await wait(150);
+  out.unfollowWithdrew = orbit.orbitStatus('open') === 'none';
+  return out;
+});
+ok('a locked private profile shows counts and a follow button only',
+   gate.locked.panel && !gate.locked.events && !gate.locked.vouches && gate.locked.counts === '2/1'
+   && /Ask to follow/.test(gate.locked.follow || '') && !gate.locked.orbitBtn && gate.locked.eventCards === 0,
+   JSON.stringify(gate.locked));
+ok('once you follow, events, vouches and orbit open up in place',
+   !gate.unlocked.panel && gate.unlocked.events && gate.unlocked.vouches && gate.unlocked.rows === 1 && gate.unlocked.orbitBtn,
+   JSON.stringify(gate.unlocked));
+ok('a public profile shows everything but orbit until you follow',
+   !gate.publicView.panel && gate.publicView.events && !gate.publicView.orbitBtn && gate.publicView.hint && gate.publicListOpen,
+   JSON.stringify(gate.publicView));
+ok('pulling a stranger into orbit is refused before any write', gate.pullRefused);
+ok('unfollowing withdraws a waiting orbit request', gate.unfollowWithdrew);
 
 /* ------------------------------------------------------------------ */
 group('overall');

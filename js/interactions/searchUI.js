@@ -8,6 +8,7 @@ import { openOverlay, closeOverlay } from '../utils/overlays.js';
 import { showTab } from '../utils/ui.js';
 import { displayNameFor, usernameFor, avatarFor } from '../services/userService.js';
 import { orbitStatus } from '../services/orbitService.js';
+import { isFollowing, hasAskedToFollow, isPrivateAccount } from '../services/followService.js';
 import { searchPeople, searchEvents } from '../services/searchService.js';
 import { focusEvent } from '../services/eventsService.js';
 
@@ -69,8 +70,8 @@ function personRow(uid) {
   const id = safeId(uid);
   if (!id) return "";
 
-  // Search is the main way into someone's orbit, so the action lives
-  // right here rather than one tap further in. A div, not a button:
+  // The next step with this person lives right on the row: follow a
+  // stranger, pull in someone you already follow. A div, not a button:
   // the row already has an action button inside it.
   const status = orbitStatus(uid);
   let action;
@@ -82,8 +83,13 @@ function personRow(uid) {
     action = `<span class="row-chip"><i class='bx bx-time-five'></i> Asked</span>`;
   } else if (status === "incoming") {
     action = `<button class="act primary" onclick="event.stopPropagation(); window.acceptOrbit('${id}')">Accept</button>`;
-  } else {
+  } else if (isFollowing(uid)) {
     action = `<button class="act primary" onclick="event.stopPropagation(); window.pullIn('${id}')"><i class='bx bx-user-plus'></i> Pull in</button>`;
+  } else if (hasAskedToFollow(uid)) {
+    // Follow first, orbit later — so a stranger's row offers the follow.
+    action = `<button class="act requested" onclick="event.stopPropagation(); window.toggleFollow('${id}')">Requested</button>`;
+  } else {
+    action = `<button class="act primary" onclick="event.stopPropagation(); window.toggleFollow('${id}')">${isPrivateAccount(uid) ? "Ask" : "Follow"}</button>`;
   }
 
   return `

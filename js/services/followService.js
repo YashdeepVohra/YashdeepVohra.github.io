@@ -176,6 +176,15 @@ function nudgeFollowers(uid, delta) {
 // rather than racing the first one to the database.
 const busy = new Set();
 
+// Things that must happen when you stop following someone, registered
+// by whoever owns them (a pending orbit request goes too — orbit comes
+// after following). A registry rather than an import keeps the orbit
+// and follow modules from importing each other.
+const unfollowHooks = [];
+export function onUnfollow(fn) {
+  if (typeof fn === "function") unfollowHooks.push(fn);
+}
+
 const arr = (v) => (Array.isArray(v) ? v : []);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -402,6 +411,7 @@ async function unfollow(uid, onDone) {
       await db.collection("users").doc(state.uid).update({ following: FieldValue.arrayRemove(uid) });
     }
     await refreshUser(uid).catch(() => {});
+    unfollowHooks.forEach((fn) => { try { fn(uid); } catch (e) {} });
     toast("Unfollowed " + name);
   } catch (e) {
     console.error("Unfollow failed:", e.code || e.message);
@@ -607,7 +617,7 @@ function isFollowListOpen() {
  * SECURITY.md rather than pretended otherwise.)
  */
 export function listIsLocked(uid, kind) {
-  return (kind === "followers" || kind === "following")
+  return (kind === "followers" || kind === "following" || kind === "vouches")
     && uid !== state.uid
     && isPrivateAccount(uid)
     && !isFollowing(uid);
@@ -673,7 +683,7 @@ export function renderFollowList() {
       <div class="pe-empty locked-list">
         <span class="pe-empty-icon"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2.5" stroke="currentColor" stroke-width="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span>
         <b>This account is private</b>
-        <span>Follow ${escapeHtml(displayNameFor(listUid))} to see who they follow and who follows them.</span>
+        <span>Follow ${escapeHtml(displayNameFor(listUid))} to see who they follow, who follows them, and who vouches for them.</span>
       </div>`;
     return;
   }

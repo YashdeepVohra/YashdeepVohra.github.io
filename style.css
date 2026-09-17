@@ -2472,3 +2472,41 @@ html:not(.kb-open) .chat-footer {
 .act.icon-only:hover { color: var(--rose); background: color-mix(in srgb, var(--rose) 12%, var(--paper)); }
 
 .locked-list { margin: var(--s-16); }
+
+/* =====================================================================
+   PROFILE — LOCKED (a private account you don't follow)
+   Counts and a way in. Everything that would show what's behind the
+   counts is hidden here, not just disabled.
+   ===================================================================== */
+
+.profile-is-locked #statVouchesBox,
+.profile-is-locked .track-counts,
+.profile-is-locked .pe-section,
+.profile-is-locked #profileRings { display: none !important; }
+
+.profile-is-locked .profile-stats-pro .stat-box-pro { pointer-events: none; }
+
+.profile-locked {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin: var(--s-16) 0;
+  padding: var(--s-24) var(--s-20);
+  text-align: center;
+  border: 1.5px dashed var(--ash);
+  border-radius: var(--r-card);
+  color: var(--fog);
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+.profile-locked.hidden { display: none; }
+.profile-locked b { color: var(--aubergine); font-size: 15px; font-weight: 650; }
+
+/* Why there's no orbit button yet. */
+.orbit-hint {
+  margin: var(--s-8) 4px 0;
+  font-size: 12.5px;
+  color: var(--fog);
+  line-height: 1.4;
+}

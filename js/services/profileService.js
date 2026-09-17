@@ -418,6 +418,11 @@ export async function loadProfileUI(targetUid) {
 
   const isSelf = targetUid === state.uid;
   settingsGear?.classList.toggle("hidden", !isSelf);
+  // Forget which profile's events are on screen, so reopening one loads
+  // them fresh rather than trusting what was there last time.
+  profileEvents.uid = "";
+  document.getElementById("profileLocked")?.classList.add("hidden");
+  document.getElementById("profileScreen")?.classList.remove("profile-is-locked");
   renderSafetyActions(targetUid, isSelf);
   renderOrbitActions(targetUid, isSelf);
 
@@ -438,8 +443,8 @@ export async function loadProfileUI(targetUid) {
       if (editInput) editInput.value = state.userDisplayName;
     }
 
-    // Counts come from the same two queries as the lists below them.
-    loadUserEvents(targetUid);
+    // Hosted / Joined load from refreshProfileSocial above, once the
+    // profile is known not to be locked.
   } catch (e) {
     console.error("Profile load error:", e.code || e.message);
     if (nameDisplay) nameDisplay.innerText = "Could not load profile";
@@ -569,15 +574,46 @@ export function refreshProfileSocial(targetUid) {
 
   renderOrbitActions(targetUid, targetUid === state.uid);
 
+  applyProfileLock(targetUid);
+}
+
+/**
+ * A private account you don't follow shows its name, its follower and
+ * following counts, and a way to ask. Nothing else: not the lists
+ * behind the counts, not vouches, not events, not the orbit button.
+ * Being let in (or following) opens the rest in place, and unfollowing
+ * closes it again.
+ */
+export function isProfileLocked(uid) {
+  return !!uid
+    && uid !== state.uid
+    && !isBlocked(uid)
+    && isPrivateAccount(uid)
+    && !isFollowing(uid);
+}
+
+function applyProfileLock(targetUid) {
+  const locked = isProfileLocked(targetUid);
+  document.getElementById("profileScreen")?.classList.toggle("profile-is-locked", locked);
+
   const badge = document.getElementById("profilePrivate");
   if (badge) badge.classList.toggle("hidden", !isPrivateAccount(targetUid));
 
-  // Following somebody private (or being let in) opens their Joined
-  // tab; unfollowing closes it again. Only refetch when that changed.
-  const locked = targetUid !== state.uid && isPrivateAccount(targetUid) && !isFollowing(targetUid);
-  if (profileEvents.uid === targetUid && profileEvents.loaded && profileEvents.joinedLocked !== locked) {
-    loadUserEvents(targetUid);
+  const panel = document.getElementById("profileLocked");
+  if (panel) {
+    panel.classList.toggle("hidden", !locked);
+    const text = document.getElementById("profileLockedText");
+    if (text && locked) {
+      text.innerText = hasAskedToFollow(targetUid)
+        ? "You've asked to follow " + displayNameFor(targetUid) + ". Once they say yes you'll see their events, who they follow, and their orbit."
+        : "Follow " + displayNameFor(targetUid) + " to see their events, who they follow, and their orbit.";
+    }
   }
+
+  // Events are only fetched for a profile you're allowed to see — a
+  // locked one costs no event reads at all. They load the moment it
+  // opens up, and not again after.
+  if (!locked && profileEvents.uid !== targetUid) loadUserEvents(targetUid);
 }
 
 /**
@@ -673,8 +709,12 @@ export function renderOrbitActions(targetUid, isSelf) {
     action = `
       <button class="orbit-btn primary" onclick="window.acceptOrbit('${id}')"><i class='bx bx-user-check'></i> Accept</button>
       <button class="orbit-btn" onclick="window.declineOrbit('${id}')">Ignore</button>`;
-  } else {
+  } else if (following) {
     action = `<button class="orbit-btn primary" onclick="window.pullIn('${id}')"><i class='bx bx-user-plus'></i> Pull into orbit</button>`;
+  } else {
+    // Orbit comes after following, public or private: you follow
+    // someone first, and pull them in later if they're more than that.
+    action = "";
   }
 
   // The trust line. "3 people you know" is worth far more here than a
@@ -690,7 +730,16 @@ export function renderOrbitActions(targetUid, isSelf) {
     ? `<button class="orbit-btn ${hasVouched(targetUid) ? "vouched" : ""}" onclick="window.toggleVouch('${id}')"><i class='bx ${hasVouched(targetUid) ? "bxs-badge-check" : "bx-badge-check"}'></i> ${hasVouched(targetUid) ? "You vouched" : "Vouch for them"}</button>`
     : "";
 
-  host.innerHTML = `<div class="orbit-actions">${followBtn}${action}</div>${vouch ? `<div class="orbit-actions second">${vouch}</div>` : ""}${trust}`;
+  const locked = isProfileLocked(targetUid);
+  const hint = !following && status === "none" && !locked
+    ? `<p class="orbit-hint">Follow ${escapeHtml(displayNameFor(targetUid))} first, then you can pull them into your orbit.</p>`
+    : "";
+
+  host.innerHTML = `<div class="orbit-actions">${followBtn}${action}</div>`
+    + (vouch ? `<div class="orbit-actions second">${vouch}</div>` : "")
+    // Vouches are part of what a locked profile keeps to itself.
+    + (locked ? "" : trust)
+    + hint;
 }
 
 /** Block / report controls, shown only on someone else's profile. */

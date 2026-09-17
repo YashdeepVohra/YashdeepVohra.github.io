@@ -44,6 +44,13 @@ import { openOverlay, closeOverlay } from '../utils/overlays.js';
 import { toast, refreshSocialUI } from '../utils/ui.js';
 import { askConfirm } from '../utils/confirm.js';
 import { stampAsk, msUntilAskAllowed, limitMessage } from './limitsService.js';
+import { isFollowing, onUnfollow } from './followService.js';
+
+// Unfollowing someone takes back an orbit request that's still waiting.
+// Somebody already in your orbit stays there — that was agreed by both.
+onUnfollow((uid) => {
+  if (orbitStatus(uid) === "outgoing") removeOrbit(uid, true);
+});
 
 const MAX_VOUCHES = 500;
 
@@ -196,6 +203,10 @@ export async function pullIn(targetUid) {
 
   if (orbitStatus(uid) === "incoming") return acceptRequest(uid);
   if (orbitStatus(uid) !== "none") return;        // already asked, or already in
+
+  // Orbit comes after following, for public and private accounts alike.
+  // The rules check this too; this just says why instead of failing.
+  if (!isFollowing(uid)) return toast("Follow " + displayNameFor(uid) + " first, then pull them into your orbit.");
 
   const before = orbitStatus(uid);
   setLocalOrbit(uid, "outgoing");

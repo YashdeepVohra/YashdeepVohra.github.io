@@ -165,6 +165,11 @@ something breaks.
   (`refreshUser`), and every fresh read runs `onUserFetched` hooks —
   that's how an approved request becomes `following` on the asker's
   side, since only the asker can write their own list.
+- **Follow first, orbit later.** `pullIn` needs you to be in their
+  `followers` (client and rules). A private profile you don't follow is
+  "locked" (`isProfileLocked`): counts, Follow, Message/Report/Block, and
+  nothing else — no lists, vouches, events, or orbit. Public profiles
+  show everything except the orbit button until you follow.
 - **Overlays go through `js/utils/overlays.js`**, which backs them with
   history so Android back works. Closing is async — `pendingPops` exists
   because close-then-open in one tick used to tear down the new layer.

@@ -256,7 +256,7 @@
             <div class="profile-handle-pro" id="profileUsernameDisplay">@username</div>
             <div class="profile-track" id="profileTrack">
               <span id="profilePrivate" class="private-badge hidden"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2.5" stroke="currentColor" stroke-width="2.2"/><path d="M8 11V8a4 4 0 0 1 8 0v3" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg> Private</span>
-              <span id="statEventsJoined">0</span> joined · <span id="statEventsHosted">0</span> hosted
+              <span class="track-counts"><span id="statEventsJoined">0</span> joined · <span id="statEventsHosted">0</span> hosted</span>
             </div>
           </div>
         </div>
@@ -269,7 +269,7 @@
             <span class="stat-num" id="statFollowing">0</span>
             <span class="stat-label">Following</span>
           </button>
-          <button class="stat-box-pro tappable" onclick="openProfileList('vouches')">
+          <button class="stat-box-pro tappable" id="statVouchesBox" onclick="openProfileList('vouches')">
             <span class="stat-num" id="statVouches">0</span>
             <span class="stat-label">Vouches</span>
           </button>
@@ -279,6 +279,13 @@
       <div id="profileRequests" class="profile-requests hidden"></div>
       <div id="profileOrbit" class="profile-orbit hidden"></div>
       <div id="profileRings" class="profile-rings hidden"></div>
+
+      <!-- A private account you don't follow: counts and a way in, nothing else. -->
+      <div id="profileLocked" class="profile-locked hidden">
+        <span class="pe-empty-icon"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2.5" stroke="currentColor" stroke-width="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span>
+        <b>This account is private</b>
+        <span id="profileLockedText">Follow them to see their events, who they follow, and their orbit.</span>
+      </div>
 
       <div id="profileSafety" class="profile-safety hidden"></div>
 
