@@ -18,6 +18,8 @@ step. Open `index.html` over http (not `file://`, modules won't load).
 - **Always `node --check` every changed .js** before committing. There is
   no build step to catch a typo.
 - **Run `test/smoke.mjs`** before saying something works (see Testing).
+- **Commit when a change is done and tested** (`git add -A`, so new files
+  come along). The user only runs `git push` — don't leave work unstaged.
 - The user pushes and deploys themselves. After changing `firestore.rules`,
   say so — the rules only do anything once redeployed, and until then
   every limit in them is decoration.
