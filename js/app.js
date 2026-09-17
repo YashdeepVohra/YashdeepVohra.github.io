@@ -306,6 +306,25 @@ function boot() {
 
   document.getElementById("newUsername")?.addEventListener("input", checkUsernameAvailability);
 
+  // The feed only repaints when something changes, so an event that
+  // ENDS while somebody is looking at it just sat there in Live Now,
+  // and "10m ago" quietly went stale. One tick a minute moves it to
+  // Recap on its own. It costs nothing: renderEvents diffs, so a minute
+  // where nothing changed touches no DOM and reads nothing.
+  setInterval(() => {
+    if (document.visibilityState === "visible" && state.uid) renderEvents();
+  }, 60000);
+
+  // Registering this is what lets a browser offer "add to home screen".
+  // It caches nothing — see sw.js for why that is deliberate.
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("/sw.js").catch((e) => {
+        console.warn("Install prompt unavailable:", e.message);
+      });
+    });
+  }
+
   // A hype waits a moment before it is written, so anything still
   // waiting has to go when the app is put away — otherwise tapping and
   // immediately locking the phone would lose it.

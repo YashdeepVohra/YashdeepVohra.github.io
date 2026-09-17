@@ -297,7 +297,19 @@ export function initializeUserApp(userData) {
 // HANDLE CLAIMING
 // ==========================================
 
-export async function checkUsernameAvailability() {
+// Typing "yashdeep" fired eight document reads, one per keystroke, with
+// nothing between the keyboard and Firestore. Wait for them to stop.
+let handleCheck = 0;
+export function checkUsernameAvailability() {
+  clearTimeout(handleCheck);
+  const input = document.getElementById("newUsername");
+  if (input) input.value = normalizeUsername(input.value);
+  const btn = document.getElementById("claimBtn");
+  if (btn) btn.disabled = true;
+  handleCheck = setTimeout(runHandleCheck, 350);
+}
+
+async function runHandleCheck() {
   const input = document.getElementById("newUsername");
   const status = document.getElementById("usernameStatus");
   const btn = document.getElementById("claimBtn");
@@ -306,28 +318,32 @@ export async function checkUsernameAvailability() {
   const val = normalizeUsername(input.value);
   input.value = val;
 
-  const block = (text, color) => {
+  // The button's look comes from `disabled` and the base stylesheet.
+  // It used to be painted by hand, and the "you can have it" colour was
+  // --lavender — a pale lilac behind white text, which read as MORE
+  // disabled than the disabled state. Nothing here sets a colour now.
+  const say = (text, tone) => {
     status.innerText = text;
-    status.style.color = color;
-    btn.style.background = "var(--ash)";
-    btn.style.cursor = "not-allowed";
+    status.className = "handle-status " + (tone || "");
     btn.disabled = true;
   };
 
-  if (val.length === 0) return block("", "var(--text-muted)");
-  if (val.length < 3) return block("Must be at least 3 characters", "var(--text-muted)");
+  if (val.length === 0) return say("");
+  if (val.length < 3) return say("A few more characters", "waiting");
+
+  say("Checking\u2026", "waiting");
 
   try {
     const doc = await db.collection("usernames").doc(val).get();
-    if (doc.exists) return block("Taken \u{1F614}", "var(--danger)");
+    // A slower check for an older keystroke must not overwrite a newer one.
+    if (normalizeUsername(input.value) !== val) return;
 
-    status.innerText = "Available! \u{1F389}";
-    status.style.color = "var(--mint)";
-    btn.style.background = "var(--lavender)";
-    btn.style.cursor = "pointer";
+    if (doc.exists) return say("@" + val + " is taken", "taken");
+
+    say("@" + val + " is yours", "free");
     btn.disabled = false;
   } catch (e) {
-    block("Could not check right now", "var(--text-muted)");
+    say("Couldn't check just now", "waiting");
   }
 }
 

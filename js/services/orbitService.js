@@ -560,7 +560,11 @@ export function renderOrbitRings(hostEl, uids, total) {
   // whole system visibly jump back to its start position each time
   // somebody was followed. Rebuild only when the people really changed.
   const signature = people.join(",") + "|" + outNow.join(",") + "|" + total;
-  if (hostEl.dataset.signature === signature) return;
+  // ...but only if what it drew is still there. Opening somebody else's
+  // profile empties this element, and the signature alone did not know
+  // that — so coming back to your own profile matched the signature,
+  // returned early, and left the orbit blank until a reload.
+  if (hostEl.dataset.signature === signature && hostEl.children.length) return;
   hostEl.dataset.signature = signature;
 
   if (!people.length) {

@@ -323,9 +323,21 @@ export function loadEvents() {
 
         await primeUsers([...uids]);
 
+        // Happening now first, most recently started at the top of those;
+        // then what starts soonest. This used to be a plain descending
+        // sort on startTime, which put the event furthest in the FUTURE
+        // at the top of a feed called Live Now, and buried the thing
+        // starting in ten minutes at the bottom.
+        const clock = Date.now();
+        const live = (x) => (x.startTime || 0) <= clock;
         state.eventOrder = events
-          .sort((a, b) => (b.startTime || 0) - (a.startTime || 0))
-          .map((e) => e.id);
+          .sort((a, b) => {
+            if (live(a) !== live(b)) return live(a) ? -1 : 1;
+            return live(a)
+              ? (b.startTime || 0) - (a.startTime || 0)
+              : (a.startTime || 0) - (b.startTime || 0);
+          })
+          .map((x) => x.id);
 
         renderEvents();
       },

@@ -385,7 +385,13 @@ export function renderOrbitActions(targetUid, isSelf) {
     return;
   }
 
-  if (rings) { rings.innerHTML = ""; rings.classList.add("hidden"); }
+  // Clear the stamp with the contents, or renderOrbitRings will think
+  // its work is already on screen when it isn't.
+  if (rings) {
+    rings.innerHTML = "";
+    rings.classList.add("hidden");
+    delete rings.dataset.signature;
+  }
 
   if (isBlocked(targetUid)) {
     host.innerHTML = "";
