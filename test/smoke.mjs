@@ -1081,7 +1081,7 @@ group('dark mode');
 
   const sysDark = await themeRun('dark');
   ok('a dark-mode device gets dark from the first paint', sysDark.firstPaint === 'dark' && sysDark.theme === 'dark'
-     && sysDark.bg === 'rgb(15, 13, 22)' && sysDark.bar === '#0f0d16', JSON.stringify({ ...sysDark, p: 0, ctx: 0 }));
+     && sysDark.bg === 'rgb(26, 35, 39)' && sysDark.bar === '#1a2327', JSON.stringify({ ...sysDark, p: 0, ctx: 0 }));
 
   // Picking Light in Settings wins over the device, and sticks.
   const picked = await sysDark.p.evaluate(async () => {
@@ -1098,7 +1098,7 @@ group('dark mode');
   await sysDark.ctx.close();
 
   const sysLight = await themeRun('light');
-  ok('a light device stays light', sysLight.theme === 'light' && sysLight.bg === 'rgb(250, 249, 253)', sysLight.bg);
+  ok('a light device stays light', sysLight.theme === 'light' && sysLight.bg === 'rgb(230, 242, 221)', sysLight.bg);
   await sysLight.ctx.close();
 
   const forced = await themeRun('light', 'dark');

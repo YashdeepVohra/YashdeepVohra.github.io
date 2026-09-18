@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <title>livesociya</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
-  <meta name="theme-color" content="#fdfcfe">
+  <meta name="theme-color" content="#e6f2dd">
   <meta name="description" content="The campus live feed. See what's happening right now, join it, and meet the people who showed up.">
 
   <!-- Installable. Without the manifest link and an icon of at least
@@ -35,7 +35,13 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300..700&display=swap" rel="stylesheet">
+  <!-- Two families, both with display=swap: Inter carries everything
+       functional, Archivo 800 is one static instance used only for
+       headings. A phone on a slow connection paints in the system
+       fallback immediately and swaps when they arrive — and because
+       headings ask for weight 800, the fallback is already heavy, so
+       the swap changes letterforms rather than weight. -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300..800&family=Archivo:wght@800&display=swap" rel="stylesheet">
   <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
 
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
@@ -55,7 +61,7 @@
       r.setAttribute("data-theme", t);
       r.style.colorScheme = t;
       var m = document.querySelector('meta[name="theme-color"]');
-      if (m) m.setAttribute("content", t === "dark" ? "#0f0d16" : "#fdfcfe");
+      if (m) m.setAttribute("content", t === "dark" ? "#1a2327" : "#e6f2dd");
     })();
   </script>
   <link rel="stylesheet" href="style.css">
@@ -143,7 +149,7 @@
 
     <div id="eventsTab">
       <div class="section-head">
-        <h3>Live Now</h3>
+        <h3>Live <span class="marker">now</span></h3>
       </div>
 
       <div class="live-rail-wrap" id="liveRailWrap">
@@ -164,7 +170,7 @@
     </div>
 
     <div id="recapTab" class="hidden">
-      <div class="section-head"><h3>Campus Recap</h3></div>
+      <div class="section-head"><h3>Campus <span class="marker">recap</span></h3></div>
       <p class="section-sub">What just wrapped up. The more people went, the longer it stays.</p>
 
       <div class="feed-filters" id="recapFilters">

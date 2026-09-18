@@ -20,3 +20,7 @@ serviceAccountKey.json
 # Pre-refactor snapshot. Git is the backup now — safe to delete this
 # folder once the first push has landed.
 _backup_pre_uid/
+
+# Screenshots and files delivered into the chat land here. They are
+# session artefacts, not source — they stay on disk, out of the repo.
+Claude outputs/

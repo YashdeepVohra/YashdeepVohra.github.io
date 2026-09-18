@@ -17,7 +17,7 @@ export const THEME_KEY = "livesociya.theme";
 const CHOICES = ["system", "light", "dark"];
 
 // The browser bar matches the page behind it.
-const BAR = { light: "#fdfcfe", dark: "#0f0d16" };
+const BAR = { light: "#e6f2dd", dark: "#1a2327" };
 
 const darkQuery = typeof window.matchMedia === "function"
   ? window.matchMedia("(prefers-color-scheme: dark)")

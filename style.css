@@ -1,42 +1,76 @@
 /* =====================================================================
    livesociya
-   A violet social system: restrained structure, live surfaces, motion
-   that reports state rather than decorates.
+   Sage on paper: a warm green editorial system with one ember signal.
 
-   Palette spine stays monochromatic violet. Colour enters through the
-   six vibe accents and the live ring — the same way Instagram lets a
-   gradient ring mean "there's something here" against a neutral feed.
+   Three ideas, borrowed on purpose:
+
+   - The canvas is never white. A pale green paper (#e6f2dd) holds the
+     page and cards sit LIGHTER on it, so surfaces separate by colour
+     rather than by shadow. Nothing here casts a real shadow except the
+     things that genuinely float — modals, sheets, the toast.
+   - One display face does the shouting. Archivo at 800 carries screen
+     titles, event titles and numbers; Inter stays quiet underneath and
+     a system mono handles meta rows, so the interface reads like a
+     printed listing rather than a dashboard.
+   - Colour is rationed. The greens ARE the interface, so a green
+     "live" badge would say nothing. One warm ember is reserved for
+     right-now: the live dot, the live ring, hype, unread. If it is
+     orange, it is happening.
+
+   TOKEN NAMES. The violet-era names (--violet, --aubergine,
+   --periwinkle, --lavender, --plum) are kept as aliases pointing at
+   the new spine, because they are used in hundreds of rules and in JS
+   templates. New code should use the real names: --ink, --forest,
+   --sage, --moss, --fern, --wash, --ember.
    ===================================================================== */
 
 :root {
   /* ---- Spine ---- */
-  --aubergine:  #3c315b;
-  --plum:       #2a2140;
-  --lavender:   #e2dffe;
-  --periwinkle: #ab9ff2;
-  --violet:     #7c6bf0;
+  --ink:        #273338;   /* headings and body: near-black, green cast */
+  --ink-deep:   #16211f;
+  --forest:     #2b5748;   /* THE action colour — buttons, links, focus */
+  --sage:       #659287;   /* mid tone: rings, rules, quiet accents */
+  --moss:       #88bda4;   /* accent surfaces and marks */
+  --fern:       #b1d3b9;   /* the marker wash behind a word */
+  --wash:       #d7e9d6;   /* soft fill: selected states, chips */
 
-  /* ---- Signals ---- */
-  --mint:       #2ec08b;
-  --blush:      #ffdadc;
-  --rose:       #e8607a;
-  --buttercream:#ffffc4;
-  --cornflower: #4a87f2;
+  /* ---- The one warm signal: right now ---- */
+  /* Two embers, because one colour cannot do both jobs. The fill is
+     what you see as a dot, a ring or a flame; the ink is what you
+     READ, and it has to clear 4.5:1 on the soft ember the chip sits
+     on, which the fill does not. */
+  --ember:      #c4603a;   /* fills: dots, rings, the flame */
+  --ember-ink:  #9c4322;   /* text on --ember-soft (5.2:1) */
+  --ember-soft: #f7e3d9;
+  --ember-line: #e8b79f;
 
-  /* ---- Vibe accents: the feed's colour, keyed to category ---- */
-  --vibe-chill:  #7cc3f0;
-  --vibe-food:   #ff9f68;
-  --vibe-party:  #f472b6;
-  --vibe-study:  #8b8ef5;
-  --vibe-sports: #45c98a;
+  /* ---- Vibe accents: muted sticky-note tones that sit on green ---- */
+  --vibe-chill:  #6fa8b8;
+  --vibe-food:   #d1904f;
+  --vibe-party:  #c9738d;
+  --vibe-study:  #8189c4;
+  --vibe-sports: #72a052;
 
   /* ---- Neutrals ---- */
-  --paper:      #ffffff;
-  --canvas:     #faf9fd;
-  --obsidian:   #1c1c22;
-  --fog:        #7c7a89;
-  --ash:        #ecebf1;
-  --bone:       #f4f3f8;
+  --paper:      #fbfdf7;   /* cards, sheets, inputs — lighter than the page */
+  --canvas:     #e6f2dd;   /* the page itself */
+  --obsidian:   #273338;
+  --fog:        #55685f;   /* secondary text: 5.2:1 on paper */
+  --ash:        #c6dcc5;   /* hairlines — the main separator in this system */
+  --bone:       #edf5e6;   /* quiet fills */
+
+  /* ---- Compatibility aliases (the violet-era names) ---- */
+  --aubergine:  var(--ink);
+  --plum:       var(--ink-deep);
+  --lavender:   var(--wash);
+  --periwinkle: var(--sage);
+  --violet:     var(--forest);
+
+  --mint:       #4f9d7a;
+  --blush:      #f7e2df;
+  --rose:       #bc4f4a;
+  --buttercream:#f6eccd;
+  --cornflower: #5f86b5;
 
   /* ---- Aliases used by JS templates ---- */
   --bg: var(--canvas);
@@ -44,19 +78,33 @@
   --text: var(--obsidian);
   --text-muted: var(--fog);
   --border: var(--ash);
-  --primary: var(--violet);
+  --primary: var(--forest);
   --danger: var(--rose);
   --success: var(--mint);
   --mist: var(--bone);
 
   /* ---- Type ---- */
+  /* Display is one static face, one weight, headings only. It loads
+     with display=swap behind a system fallback, so a slow phone paints
+     in the fallback and never waits on it. */
   --font: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* Archivo at 800, not Archivo Black. Deliberate: Black ships as a
+     single 400-weight file, so while it is still downloading every
+     heading renders in the fallback at weight 400 — thin, then
+     suddenly heavy, which is the worst version of a font swap on a
+     slow phone. Asking for 800 means the fallback (Inter, or the
+     device's own UI face) is already heavy, so the swap changes the
+     shapes and not the weight. One static instance, ~20KB. */
+  --font-display: 'Archivo', var(--font);
+  --display-weight: 800;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
   --track: -0.02em;
+  --track-mono: 0.08em;   /* meta rows are uppercase and spaced out */
 
   /* ---- Geometry ---- */
   --r-pill: 100px;
-  --r-card: 22px;
-  --r-sm: 14px;
+  --r-card: 20px;
+  --r-sm: 12px;
 
   /* ---- Rhythm ---- */
   --s-4: 4px;  --s-8: 8px;   --s-12: 12px; --s-16: 16px;
@@ -67,42 +115,49 @@
   --rail-w: 304px;
   --feed-max: 620px;
 
-  /* ---- Depth: soft violet-tinted, never grey ---- */
-  --lift-1: 0 1px 2px rgba(60, 49, 91, 0.06);
-  --lift-2: 0 4px 16px rgba(60, 49, 91, 0.08);
-  --lift-3: 0 12px 32px rgba(60, 49, 91, 0.14);
-  --glow:   0 0 0 4px rgba(171, 159, 242, 0.22);
+  /* ---- Depth ----
+     Almost nothing. Surfaces separate by colour and a 1px hairline;
+     lift-3 exists only for the things that genuinely float above the
+     page — modals, sheets, the toast. */
+  --lift-1: 0 1px 0 rgba(39, 51, 56, 0.04);
+  --lift-2: 0 2px 6px rgba(39, 51, 56, 0.07);
+  --lift-3: 0 12px 30px rgba(22, 33, 31, 0.16);
+  --glow:   0 0 0 3px rgba(101, 146, 135, 0.28);
 
   /* ---- Roles (so dark mode can swap them) ---- */
-  --on-accent:    #ffffff;             /* text on violet / gradient fills */
-  --ink-fill:     var(--aubergine);    /* a strong neutral fill: active pill */
-  --on-ink-fill:  #ffffff;
-  --deep-a:       #3c315b;             /* the dark rail card, both themes */
-  --deep-b:       #2a2140;
-  --chip-ink:     #2a2140;             /* mixed with a vibe for chip text */
-  --mint-ink:     #17765a;
-  --butter-ink:   #6b5200;
-  --rose-ink:     #9b2c3e;
-  --blush-hover:  #ffcace;
-  --butter-hover: #fff6a8;
-  --shimmer-hi:   #eceafa;
-  --glass:        rgba(255, 255, 255, 0.97);
-  --glass-canvas: rgba(250, 249, 253, 0.97);
+  --on-accent:    #f1f8ea;             /* text on the forest fill */
+  --ink-fill:     var(--ink);          /* a strong neutral fill: active pill */
+  --on-ink-fill:  #f1f8ea;
+  --deep-a:       #2b5748;             /* the dark rail card, both themes */
+  --deep-b:       #1e3f34;
+  --chip-ink:     #273338;             /* mixed with a vibe for chip text */
+  --mint-ink:     #2d6b55;
+  --butter-ink:   #7a5a22;
+  --rose-ink:     #9a3b34;
+  --blush-hover:  #f1d4d0;
+  --butter-hover: #f0e3ba;
+  --shimmer-hi:   #f5fbef;
+  --glass:        rgba(251, 253, 247, 0.96);
+  --glass-canvas: rgba(230, 242, 221, 0.96);
   --glass-edge:   rgba(255, 255, 255, 0.7);
-  --glass-soft:   rgba(255, 255, 255, 0.7);
-  --backdrop:     rgba(28, 28, 34, 0.5);
-  --amb-1: rgba(171, 159, 242, 0.34);
-  --amb-2: rgba(255, 201, 222, 0.32);
-  --amb-3: rgba(185, 220, 255, 0.24);
-  --aura-1: rgba(171, 159, 242, 0.5);
-  --aura-2: rgba(255, 214, 232, 0.5);
-  --aura-3: rgba(207, 230, 255, 0.42);
-  --grid-dot: rgba(60, 49, 91, 0.10);
-  --toast-bg:  #3c315b;
-  --toast-ink: #fdfcfe;
-  --unread-bg: #e0e7ff;
-  --knob:        #ffffff;              /* switch thumbs */
-  --danger-fill: var(--rose);          /* destructive buttons, white text */
+  --glass-soft:   rgba(255, 255, 255, 0.6);
+  --backdrop:     rgba(24, 38, 34, 0.44);
+  --amb-1: rgba(136, 189, 164, 0.42);
+  --amb-2: rgba(196, 96, 58, 0.10);
+  --amb-3: rgba(177, 211, 185, 0.46);
+  --aura-1: rgba(136, 189, 164, 0.5);
+  --aura-2: rgba(196, 96, 58, 0.16);
+  --aura-3: rgba(177, 211, 185, 0.5);
+  --grid-dot: rgba(39, 51, 56, 0.09);
+  --toast-bg:  #273338;
+  --toast-ink: #eef6e8;
+  --unread-bg: #d7e9d6;
+  --knob:        #fbfdf7;              /* switch thumbs */
+  --danger-fill: #b34a45;              /* destructive buttons */
+  /* Its own token, because --on-accent flips to a DARK ink in dark
+     mode (it sits on pale moss there) and a dark label on a red
+     button fails contrast in exactly the place it matters most. */
+  --on-danger:   #fff5f3;
 
   /* ---- Motion ---- */
   /* Height the phone keyboard is covering; set by utils/viewport.js */
@@ -140,6 +195,57 @@ h1, h2, h3, h4 {
 p { margin: 0 0 var(--s-12); }
 a { color: inherit; }
 .hidden { display: none !important; }
+
+/* =====================================================================
+   THREE VOICES
+   Display announces, Inter explains, mono labels. Nothing is set in a
+   voice that isn't its job: a screen title is never Inter, a piece of
+   metadata is never anything but mono, and body copy is never display.
+   ===================================================================== */
+
+h1, h2, h3, h4,
+.title, .section-head h3, .event-title, .screen-title,
+.display {
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  letter-spacing: -0.02em;
+  line-height: 1.12;
+}
+
+/* Screen titles are set in caps because they are OUR words, never
+   somebody's. Anything a student typed stays in the case they typed
+   it — an event called "chai + assignment panic" is not shouted. */
+.section-head h3, .screen-title {
+  text-transform: uppercase;
+  letter-spacing: 0.005em;
+}
+
+/* THE MARKER. One word of a heading gets a wash behind it, the way you
+   would highlight a line in a printed listing. It is a background on
+   an inline span — no pseudo-element, no animation, nothing to paint
+   on scroll. */
+.marker {
+  background: var(--fern);
+  color: var(--ink);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  padding: 0 0.16em;
+  margin: 0 -0.04em;
+  border-radius: 3px;
+}
+
+/* Metadata is mono, spaced out and usually caps: times, counts,
+   distances, states. It reads as data rather than as speech, which is
+   what lets the rest of the card stay quiet. */
+.meta, .live-rail-head, .cap-head, .status-chip, .receipt-head b,
+.receipt-people-head, .action-quote, .msg-time, .date-separator,
+.result-sub, .who-meta {
+  font-family: var(--font-mono);
+  letter-spacing: var(--track-mono);
+}
+.meta-caps, .live-rail-head, .status-chip, .receipt-head b, .receipt-people-head {
+  text-transform: uppercase;
+}
 
 /* =====================================================================
    MOTION SYSTEM
@@ -199,7 +305,7 @@ a { color: inherit; }
   animation: shimmer 1.25s linear infinite;
   border-radius: var(--r-sm);
 }
-.skel-card { padding: var(--s-20); background: var(--paper); border-radius: var(--r-card); box-shadow: var(--lift-1); margin-bottom: var(--s-12); }
+.skel-card { padding: var(--s-20); background: var(--paper); border: 1.5px solid var(--ash); border-radius: var(--r-card); margin-bottom: var(--s-12); }
 .skel-row { display: flex; align-items: center; gap: var(--s-12); margin-bottom: var(--s-16); }
 .skel-avatar { width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0; }
 .skel-line { height: 11px; border-radius: var(--r-pill); }
@@ -235,22 +341,32 @@ button {
   align-items: center;
   justify-content: center;
   gap: var(--s-8);
-  box-shadow: var(--lift-1);
-  transition: transform var(--fast) var(--ease), box-shadow var(--fast) var(--ease),
-              background var(--fast) var(--ease), filter var(--fast) var(--ease);
+  /* Flat. A filled pill on a paper canvas does not need a shadow to
+     read as a control, and a shadow under every button is the fastest
+     way to make an interface look like a 2019 template. */
+  box-shadow: none;
+  transition: transform var(--fast) var(--ease), background var(--fast) var(--ease),
+              border-color var(--fast) var(--ease), filter var(--fast) var(--ease);
 }
-button:hover:not(:disabled) { filter: brightness(1.06); box-shadow: var(--lift-2); transform: translateY(-1px); }
-button:active:not(:disabled) { transform: scale(0.97); box-shadow: var(--lift-1); }
+button:hover:not(:disabled) { filter: brightness(1.08); }
+/* The press is the feedback: it goes DOWN under the finger, and it is
+   a transform, so it composites and costs nothing on a slow phone. */
+button:active:not(:disabled) { transform: scale(0.96); filter: brightness(0.96); }
 button:focus-visible { outline: none; box-shadow: var(--glow); }
-button:disabled { cursor: not-allowed; opacity: 0.5; box-shadow: none; }
+button:disabled { cursor: not-allowed; opacity: 0.45; }
 
+/* The quiet counterpart: a hairline outline, no fill, like the ghost
+   pills in all three references. */
 .btn-ghost, .back-btn, .read-more-btn, .leave-btn {
-  background: var(--bone);
-  color: var(--aubergine);
+  background: transparent;
+  color: var(--ink);
+  border: 1.5px solid var(--ash);
   box-shadow: none;
 }
-.btn-ghost:hover, .back-btn:hover, .read-more-btn:hover, .leave-btn:hover { background: var(--ash); filter: none; }
-.delete-btn, .logoutBtn { background: var(--blush); color: var(--rose-ink); box-shadow: none; }
+.btn-ghost:hover, .back-btn:hover, .read-more-btn:hover, .leave-btn:hover {
+  background: var(--bone); border-color: var(--sage); filter: none;
+}
+.delete-btn, .logoutBtn { background: var(--blush); color: var(--rose-ink); border: 1.5px solid var(--rose-ink); box-shadow: none; }
 .delete-btn:hover, .logoutBtn:hover { background: var(--blush-hover); filter: none; }
 
 input, textarea, select {
@@ -280,7 +396,7 @@ input[type="datetime-local"], input[type="date"], input[type="time"], input[type
   max-width: 100%;
 }
 input[type="datetime-local"], input[type="number"] { border-radius: var(--r-card); }
-input:focus, textarea:focus { border-color: var(--periwinkle); box-shadow: var(--glow); }
+input:focus, textarea:focus { border-color: var(--forest); box-shadow: var(--glow); }
 input::placeholder, textarea::placeholder { color: var(--fog); }
 
 /* =====================================================================
@@ -315,9 +431,9 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   width: 100%;
   max-width: 380px;
   padding: var(--s-48) var(--s-32);
-  background: var(--glass);
-  border: 1px solid var(--glass-edge);
-  border-radius: 30px;
+  background: var(--paper);
+  border: 1.5px solid var(--ash);
+  border-radius: 28px;
   box-shadow: var(--lift-3);
   text-align: center;
   animation: riseIn 0.5s var(--spring);
@@ -326,14 +442,14 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 .login-mark {
   width: 66px; height: 66px;
   margin: 0 auto var(--s-20);
-  border-radius: 22px;
-  background: linear-gradient(140deg, var(--violet), var(--periwinkle) 55%, #f9a8d4);
-  box-shadow: 0 10px 24px rgba(124, 107, 240, 0.34);
+  border-radius: 20px;
+  background: var(--forest);
+  box-shadow: none;
   display: flex; align-items: center; justify-content: center;
   color: var(--on-accent); font-size: 30px;
   animation: float 5.5s var(--ease) infinite;
 }
-.login-title { font-size: 27px; font-weight: 700; letter-spacing: -0.035em; margin-bottom: 6px; }
+.login-title { font-family: var(--font-display); font-size: 30px; font-weight: var(--display-weight); letter-spacing: -0.035em; margin-bottom: 8px; }
 .login-sub { font-size: 15px; color: var(--fog); margin-bottom: var(--s-24); }
 
 .google-btn {
@@ -361,17 +477,23 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   display: flex; align-items: center; justify-content: space-between; gap: var(--s-12);
   padding: var(--s-12) var(--s-16);
   background: var(--glass-canvas);
-  border-bottom: 1px solid var(--ash);
+  border-bottom: 1.5px solid var(--ash);
 }
-.brand-lockup { display: flex; align-items: center; gap: var(--s-8); }
+.brand-lockup { display: flex; align-items: center; gap: 9px; }
+/* A solid mark, not a gradient: one colour, one paint, and it survives
+   being printed, screenshotted or rendered on a cheap panel. */
 .brand-dot {
   width: 30px; height: 30px; flex-shrink: 0;
-  border-radius: 10px;
-  background: linear-gradient(140deg, var(--violet), var(--periwinkle) 55%, #f9a8d4);
+  border-radius: 9px;
+  background: var(--forest);
   display: flex; align-items: center; justify-content: center;
   color: var(--on-accent); font-size: 15px;
 }
-.title { font-size: 18px; font-weight: 700; letter-spacing: -0.035em; color: var(--aubergine); }
+.title {
+  font-family: var(--font-display);
+  font-size: 18px; font-weight: var(--display-weight);
+  letter-spacing: -0.02em; color: var(--ink);
+}
 
 .profileBtn {
   width: 38px; height: 38px; flex-shrink: 0; padding: 0;
@@ -384,8 +506,8 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 .container { flex: 1; width: 100%; padding: var(--s-16) var(--s-16) 132px; }
 
 .section-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s-12); margin-bottom: var(--s-16); }
-.section-head h3 { font-size: 24px; font-weight: 700; letter-spacing: -0.04em; margin: 0; }
-.section-sub { font-size: 14px; color: var(--fog); margin: -8px 0 16px; }
+.section-head h3 { font-size: 26px; margin: 0; }
+.section-sub { font-size: 14px; color: var(--fog); margin: 2px 0 18px; max-width: 46ch; }
 
 /* ---- Bottom nav ---- */
 .bottom-nav {
@@ -394,10 +516,12 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   z-index: 45;
   display: flex; gap: var(--s-4);
   width: calc(100% - 28px); max-width: 390px;
-  padding: 7px;
+  padding: 6px;
   background: var(--glass);
-  border: 1px solid var(--ash);
+  border: 1.5px solid var(--ash);
   border-radius: var(--r-pill);
+  /* The one place a shadow earns its keep on this canvas: the nav
+     genuinely floats over a scrolling list and needs to detach. */
   box-shadow: var(--lift-2);
 }
 .nav-item {
@@ -410,13 +534,17 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   transition: color var(--fast) var(--ease), background var(--fast) var(--ease);
 }
 .nav-item i { font-size: 21px; transition: transform var(--base) var(--spring); }
-.nav-item.active { background: var(--lavender); color: var(--aubergine); }
-.nav-item.active i { transform: translateY(-1px) scale(1.1); }
-.nav-item:hover:not(.active) { background: var(--bone); color: var(--aubergine); filter: none; }
+/* The selected tab is a solid ink pill — the strongest thing in the
+   nav, so where you are is never in doubt. */
+.nav-item.active { background: var(--ink-fill); color: var(--on-ink-fill); }
+.nav-item.active i { transform: translateY(-1px) scale(1.06); }
+.nav-item:hover:not(.active) { background: var(--bone); color: var(--ink); filter: none; }
+.nav-item:active:not(.active) { transform: scale(0.94); }
+/* Ember, like everything that means "there is something here now". */
 .nav-badge {
   position: absolute; top: 5px; right: 24%;
   width: 9px; height: 9px;
-  background: var(--mint); border: 2px solid var(--paper);
+  background: var(--ember); border: 2px solid var(--paper);
   border-radius: 50%;
 }
 
@@ -430,11 +558,13 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   padding: 0;
   border-radius: 50%;
   font-size: 26px;
-  background: linear-gradient(140deg, var(--violet), var(--periwinkle));
-  box-shadow: 0 8px 22px rgba(124, 107, 240, 0.42);
+  background: var(--forest);
+  color: var(--on-accent);
+  box-shadow: var(--lift-3);
   animation: popIn 0.4s var(--spring) 0.2s backwards;
 }
-.fab:hover { filter: brightness(1.05); box-shadow: 0 10px 28px rgba(124, 107, 240, 0.5); }
+.fab:hover { filter: brightness(1.08); }
+.fab:active { transform: scale(0.92); }
 
 /* =====================================================================
    LIVE RAIL — the "stories" row. Circular, horizontally scrolled, and
@@ -448,17 +578,21 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   font-size: 12px; font-weight: 700; letter-spacing: 0.06em;
   text-transform: uppercase; color: var(--fog);
 }
+/* EMBER MEANS NOW. In a green interface a green "live" badge says
+   nothing, so every right-now signal — this dot, the story ring, the
+   Live chip, hype, the unread mark — is the one warm colour, and
+   nothing else in the system is allowed to use it. */
 .live-dot {
   position: relative;
   width: 7px; height: 7px; border-radius: 50%;
-  background: var(--mint);
+  background: var(--ember);
   flex-shrink: 0;
 }
 .live-dot::after {
   content: "";
   position: absolute; inset: 0;
   border-radius: 50%;
-  background: var(--mint);
+  background: var(--ember);
   animation: livePulse 2.2s ease-out infinite;
 }
 .live-rail {
@@ -483,32 +617,37 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   animation: popIn 0.4s var(--spring) backwards;
 }
 .live-story:hover { transform: translateY(-3px); filter: none; box-shadow: none; }
+.live-story:active { transform: scale(0.93); }
 .live-story:nth-child(2) { animation-delay: 0.05s; }
 .live-story:nth-child(3) { animation-delay: 0.1s; }
 .live-story:nth-child(4) { animation-delay: 0.15s; }
 .live-story:nth-child(n+5) { animation-delay: 0.2s; }
 
 /* The ring is the signal: a live event glows, an upcoming one doesn't */
+/* The ring is the signal: live burns, upcoming is a hairline. One
+   solid colour instead of a three-stop gradient — same meaning, a
+   fraction of the paint cost with a dozen of them on screen. */
 .story-ring {
   width: 62px; height: 62px;
   border-radius: 50%;
   padding: 2.5px;
   display: flex; align-items: center; justify-content: center;
-  background: linear-gradient(140deg, var(--violet), #f472b6 55%, #ff9f68);
+  background: var(--ember);
 }
 .story-ring.upcoming { background: var(--ash); }
 .story-inner {
   width: 100%; height: 100%;
   border-radius: 50%;
   border: 2.5px solid var(--canvas);
-  background: var(--lavender);
+  background: var(--wash);
   display: flex; align-items: center; justify-content: center;
   font-size: 24px;
   overflow: hidden;
 }
 .story-label {
   width: 100%;
-  font-size: 11.5px; font-weight: 600; color: var(--aubergine);
+  font-family: var(--font-mono);
+  font-size: 10.5px; font-weight: 500; letter-spacing: 0.02em; color: var(--ink);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   text-align: center;
 }
@@ -517,15 +656,23 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
    FEED CARDS
    ===================================================================== */
 
+/* A card is lighter paper on a darker page, held by a hairline. That
+   is the whole elevation system — no shadow, which is both the look
+   these references share and one less thing for a cheap GPU to
+   rasterise sixty times down a feed. */
 .card {
   background: var(--paper);
+  border: 1.5px solid var(--ash);
   border-radius: var(--r-card);
   padding: var(--s-20);
   margin-bottom: var(--s-12);
-  box-shadow: var(--lift-1);
-  transition: box-shadow var(--base) var(--ease), transform var(--base) var(--ease);
+  box-shadow: none;
+  transition: border-color var(--base) var(--ease), transform var(--fast) var(--ease);
 }
+/* Pressing a card acknowledges the tap without moving the list. */
+.event:active { transform: scale(0.992); }
 .event { position: relative; overflow: hidden; }
+.event:hover { border-color: var(--sage); }
 .event::before {
   /* A hairline of the event's own colour down the leading edge —
      enough to make a scrolling feed read as varied, not striped. */
@@ -541,12 +688,12 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   border-radius: 50%; padding: 2px;
   background: var(--ash);
 }
-.av-ring.live { background: linear-gradient(140deg, var(--violet), #f472b6 60%, #ff9f68); }
+.av-ring.live { background: var(--ember); }
 .av-inner {
   width: 100%; height: 100%;
   border-radius: 50%;
   border: 2px solid var(--paper);
-  background: var(--lavender);
+  background: var(--wash);
   display: flex; align-items: center; justify-content: center;
   font-size: 18px; overflow: hidden;
 }
@@ -554,22 +701,37 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 
 .card-who { flex: 1; min-width: 0; }
 .who-line { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
-.who-name { font-size: 15px; font-weight: 700; color: var(--obsidian); letter-spacing: -0.025em; }
-.who-meta { font-size: 13px; color: var(--fog); }
-.who-place { font-size: 13px; color: var(--fog); display: flex; align-items: center; gap: 4px; margin-top: 1px; }
+.who-name { font-size: 14.5px; font-weight: 700; color: var(--ink); letter-spacing: -0.025em; }
+.who-meta { font-size: 11.5px; color: var(--fog); }
+.who-place {
+  font-family: var(--font-mono);
+  font-size: 11.5px; letter-spacing: 0.04em; color: var(--fog);
+  display: flex; align-items: center; gap: 4px; margin-top: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 
 .status-chip {
   flex-shrink: 0;
   display: inline-flex; align-items: center; gap: 5px;
-  padding: 5px 11px;
+  padding: 4px 10px;
   border-radius: var(--r-pill);
-  font-size: 11.5px; font-weight: 700; letter-spacing: 0.01em;
+  border: 1px solid transparent;
+  font-size: 10px; font-weight: 500;
 }
-.status-chip.live { background: rgba(46, 192, 139, 0.12); color: var(--mint-ink); }
-.status-chip.live .live-dot { width: 6px; height: 6px; }
-.status-chip.soon { background: var(--bone); color: var(--fog); }
+.status-chip.live { background: var(--ember-soft); border-color: var(--ember-line); color: var(--ember-ink); }
+.status-chip.live .live-dot { width: 5px; height: 5px; }
+.status-chip.soon { background: transparent; border-color: var(--ash); color: var(--fog); }
 
-.event-title { font-size: 19px; font-weight: 700; letter-spacing: -0.035em; line-height: 1.28; color: var(--obsidian); margin-bottom: 6px; }
+/* The title is the loudest thing on the card, and the only place the
+   display face appears in the feed. Whatever case it was typed in is
+   the case it stays in. */
+.event-title {
+  font-family: var(--font-display);
+  font-size: 21px; font-weight: var(--display-weight);
+  letter-spacing: -0.03em; line-height: 1.16;
+  color: var(--ink);
+  margin-bottom: 6px;
+}
 .event-desc-box {
   display: none;
   margin-top: var(--s-8);
@@ -579,22 +741,27 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 }
 .event.expanded .event-desc-box { display: block; }
 .read-more-btn {
-  width: auto; padding: 0; margin-top: 4px;
-  background: none; box-shadow: none;
-  font-size: 13.5px; font-weight: 600; color: var(--violet);
+  width: auto; padding: 0; margin-top: 6px;
+  background: none; border: none; box-shadow: none;
+  font-family: var(--font-mono);
+  font-size: 11px; letter-spacing: var(--track-mono); text-transform: uppercase;
+  color: var(--forest);
+  text-decoration: underline; text-underline-offset: 3px;
 }
-.read-more-btn:hover { background: none; text-decoration: underline; transform: none; }
+.read-more-btn:hover { background: none; border: none; transform: none; filter: brightness(1.2); }
 
+/* A sticky note, not a tinted ghost: the vibe colour is the fill and
+   the ink stays the page's ink, so five different tags down a feed
+   still read as one system. */
 .vibe-chip {
-  display: inline-flex; align-items: center;
+  display: inline-flex; align-items: center; gap: 5px;
   margin-top: var(--s-12);
-  padding: 6px 12px;
+  padding: 5px 12px;
   border-radius: var(--r-pill);
-  font-size: 12.5px; font-weight: 600;
-  background: var(--bone);
-  color: var(--aubergine);
-  background: color-mix(in srgb, var(--vibe, var(--periwinkle)) 15%, transparent);
-  color: color-mix(in srgb, var(--vibe, var(--periwinkle)) 72%, var(--chip-ink));
+  font-size: 12px; font-weight: 600;
+  background: color-mix(in srgb, var(--vibe, var(--sage)) 34%, var(--paper));
+  color: var(--chip-ink);
+  border: 1px solid color-mix(in srgb, var(--vibe, var(--sage)) 52%, var(--paper));
 }
 
 /* ---- Who's going: overlapping stack, the pattern every social app uses ---- */
@@ -604,7 +771,7 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   width: 26px; height: 26px;
   border-radius: 50%;
   border: 2px solid var(--paper);
-  background: var(--lavender);
+  background: var(--wash);
   display: flex; align-items: center; justify-content: center;
   font-size: 12px; overflow: hidden;
   margin-left: -8px;
@@ -613,22 +780,25 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 .av-stack .mini:first-child { margin-left: 0; }
 .av-stack .mini:hover { transform: translateY(-2px); z-index: 2; }
 .av-stack .mini.more { background: var(--bone); color: var(--fog); font-size: 10.5px; font-weight: 700; }
-.going-text { font-size: 13.5px; color: var(--fog); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.going-text b { color: var(--aubergine); font-weight: 600; cursor: pointer; }
+.going-text { font-size: 13px; color: var(--fog); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.going-text b { color: var(--ink); font-weight: 600; cursor: pointer; }
 .going-text b:hover { text-decoration: underline; }
 
 /* ---- Capacity ---- */
 .cap-wrap { margin-top: var(--s-16); }
-.cap-head { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--fog); margin-bottom: 6px; }
+.cap-head { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--fog); margin-bottom: 7px; }
 .cap-track { width: 100%; height: 5px; background: var(--bone); border-radius: var(--r-pill); overflow: hidden; }
 .cap-fill { height: 100%; border-radius: var(--r-pill); background: var(--vibe, var(--periwinkle)); transition: width 0.5s var(--ease); }
 .cap-fill.full { background: var(--rose); }
 
 /* ---- Action bar ---- */
+/* A dotted rule, borrowed straight from Caldera. It is one property,
+   it reads as a tear-off line on a printed listing, and it separates
+   the actions from the content without adding another box. */
 .card-actions {
   display: flex; align-items: center; gap: var(--s-8);
   margin-top: var(--s-16); padding-top: var(--s-12);
-  border-top: 1px solid var(--ash);
+  border-top: 1.5px dotted var(--ash);
 }
 .act {
   width: auto; flex-shrink: 0;
@@ -639,18 +809,25 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   box-shadow: none;
 }
 .act i { font-size: 18px; }
-.act:hover { background: var(--bone); color: var(--aubergine); filter: none; transform: none; box-shadow: none; }
-.act.hyped { color: var(--rose); }
+.act:hover { background: var(--bone); color: var(--ink); filter: none; transform: none; box-shadow: none; }
+.act:active { transform: scale(0.94); }
+/* Hype is a right-now signal, so it is ember like the rest of them. */
+.act.hyped { color: var(--ember); }
 .act.hyped i { animation: hypePop 0.42s var(--spring); }
 .act.grow { flex: 1; }
 .act.primary {
-  background: var(--violet); color: var(--on-accent);
+  background: var(--forest); color: var(--on-accent);
   padding: 10px 20px;
-  box-shadow: var(--lift-1);
+  box-shadow: none;
 }
-.act.primary:hover { background: var(--violet); filter: brightness(1.06); color: var(--on-accent); transform: translateY(-1px); box-shadow: var(--lift-2); }
-.act.joined { background: var(--lavender); color: var(--aubergine); }
-.act.joined:hover { background: var(--lavender); color: var(--aubergine); }
+.act.primary:hover { background: var(--forest); filter: brightness(1.1); color: var(--on-accent); transform: none; box-shadow: none; }
+.act.primary:active { transform: scale(0.94); }
+/* Already going reads as done, not as an offer: outlined, not filled. */
+.act.joined {
+  background: transparent; color: var(--forest);
+  border: 1.5px solid var(--forest);
+}
+.act.joined:hover { background: var(--wash); color: var(--forest); }
 .act.full { background: var(--bone); color: var(--fog); }
 
 /* ---- Filters ---- */
@@ -664,18 +841,23 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   scrollbar-width: none; -ms-overflow-style: none; flex-wrap: nowrap;
 }
 .feed-filters::-webkit-scrollbar, .tag-selector::-webkit-scrollbar { display: none; }
+/* Unselected pills are outline-only so the row reads as a set of
+   options rather than a row of buttons; the chosen one goes solid
+   ink, which is the loudest state in the system after the ember. */
 .filter-pill, .tag {
   flex-shrink: 0;
-  padding: 9px 16px;
+  padding: 8px 15px;
   border-radius: var(--r-pill);
-  background: var(--paper);
+  background: transparent;
   border: 1.5px solid var(--ash);
   color: var(--fog);
-  font-size: 13.5px; font-weight: 600;
+  font-size: 13px; font-weight: 600;
   white-space: nowrap; cursor: pointer;
-  transition: all var(--fast) var(--ease);
+  transition: background var(--fast) var(--ease), border-color var(--fast) var(--ease),
+              color var(--fast) var(--ease), transform var(--fast) var(--ease);
 }
-.filter-pill:hover, .tag:hover { border-color: var(--periwinkle); color: var(--aubergine); transform: translateY(-1px); }
+.filter-pill:hover, .tag:hover { border-color: var(--sage); color: var(--ink); background: var(--bone); }
+.filter-pill:active, .tag:active { transform: scale(0.94); }
 .filter-pill.active, .tag.active {
   background: var(--ink-fill); border-color: var(--ink-fill); color: var(--on-ink-fill);
 }
@@ -683,12 +865,13 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 .empty-state {
   padding: var(--s-48) var(--s-24);
   background: var(--paper);
+  border: 1.5px dashed var(--ash);
   border-radius: var(--r-card);
-  box-shadow: var(--lift-1);
+  box-shadow: none;
   text-align: center; color: var(--fog);
   animation: rise 0.4s var(--ease);
 }
-.empty-state i { font-size: 34px; display: block; margin-bottom: var(--s-8); color: var(--periwinkle); }
+.empty-state i { font-size: 34px; display: block; margin-bottom: var(--s-8); color: var(--sage); }
 .empty-state p { margin: 0; font-size: 14.5px; }
 
 /* =====================================================================
@@ -705,7 +888,8 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   cursor: pointer;
   transition: transform var(--fast) var(--ease), box-shadow var(--fast) var(--ease), background var(--fast) var(--ease);
 }
-.chat-item:hover { transform: translateX(3px); box-shadow: var(--lift-2); }
+.chat-item:hover { transform: translateX(3px); border-color: var(--sage); }
+.chat-item:active { transform: scale(0.99); }
 .chat-avatar {
   width: 44px; height: 44px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
@@ -733,9 +917,10 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   padding: var(--s-20);
   margin-bottom: var(--s-16);
   background: var(--paper);
+  border: 1.5px solid var(--ash);
+  border-top: 3px solid var(--forest);
   border-radius: var(--r-card);
-  box-shadow: var(--lift-1);
-  border-top: 3px solid var(--periwinkle);
+  box-shadow: none;
 }
 .receipt-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-12); }
 .receipt-head b { font-size: 12px; font-weight: 700; letter-spacing: var(--track); text-transform: uppercase; color: var(--periwinkle); }
@@ -812,7 +997,7 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   transform: translateX(-50%) translateY(-10px);
   z-index: 20;
   padding: 6px 16px; border-radius: var(--r-pill);
-  background: rgba(42, 33, 64, 0.9); color: var(--on-accent);
+  background: var(--ink); color: var(--on-ink-fill);
   font-size: 12px; font-weight: 600;
   opacity: 0; pointer-events: none;
   transition: opacity var(--base) var(--ease), transform var(--base) var(--ease);
@@ -840,8 +1025,11 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   outline: none !important;
 }
 .msg-bubble.media-only { padding: 5px; background: var(--bone); }
-.msg-sent { background: var(--violet); color: var(--on-accent); align-self: flex-end; box-shadow: 0 2px 8px rgba(124, 107, 240, 0.28); }
-.msg-received { background: var(--paper); color: var(--obsidian); align-self: flex-start; box-shadow: var(--lift-1); }
+.msg-sent { background: var(--forest); color: var(--on-accent); align-self: flex-end; box-shadow: none; }
+.msg-received {
+  background: var(--paper); color: var(--obsidian); align-self: flex-start;
+  box-shadow: none; border: 1.5px solid var(--ash);
+}
 
 .msg-sent.single, .msg-sent.first { border-radius: 20px 20px 6px 20px; }
 .msg-sent.middle { border-radius: 20px 6px 6px 20px; }
@@ -1043,11 +1231,15 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   box-shadow: 0 0 0 3px var(--paper), 0 0 0 5.5px var(--periwinkle);
 }
 .profile-name-group { flex: 1; min-width: 0; }
-.profile-name-pro { font-size: 21px; font-weight: 700; letter-spacing: -0.035em; color: var(--obsidian); word-break: break-word; }
+.profile-name-pro {
+  font-family: var(--font-display);
+  font-size: 22px; font-weight: var(--display-weight);
+  letter-spacing: -0.035em; color: var(--ink); word-break: break-word;
+}
 .profile-handle-pro { font-size: 14px; color: var(--fog); }
 .profile-stats-pro { display: flex; gap: var(--s-8); }
 .profile-stats-pro.no-margin-bottom { margin-bottom: 0; }
-.stat-box-pro { flex: 1; text-align: center; padding: var(--s-12); background: var(--bone); border-radius: var(--r-sm); }
+.stat-box-pro { flex: 1; text-align: center; padding: var(--s-12); background: var(--bone); border: 1.5px solid var(--ash); border-radius: var(--r-sm); }
 .stat-num { display: block; font-size: 22px; font-weight: 700; letter-spacing: -0.03em; color: var(--aubergine); line-height: 1.2; }
 .stat-label { display: block; font-size: 12px; color: var(--fog); margin-top: 1px; }
 .hosted-events-title { font-size: 16px; font-weight: 700; margin: var(--s-24) 0 var(--s-12); }
@@ -1073,7 +1265,8 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   text-align: center;
   animation: riseIn 0.34s var(--spring);
 }
-.modal-content h3 { font-size: 20px; }
+.modal-content { border: 1.5px solid var(--ash); }
+.modal-content h3 { font-size: 21px; }
 .modal-content p { font-size: 14.5px; color: var(--fog); }
 .modal-content button { margin-bottom: var(--s-8); }
 .modal-content button:last-child { margin-bottom: 0; }
@@ -1093,7 +1286,7 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 .avatar-option.selected { background: var(--lavender); border-color: var(--violet); transform: scale(1.04); }
 
 .full-screen-view { position: fixed; inset: 0; bottom: var(--kb); z-index: 1500; display: flex; flex-direction: column; background: var(--canvas); overflow: hidden; animation: rise 0.28s var(--ease); }
-.screen-header { display: flex; align-items: center; justify-content: space-between; gap: var(--s-12); padding: var(--s-12) var(--s-16); background: var(--paper); border-bottom: 1px solid var(--ash); flex-shrink: 0; }
+.screen-header { display: flex; align-items: center; justify-content: space-between; gap: var(--s-12); padding: var(--s-12) var(--s-16); background: var(--paper); border-bottom: 1.5px solid var(--ash); flex-shrink: 0; }
 .screen-body {
   flex: 1;
   overflow-y: auto;
@@ -1103,7 +1296,13 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 .time-stack > div { min-width: 0; }
 .onboarding-screen { align-items: center; justify-content: center; text-align: center; padding: var(--s-24); }
 .onboarding-screen input { text-align: left; }
-.settings-label { display: block; margin: var(--s-16) 0 var(--s-8); font-size: 12px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--fog); }
+.settings-label {
+  display: block; margin: var(--s-20) 0 var(--s-8);
+  font-family: var(--font-mono);
+  font-size: 11px; font-weight: 500;
+  letter-spacing: var(--track-mono); text-transform: uppercase;
+  color: var(--fog);
+}
 .settings-input, .save-settings-btn { margin-bottom: var(--s-16); }
 .time-stack { display: flex; flex-direction: column; gap: var(--s-12); margin-bottom: var(--s-16); text-align: left; }
 .text-action-btn { width: auto; padding: 9px 18px; font-size: 14px; }
@@ -1164,7 +1363,7 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   .side-item.active { background: var(--lavender); color: var(--aubergine); }
   .side-item.active i { transform: scale(1.1); }
   .side-badge { width: 8px; height: 8px; margin-left: auto; background: var(--mint); border-radius: 50%; }
-  .sidebar-create { margin-top: var(--s-12); background: linear-gradient(140deg, var(--violet), var(--periwinkle)); box-shadow: 0 6px 16px rgba(124, 107, 240, 0.32); }
+  .sidebar-create { margin-top: var(--s-12); background: var(--forest); color: var(--on-accent); box-shadow: none; }
   .sidebar-foot { margin-top: auto; }
   .sidebar-me {
     display: flex; align-items: center; gap: var(--s-12);
@@ -1192,7 +1391,7 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   .rail-card:nth-child(2) { animation-delay: 0.06s; }
   .rail-card:nth-child(3) { animation-delay: 0.12s; }
   .rail-card:nth-child(4) { animation-delay: 0.18s; }
-  .rail-card.accent-dark { background: linear-gradient(150deg, var(--deep-a), var(--deep-b)); color: var(--on-accent); box-shadow: 0 8px 22px rgba(60, 49, 91, 0.28); }
+  .rail-card.accent-dark { background: var(--deep-a); color: #eef6e8; box-shadow: none; border-color: var(--deep-b); }
   .rail-card.accent-dark .rail-title, .rail-card.accent-dark .rail-note { color: rgba(255, 255, 255, 0.68); }
   .rail-card.accent-dark .rail-stat { color: var(--on-accent); }
   .rail-card.accent-lavender { background: var(--lavender); }
@@ -1312,7 +1511,7 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   position: absolute;
   top: 0; left: 0; right: 0;
   height: 96px;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--vibe, var(--periwinkle)) 13%, transparent), transparent);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--vibe, var(--sage)) 10%, transparent), transparent);
   pointer-events: none;
   z-index: 0;
 }
@@ -1325,34 +1524,38 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   top: -12px; right: -10px;
   font-size: 84px;
   line-height: 1;
-  opacity: 0.09;
+  opacity: 0.07;
   transform: rotate(14deg);
   pointer-events: none;
   z-index: 0 !important;
   transition: transform 0.5s var(--ease), opacity 0.5s var(--ease);
 }
-.event:hover .vibe-watermark { transform: rotate(6deg) scale(1.08); opacity: 0.14; }
+.event:hover .vibe-watermark { transform: rotate(6deg) scale(1.06); opacity: 0.11; }
 
 /* The leading accent bar swells on hover */
 .event::before { transition: width var(--base) var(--ease); }
 .event:hover::before { width: 6px; }
 
-/* Live events get a slowly rotating gradient edge. Falls back to a
-   static gradient border where @property isn't supported. */
+/* Live used to also outline the whole card. Between the ember chip,
+   the ember avatar ring and the ember dot in the rail, a fourth ember
+   mark around the perimeter stopped adding meaning and started making
+   every second card look like a warning. The edge is gone; the border
+   stays neutral and those three marks carry it. */
 .event.is-live { isolation: isolate; }
+.event.is-live > .live-edge { display: none; }
 .event.is-live > .live-edge {
   content: "";
   position: absolute; inset: 0;
   border-radius: inherit;
   padding: 1.6px;
-  background: linear-gradient(120deg, var(--vibe, var(--periwinkle)), #f472b6 45%, var(--violet));
+  background: var(--ember-line);
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   -webkit-mask-composite: xor;
   mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
   mask-composite: exclude;
   pointer-events: none;
   z-index: 2 !important;
-  opacity: 0.85;
+  opacity: 1;
 }
 
 /* Hype burst: little dots thrown outward on tap */
@@ -1373,17 +1576,10 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
    SECTION HEADINGS & EMPTY STATES
    ===================================================================== */
 
+/* No rule under the title. The marker wash behind one word is already
+   the emphasis, and two emphasis devices on the same four words is how
+   a heading starts to look anxious. */
 .section-head h3 { position: relative; display: inline-block; }
-.section-head h3::after {
-  content: "";
-  position: absolute;
-  left: 0; bottom: -4px;
-  height: 4px; width: 100%;
-  border-radius: var(--r-pill);
-  background: linear-gradient(90deg, var(--violet), var(--periwinkle), transparent);
-  transform-origin: left;
-  animation: sweep 0.7s var(--ease) 0.15s backwards;
-}
 @keyframes sweep { from { transform: scaleX(0); opacity: 0; } to { transform: scaleX(1); opacity: 1; } }
 
 .empty-art { width: 120px; height: 90px; margin: 0 auto var(--s-12); display: block; }
@@ -1964,13 +2160,17 @@ html:not(.kb-open) .chat-footer {
   border-radius: var(--r-pill);
   font-size: 11.5px;
   font-weight: 400;
-  background: color-mix(in srgb, var(--periwinkle) 22%, transparent);
-  color: var(--plum);
+  background: var(--bone);
+  border: 1px solid var(--ash);
+  color: var(--fog);
 }
 .trust-chip i { font-size: 13px; }
+/* Somebody already in your orbit is worth more than a neutral chip. */
 .trust-chip.in-orbit {
-  background: color-mix(in srgb, var(--mint) 18%, transparent);
-  color: var(--mint-ink);
+  background: var(--wash);
+  border-color: var(--moss);
+  color: var(--forest);
+  font-weight: 600;
 }
 
 /* ---- Search result chips ---- */
@@ -2009,7 +2209,7 @@ html:not(.kb-open) .chat-footer {
   font: inherit;
   transition: background 0.15s var(--ease), transform 0.12s var(--ease);
 }
-.stat-box-pro.tappable:hover { background: color-mix(in srgb, var(--periwinkle) 16%, var(--bone)); }
+.stat-box-pro.tappable:hover { background: var(--wash); border-color: var(--moss); }
 .stat-box-pro.tappable:active { transform: scale(0.97); }
 
 /* =====================================================================
@@ -2195,8 +2395,8 @@ html:not(.kb-open) .chat-footer {
   place-items: center;
   margin: 0 auto var(--s-16);
   color: var(--on-accent);
-  background: linear-gradient(140deg, var(--violet), var(--periwinkle) 55%, #f9a8d4);
-  box-shadow: 0 10px 26px rgba(124, 107, 240, 0.30);
+  background: var(--forest);
+  box-shadow: none;
   animation: sparkFloat 4.5s var(--ease) infinite;
 }
 @keyframes sparkFloat {
@@ -2378,7 +2578,7 @@ html:not(.kb-open) .chat-footer {
 .confirm-sheet h3 { font-size: 18px; margin-bottom: 6px; }
 .confirm-sheet p { font-size: 14px; line-height: 1.5; margin-bottom: var(--s-20); }
 .confirm-sheet button { font-size: 15px; }
-.confirm-sheet .danger-btn { background: var(--danger-fill); }
+.confirm-sheet .danger-btn { background: var(--danger-fill); color: var(--on-danger); }
 
 /* =====================================================================
    RECAP CARDS
@@ -2632,7 +2832,7 @@ html:not(.kb-open) .chat-footer {
 .type-card.selected {
   border-color: var(--violet);
   background: color-mix(in srgb, var(--periwinkle) 12%, var(--paper));
-  box-shadow: 0 0 0 3px rgba(124, 107, 240, 0.14);
+  box-shadow: var(--glow);
 }
 .type-icon {
   width: 42px; height: 42px;
@@ -2866,58 +3066,76 @@ html {
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  --aubergine:  #d9d1ff;   /* headings, strong violet text */
-  --plum:       #eeeaff;
-  --lavender:   #2c2548;   /* selected / soft violet fills */
-  --periwinkle: #9f93f4;
-  --violet:     #7c6bf0;
+  /* The same system after dark: the page goes to a deep slate-green,
+     cards to the forest slate above it, and the pale paper colour
+     becomes the text. The ember lifts a little so it still reads as
+     heat against a dark ground. */
+  --ink:        #e6f2dd;
+  --ink-deep:   #f4f9ef;
+  --forest:     #88bda4;   /* the action colour, inverted for dark */
+  --sage:       #9cb080;
+  --moss:       #88bda4;
+  --fern:       #35564a;
+  --wash:       #2f4a42;
 
-  --mint:       #3dd49c;
-  --blush:      #3a1f29;
-  --rose:       #ff7d95;
-  --buttercream:#3a3312;
-  --cornflower: #6aa0ff;
+  --ember:      #e8875c;
+  --ember-ink:  #f0a17c;
+  --ember-soft: #3a2822;
+  --ember-line: #6d4433;
 
-  --paper:      #191724;   /* cards, sheets, inputs */
-  --canvas:     #0f0d16;   /* the page */
-  --obsidian:   #eeecf5;   /* body text */
-  --fog:        #a6a3b5;   /* secondary text: 7:1 on --paper */
-  --ash:        #2e2b3c;   /* borders, dividers */
-  --bone:       #232030;   /* quiet fills */
+  --vibe-chill:  #87bccb;
+  --vibe-food:   #e0a86c;
+  --vibe-party:  #dd93a9;
+  --vibe-study:  #a0a6dd;
+  --vibe-sports: #93bd74;
 
-  --lift-1: 0 1px 2px rgba(0, 0, 0, 0.5);
-  --lift-2: 0 4px 18px rgba(0, 0, 0, 0.45);
-  --lift-3: 0 14px 36px rgba(0, 0, 0, 0.6);
-  --glow:   0 0 0 4px rgba(159, 147, 244, 0.28);
+  --paper:      #273338;   /* cards, sheets, inputs */
+  --canvas:     #1a2327;   /* the page */
+  --obsidian:   #e6f2dd;   /* body text */
+  --fog:        #a2b3aa;   /* secondary text: 6:1 on --paper */
+  --ash:        #3a4b4f;   /* borders, dividers */
+  --bone:       #2f3d41;   /* quiet fills */
 
-  --ink-fill:     #e6e0ff;
-  --on-ink-fill:  #1a1526;
-  --deep-a:       #2d2549;
-  --deep-b:       #1d1830;
-  --chip-ink:     #f6f3ff;
-  --mint-ink:     #62e0b1;
-  --butter-ink:   #f0d67a;
-  --rose-ink:     #ff9fb0;
-  --blush-hover:  #4a2633;
-  --butter-hover: #4a4218;
-  --shimmer-hi:   #2d2a3b;
-  --glass:        rgba(25, 23, 36, 0.96);
-  --glass-canvas: rgba(15, 13, 22, 0.94);
+  --mint:       #5cc79c;
+  --blush:      #3a2624;
+  --rose:       #ef8f83;
+  --buttercream:#3a3320;
+  --cornflower: #86aede;
+
+  --lift-1: 0 1px 0 rgba(0, 0, 0, 0.35);
+  --lift-2: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --lift-3: 0 14px 34px rgba(0, 0, 0, 0.6);
+  --glow:   0 0 0 3px rgba(136, 189, 164, 0.3);
+
+  --on-accent:    #14201c;
+  --on-ink-fill:  #1a2327;
+  --deep-a:       #2b5748;
+  --deep-b:       #1e3f34;
+  --chip-ink:     #eef6e8;
+  --mint-ink:     #74d2aa;
+  --butter-ink:   #e3c98a;
+  --rose-ink:     #ef9b8f;
+  --blush-hover:  #4a312e;
+  --butter-hover: #4a4128;
+  --shimmer-hi:   #324246;
+  --glass:        rgba(39, 51, 56, 0.96);
+  --glass-canvas: rgba(26, 35, 39, 0.94);
   --glass-edge:   rgba(255, 255, 255, 0.06);
   --glass-soft:   rgba(255, 255, 255, 0.06);
-  --backdrop:     rgba(4, 3, 8, 0.66);
-  --amb-1: rgba(124, 107, 240, 0.20);
-  --amb-2: rgba(244, 114, 182, 0.09);
-  --amb-3: rgba(90, 140, 255, 0.08);
-  --aura-1: rgba(124, 107, 240, 0.32);
-  --aura-2: rgba(244, 114, 182, 0.14);
-  --aura-3: rgba(90, 140, 255, 0.12);
-  --grid-dot: rgba(255, 255, 255, 0.05);
-  --toast-bg:  #ece8ff;
-  --toast-ink: #1a1526;
-  --unread-bg: rgba(124, 107, 240, 0.16);
-  --knob:        #f1eff8;
-  --danger-fill: #d24c66;              /* the lighter rose is text, not a fill */
+  --backdrop:     rgba(6, 12, 11, 0.68);
+  --amb-1: rgba(136, 189, 164, 0.14);
+  --amb-2: rgba(232, 135, 92, 0.07);
+  --amb-3: rgba(156, 176, 128, 0.08);
+  --aura-1: rgba(136, 189, 164, 0.24);
+  --aura-2: rgba(232, 135, 92, 0.12);
+  --aura-3: rgba(156, 176, 128, 0.12);
+  --grid-dot: rgba(230, 242, 221, 0.055);
+  --toast-bg:  #e6f2dd;
+  --toast-ink: #1a2327;
+  --unread-bg: rgba(136, 189, 164, 0.15);
+  --knob:        #e6f2dd;
+  --danger-fill: #b34a45;
+  --on-danger:   #fff5f3;
 }
 
 /* Light text on a dark ground reads heavier than the same weight the

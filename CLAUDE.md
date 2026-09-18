@@ -42,7 +42,7 @@ js/utils/           ui (screens/toasts/repaint registry), confirm, overlays,
                     formatters, viewport
 js/interactions/    search screen, message gestures (swipe, hold)
 firestore.rules     ~700 lines, the real access control
-test/               stub.js + smoke.mjs
+test/               stub.js + smoke.mjs + contrast.mjs
 ```
 
 ## Things that must stay true
@@ -110,6 +110,38 @@ test/               stub.js + smoke.mjs
   functions, no imports: 6h + 8h x log2(1 + guests + hype/2), capped at
   48h; your own events stay 24h for you. Change the numbers there and in
   the smoke cases, nowhere else.
+- **The look is one system, and it has three rules.** `style.css`
+  opens with them; this is the short version.
+
+  1. *The canvas is never white.* The page is pale green paper
+     (`--canvas`) and cards sit LIGHTER on it (`--paper`), held by a
+     1.5px `--ash` hairline. Nothing casts a shadow except the things
+     that genuinely float: modals, sheets, the toast, the bottom nav,
+     the FAB. `--lift-1` and `--lift-2` are nearly nothing on purpose —
+     if a new surface needs separating, give it a border, not a shadow.
+  2. *Three voices, and nothing is set in the wrong one.*
+     `--font-display` (Archivo 800) for screen titles, event titles and
+     names; `--font` (Inter) for everything functional; `--font-mono`
+     (the system mono, no download) for metadata — times, counts,
+     states, form labels. A screen title is never Inter and a
+     timestamp is never anything but mono. Screen titles are uppercase
+     because they are OUR words; anything a student typed keeps the
+     case they typed it in.
+  3. *Ember means now, and nothing else may use it.* The greens are
+     the whole interface, so a green "live" badge would say nothing.
+     `--ember` is reserved for right-now: the live dot, the live ring,
+     the LIVE chip, hype, the unread mark. Two embers exist because one
+     colour cannot do both jobs — `--ember` is the FILL, `--ember-ink`
+     is what you READ (the fill is only 3.3:1 on the chip's
+     background). If you are about to use ember for anything that
+     isn't happening this minute, use `--sage` or `--forest` instead.
+
+  One more thing, load-bearing: **the violet-era token names are
+  aliases now.** `--violet`, `--aubergine`, `--periwinkle`,
+  `--lavender` and `--plum` point at `--forest`, `--ink`, `--sage`,
+  `--wash` and `--ink-deep`, because they are used in hundreds of rules
+  and in JS templates and renaming them all was a worse risk than the
+  confusing names. New code uses the real names.
 - **Blocking is total.** Filter `isBlocked` everywhere — lists, counts,
   the feed, vouches. A count that disagrees with the list under it is a bug.
 
@@ -165,7 +197,14 @@ startAfter), batches that really apply, and counters on `window.__reads` /
 ```
 python3 -m http.server 8111        # from the repo root
 node test/smoke.mjs                # CHROME_PATH=... if playwright has no browser
+node test/contrast.mjs             # no browser, no network — just the palette
 ```
+
+`contrast.mjs` reads the colour tokens straight out of `style.css` and
+checks every text-on-surface pair in both themes against WCAG. The
+palette is a family of greens, so every pair is close together and it
+is easy to pick two that look fine on a laptop and vanish on a cheap
+phone in daylight. It has already caught two.
 
 Useful handles inside a page: `window.__m` (the modules), `window.__events`
 + `window.__fireEvents()`, `window.__orbit` + `window.__fireOrbit()`,
@@ -248,10 +287,16 @@ something breaks.
   the profile document, so they cost no extra reads.
 - **Dark mode is tokens, not overrides.** Colours come from `:root` in
   `style.css`; `:root[data-theme="dark"]` swaps them. Never write a
-  literal colour in CSS or a JS template — add a role token (`--on-accent`
-  for text on a violet fill, `--ink-fill` for a strong neutral fill,
-  `--glass`, `--mint-ink`...) with a value in both blocks. `--paper` is a
-  surface, never a text colour. The choice is per device
+  literal colour in CSS or a JS template — add a role token
+  (`--on-accent` for text on the forest fill, `--on-danger` for a label
+  on a delete button, `--ink-fill` for a strong neutral fill,
+  `--glass`, `--ember-ink`...) with a value in both blocks. `--paper`
+  is a surface, never a text colour. A role token whose value has to
+  flip meaning between themes needs its OWN token: `--on-accent` is
+  light in light mode and DARK in dark mode, because it sits on deep
+  forest and then on pale moss — which is exactly why a delete button
+  cannot borrow it. Run `node test/contrast.mjs` after touching any
+  colour. The choice is per device
   (`livesociya.theme`: system/light/dark, `js/utils/theme.js`), painted
   before CSS by an inline script in `<head>`, and kept across logout.
 - **Overlays go through `js/utils/overlays.js`**, which backs them with
@@ -267,8 +312,8 @@ approval, rate limits, the icebreaker, the day-one empty state, public /
 private chosen at sign-up (and asked once of older accounts), remove a
 follower, going public lets waiting requests in, dark mode, editing and
 taking back a message (hold a bubble, or right-click on a desktop),
-reactions, a host's pinned message in an event chat, and the Recap
-receipt.
+reactions, a host's pinned message in an event chat, the Recap
+receipt, and the sage-on-paper redesign.
 
 Not built, roughly in the order I'd do them: push notifications (needs
 Blaze — and it is the ceiling on everything else, since a live event
