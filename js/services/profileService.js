@@ -576,7 +576,7 @@ export async function saveProfileData() {
     applyAvatarEverywhere(avatar);
 
     if (btn) {
-      btn.style.background = "var(--periwinkle)";
+      btn.style.background = "var(--sage)";
       btn.innerHTML = `<i class='bx bx-check'></i> Saved!`;
       setTimeout(() => {
         btn.style.background = "";

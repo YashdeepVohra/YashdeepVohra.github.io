@@ -357,7 +357,7 @@ async function runHandleCheck() {
 
   // The button's look comes from `disabled` and the base stylesheet.
   // It used to be painted by hand, and the "you can have it" colour was
-  // --lavender — a pale lilac behind white text, which read as MORE
+  // --wash — a pale lilac behind white text, which read as MORE
   // disabled than the disabled state. Nothing here sets a colour now.
   const say = (text, tone) => {
     status.innerText = text;

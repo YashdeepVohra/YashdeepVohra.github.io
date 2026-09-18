@@ -136,12 +136,11 @@ test/               stub.js + smoke.mjs + contrast.mjs
      background). If you are about to use ember for anything that
      isn't happening this minute, use `--sage` or `--forest` instead.
 
-  One more thing, load-bearing: **the violet-era token names are
-  aliases now.** `--violet`, `--aubergine`, `--periwinkle`,
-  `--lavender` and `--plum` point at `--forest`, `--ink`, `--sage`,
-  `--wash` and `--ink-deep`, because they are used in hundreds of rules
-  and in JS templates and renaming them all was a worse risk than the
-  confusing names. New code uses the real names.
+  The spine is `--ink`, `--ink-deep`, `--forest`, `--sage`, `--moss`,
+  `--fern`, `--wash` and `--ember`. There is no `--violet`,
+  `--aubergine`, `--periwinkle`, `--lavender` or `--plum` — they were
+  briefly kept as aliases during the redesign and are gone. If you find
+  one in a branch, it is stale.
 - **Blocking is total.** Filter `isBlocked` everywhere — lists, counts,
   the feed, vouches. A count that disagrees with the list under it is a bug.
 
@@ -227,6 +226,19 @@ something breaks.
   exists before using it. Anything load-bearing (the brand mark, the hype
   flame, arrows) is inline SVG now, because an icon font that fails to
   load leaves an invisible control.
+- **Renaming a token renames its own definition too.** The sweep that
+  retired the violet-era names turned `--aubergine: var(--ink)` into
+  `--ink: var(--ink)` — a self-reference, which makes the token
+  invalid and would have taken the text colour out of the entire app.
+  It was caught because the alias block was deleted in the same pass
+  and checked; if you ever do this again, grep for
+  `^\s*--([a-z0-9-]+):\s*var\(--\1\)` afterwards.
+- **A rename is provable, so prove it.** `node snap.mjs` style
+  screenshots (fixed clock, animations off, both themes, every screen)
+  taken before and after must be BYTE-identical — a pure rename cannot
+  move a pixel. Run the snapshot twice against unchanged code first, to
+  show the harness itself is deterministic; otherwise the comparison
+  means nothing. That is how the 134-replacement rename was signed off.
 - **Specificity beats source order.** `.empty-state p { margin: 0 }` quietly
   outranked a later `.starter-foot` rule. It bites from the other side
   too: `.modal-content { text-align: center }` and

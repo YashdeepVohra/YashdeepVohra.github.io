@@ -372,17 +372,17 @@ const VIBE = {
   "📚 Study":  "var(--vibe-study)",
   "🏀 Sports": "var(--vibe-sports)"
 };
-export const vibeColor = (tag) => VIBE[tag] || "var(--periwinkle)";
+export const vibeColor = (tag) => VIBE[tag] || "var(--sage)";
 
 // Drawn rather than an icon font: it carries the palette and can move.
 const EMPTY_ART = `
   <svg class="empty-art" viewBox="0 0 120 90" fill="none" aria-hidden="true">
-    <ellipse cx="60" cy="78" rx="34" ry="5" fill="var(--periwinkle)" opacity="0.25"/>
+    <ellipse cx="60" cy="78" rx="34" ry="5" fill="var(--sage)" opacity="0.25"/>
     <g class="float-a">
-      <rect x="34" y="24" width="52" height="40" rx="12" fill="var(--paper)" stroke="var(--periwinkle)" stroke-width="2"/>
-      <circle cx="49" cy="42" r="3.4" fill="var(--periwinkle)"/>
-      <circle cx="71" cy="42" r="3.4" fill="var(--periwinkle)"/>
-      <path d="M50 53c4 4 16 4 20 0" stroke="var(--periwinkle)" stroke-width="2" stroke-linecap="round"/>
+      <rect x="34" y="24" width="52" height="40" rx="12" fill="var(--paper)" stroke="var(--sage)" stroke-width="2"/>
+      <circle cx="49" cy="42" r="3.4" fill="var(--sage)"/>
+      <circle cx="71" cy="42" r="3.4" fill="var(--sage)"/>
+      <path d="M50 53c4 4 16 4 20 0" stroke="var(--sage)" stroke-width="2" stroke-linecap="round"/>
     </g>
     <g class="float-b">
       <circle cx="24" cy="26" r="6" fill="var(--vibe-food)" opacity="0.5"/>
@@ -1202,7 +1202,7 @@ function burstFrom(el) {
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
   const r = el.getBoundingClientRect();
-  const colors = ["var(--vibe-party)", "var(--vibe-food)", "var(--violet)", "var(--periwinkle)", "var(--vibe-sports)"];
+  const colors = ["var(--vibe-party)", "var(--vibe-food)", "var(--forest)", "var(--sage)", "var(--vibe-sports)"];
 
   for (let i = 0; i < 7; i++) {
     const dot = document.createElement("span");
