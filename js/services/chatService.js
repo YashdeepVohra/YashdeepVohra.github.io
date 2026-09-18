@@ -19,6 +19,11 @@ import { auth, db, FieldValue } from '../config/firebase.js';
 import { state } from '../state/store.js';
 import { renderAvatar, formatTime, formatMessage, escapeHtml, safeId } from '../utils/formatters.js';
 import { switchScreen, showTab, showNotification, toggleTime, toast } from '../utils/ui.js';
+import { askConfirm } from '../utils/confirm.js';
+import { openOverlay, closeOverlay, isOverlayOpen } from '../utils/overlays.js';
+import {
+  isDeleted, isEdited, canEdit, canRetract, messageActions, editWindowLabel
+} from './messageRules.js';
 import { openProfileScreen } from './profileService.js';
 import { isBlocked } from './blockService.js';
 import { searchPeople } from './searchService.js';
@@ -30,10 +35,17 @@ import {
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 // Only the newest messages get a live listener. Older ones are fetched
-// once, on demand, when you scroll back — messages are immutable, so
-// they never need watching. Opening a conversation used to cost 300
-// reads, then 60; now it costs 25, and you only pay for history you
-// actually look at.
+// once, on demand, when you scroll back. Opening a conversation used
+// to cost 300 reads, then 60; now it costs 25, and you only pay for
+// history you actually look at.
+//
+// Messages are near enough immutable for that to hold: the only
+// writes to one are its sender's own edit or retraction, and when
+// those land on a message outside the live window we patch the copy
+// on screen ourselves (patchLocalMessage) rather than widen the
+// listener, which would re-read the whole thread. The other person
+// sees it on their next open. That is the price of not paying for a
+// listener over history nobody is looking at.
 const LIVE_WINDOW = 25;
 const OLDER_PAGE = 25;
 
@@ -96,6 +108,7 @@ export function openChat(chatId, otherUid) {
   state.currentOtherUid = otherUid;
   state.currentChatType = "direct";
   state.replyingToMessage = null;
+  state.editingMessage = null;
 
   const hAvatar = document.getElementById("chatHeaderAvatar");
   const hTitle = document.getElementById("chatWithTitle");
@@ -162,6 +175,7 @@ export function openEventChat(eventId) {
   state.currentChatInitiatorUid = "";
   state.currentChatData = null;
   state.replyingToMessage = null;
+  state.editingMessage = null;
 
   const hAvatar = document.getElementById("chatHeaderAvatar");
   const hTitle = document.getElementById("chatWithTitle");
@@ -231,6 +245,8 @@ export function closeChat({ silent = false } = {}) {
   state.currentEventData = null;
   state.currentOtherUid = "";
   state.replyingToMessage = null;
+  state.editingMessage = null;
+  closeMessageActions();
 
   document.querySelector(".topbar")?.classList.remove("hidden");
   if (!silent) switchScreen("home");
@@ -240,6 +256,10 @@ export function closeChat({ silent = false } = {}) {
 export async function sendMessage() {
   const input = document.getElementById("msgInput");
   if (!input || !auth.currentUser) return;
+
+  // Same box, same Enter key — but if the composer is in edit mode it
+  // is rewriting something already sent, not adding to the thread.
+  if (state.editingMessage) return commitEdit();
 
   const text = input.value.trim();
   if (!text || !state.currentChat) return;
@@ -392,6 +412,8 @@ export function stopTyping() {
 
 // ---------- Replies ----------
 export function initiateReply(senderUid, text, time) {
+  if (!text) return;            // a retracted message has nothing to quote
+  state.editingMessage = null;  // the two composer modes are exclusive
   state.replyingToMessage = { senderUid, text, time };
   updateChatFooterUI();
   setTimeout(() => {
@@ -407,6 +429,254 @@ export function cancelReply() {
   state.replyingToMessage = null;
   updateChatFooterUI();
   document.getElementById("msgInput")?.focus();
+}
+
+// ---------- Editing, and taking a message back ----------
+//
+// One message at a time, held here in `actionTargetId` instead of
+// being passed through markup — so the sheet's buttons carry an action
+// name and nothing else: no ids, and certainly no message text.
+//
+// The two things you can do are deliberately not symmetrical. An edit
+// has 15 minutes on it and always leaves "edited" behind; a deletion
+// has no clock but leaves the bubble in place, reading "This message
+// was deleted". js/services/messageRules.js says why, and
+// firestore.rules enforces both — the sheet only decides what to
+// offer.
+
+let actionTargetId = "";
+
+/** The copy of a message we have on screen: live window or history. */
+function findMessage(id) {
+  if (!id) return null;
+  return state.olderMessages.concat(state.liveMessages).find((m) => m.id === id) || null;
+}
+
+/**
+ * Apply a change to the copy on screen and repaint without moving the
+ * view.
+ *
+ * Inside the live window the listener would do this a moment later
+ * anyway, and doing it here is what makes the tap feel instant. For an
+ * older message — fetched once with get(), never watched — this is the
+ * only thing that updates it.
+ */
+function patchLocalMessage(id, fields) {
+  let found = false;
+  [state.olderMessages, state.liveMessages].forEach((list) => {
+    const m = list.find((x) => x.id === id);
+    if (m) { Object.assign(m, fields); found = true; }
+  });
+  if (!found) return;
+
+  const box = document.getElementById("messages");
+  const keepScroll = box
+    ? { heightBefore: box.scrollHeight, topBefore: box.scrollTop }
+    : null;
+  renderMessages(state.olderMessages.concat(state.liveMessages), { keepScroll });
+}
+
+const ACTION_LABELS = {
+  reply:  { icon: "bx-reply",    label: "Reply" },
+  copy:   { icon: "bx-copy",     label: "Copy text" },
+  edit:   { icon: "bx-edit-alt", label: "Edit" },
+  delete: { icon: "bx-trash",    label: "Delete", danger: true }
+};
+
+/** Built here rather than in index.html, the same way confirm.js does. */
+function actionSheetEl() {
+  let el = document.getElementById("msgActionSheet");
+  if (el) return el;
+
+  el = document.createElement("div");
+  el.id = "msgActionSheet";
+  el.className = "modal-overlay hidden";
+  el.innerHTML = `
+    <div class="modal-content action-sheet">
+      <div class="action-quote" id="msgActionQuote"></div>
+      <div class="action-list" id="msgActionList"></div>
+      <button class="btn-ghost" data-act="cancel">Cancel</button>
+    </div>`;
+  el.addEventListener("click", (e) => {
+    if (e.target === el) return closeMessageActions();
+    const btn = e.target.closest("[data-act]");
+    if (btn) runMessageAction(btn.getAttribute("data-act"));
+  });
+  document.body.appendChild(el);
+  return el;
+}
+
+/** Opened by a long press, or a right-click on a desktop. */
+export function openMessageActions(messageId) {
+  if (isOverlayOpen("msgActionSheet")) return;
+
+  const msg = findMessage(messageId);
+  const acts = messageActions(msg, state.uid);
+  if (!acts.length) return;          // nothing to offer on a tombstone
+
+  actionTargetId = messageId;
+  actionSheetEl();
+
+  // innerText, not innerHTML — this is somebody's own words.
+  const quote = document.getElementById("msgActionQuote");
+  if (quote) quote.innerText = String(msg.text || "").slice(0, 140);
+
+  const list = document.getElementById("msgActionList");
+  if (list) {
+    list.innerHTML = acts.map((key) => {
+      const a = ACTION_LABELS[key];
+      const note = key === "edit" ? editWindowLabel(msg) : "";
+      return `
+        <button class="action-row ${a.danger ? "danger" : ""}" data-act="${key}">
+          <i class='bx ${a.icon}'></i>
+          <span>${a.label}</span>
+          ${note ? `<em>${escapeHtml(note)}</em>` : ""}
+        </button>`;
+    }).join("");
+  }
+
+  openOverlay("msgActionSheet", { onClose: () => { actionTargetId = ""; } });
+}
+
+export function closeMessageActions() {
+  if (isOverlayOpen("msgActionSheet")) closeOverlay("msgActionSheet");
+}
+
+function runMessageAction(key) {
+  const id = actionTargetId;
+  const msg = findMessage(id);
+  // Close first: askConfirm opens a layer of its own, and the overlay
+  // stack is happier with one out before the next goes in.
+  closeMessageActions();
+  if (!msg || key === "cancel") return;
+
+  if (key === "reply") return initiateReply(msg.senderUid, String(msg.text || ""), msg.time);
+  if (key === "copy") return copyMessageText(msg);
+  if (key === "edit") return startEditMessage(id);
+  if (key === "delete") return confirmRetractMessage(id);
+}
+
+/** The async clipboard needs a secure context; the old way always works. */
+async function copyMessageText(msg) {
+  const text = String(msg.text || "");
+  if (!text) return;
+
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const pad = document.createElement("textarea");
+      pad.value = text;
+      pad.setAttribute("readonly", "");
+      pad.style.cssText = "position:fixed;top:-1000px;opacity:0;";
+      document.body.appendChild(pad);
+      pad.select();
+      document.execCommand("copy");
+      pad.remove();
+    }
+    toast("Copied.");
+  } catch (e) {
+    toast("Couldn't copy that.");
+  }
+}
+
+export function startEditMessage(messageId) {
+  const msg = findMessage(messageId);
+  if (!canEdit(msg, state.uid)) return toast("The 15 minutes to edit that are up.");
+
+  state.replyingToMessage = null;
+  state.editingMessage = { id: msg.id, text: String(msg.text || ""), time: msg.time };
+
+  const input = document.getElementById("msgInput");
+  if (input) {
+    input.value = state.editingMessage.text;
+    // Caret at the end, not the start — you are almost always fixing
+    // the last few characters.
+    setTimeout(() => {
+      input.focus();
+      try { input.setSelectionRange(input.value.length, input.value.length); } catch (e) {}
+    }, 50);
+  }
+  updateChatFooterUI();
+}
+
+export function cancelEdit() {
+  state.editingMessage = null;
+  const input = document.getElementById("msgInput");
+  if (input) input.value = "";
+  updateChatFooterUI();
+  input?.focus();
+}
+
+/** Send, when the composer is in edit mode. */
+async function commitEdit() {
+  const input = document.getElementById("msgInput");
+  const target = state.editingMessage;
+  if (!input || !target) return;
+
+  const text = input.value.trim();
+  if (!text) return toast("An empty message isn't an edit — delete it instead.");
+  if (text.length > 2000) return toast("That message is too long.");
+  if (text === target.text) return cancelEdit();
+
+  // The window can close while the box is open.
+  const current = findMessage(target.id) || target;
+  if (!canEdit(current, state.uid)) {
+    cancelEdit();
+    return toast("The 15 minutes to edit that are up.");
+  }
+
+  // The chat can change under a slow write, so pin down which one.
+  const chatId = state.currentChat;
+  const type = state.currentChatType;
+  const before = { text: current.text, editedAt: current.editedAt };
+  const after = { text, editedAt: Date.now() };
+
+  input.value = "";
+  state.editingMessage = null;
+  updateChatFooterUI();
+  patchLocalMessage(target.id, after);
+
+  try {
+    await messagesRef(chatId, type).doc(target.id).update(after);
+  } catch (e) {
+    console.error("Edit failed:", e.code || e.message);
+    patchLocalMessage(target.id, before);
+    toast(e.code === "permission-denied"
+      ? "The 15 minutes to edit that are up."
+      : "Couldn't save that edit.");
+  }
+}
+
+async function confirmRetractMessage(messageId) {
+  const msg = findMessage(messageId);
+  if (!canRetract(msg, state.uid)) return;
+
+  const yes = await askConfirm({
+    title: "Delete this message?",
+    body: "Both of you will see “This message was deleted” in its place. It can't be undone.",
+    confirm: "Delete",
+    cancel: "Keep it",
+    danger: true
+  });
+  if (!yes) return;
+
+  const chatId = state.currentChat;
+  const type = state.currentChatType;
+  const before = { text: msg.text, replyTo: msg.replyTo || null, deleted: false, deletedAt: null };
+  // The quoted reply goes too: a tombstone that still quotes somebody
+  // is half a message, and it is the half you didn't mean to keep.
+  const tomb = { text: "", replyTo: null, deleted: true, deletedAt: Date.now() };
+
+  patchLocalMessage(messageId, tomb);
+
+  try {
+    await messagesRef(chatId, type).doc(messageId).update(tomb);
+  } catch (e) {
+    console.error("Delete failed:", e.code || e.message);
+    patchLocalMessage(messageId, before);
+    toast("Couldn't delete that message.");
+  }
 }
 
 export function scrollToMessage(time) {
@@ -427,6 +697,13 @@ export function scrollToMessage(time) {
  * element, so no user text is ever interpolated into the onclick markup.
  */
 export function handleMessageTap(event, element) {
+  // A long press opens the sheet and the browser then sends the click
+  // on the way up. Swallow exactly that one.
+  if (state.suppressNextTap) {
+    state.suppressNextTap = false;
+    return;
+  }
+
   const replyBox = event.target.closest(".msg-replied-to");
   if (replyBox) {
     const targetTime = replyBox.getAttribute("data-target-time");
@@ -440,6 +717,7 @@ export function handleMessageTap(event, element) {
 
   if (tapLength < 300 && tapLength > 0) {
     event.preventDefault();
+    if (element.getAttribute("data-deleted") === "1") return;
     initiateReply(
       element.getAttribute("data-sender-uid"),
       decodeURIComponent(element.getAttribute("data-text") || ""),
@@ -608,20 +886,47 @@ export function updateChatFooterUI() {
   previewContainer.classList.toggle("hidden", lockedOut);
   if (lockedOut) return;
 
-  if (state.replyingToMessage) {
+  // The composer is in one of three modes, and the note above it says
+  // which: writing something new, quoting, or rewriting.
+  const sendIcon = inputWrapper.querySelector("button i");
+  inputWrapper.classList.toggle("editing", !!state.editingMessage);
+  if (sendIcon) {
+    sendIcon.className = state.editingMessage ? "bx bx-check" : "bx bxs-send";
+  }
+
+  if (state.editingMessage) {
+    previewContainer.innerHTML = composeNote({
+      icon: "bx-edit-alt",
+      title: "Editing message",
+      body: state.editingMessage.text,
+      cancel: "window.cancelEdit()",
+      variant: "editing"
+    });
+  } else if (state.replyingToMessage) {
     const name = state.replyingToMessage.senderUid === state.uid
       ? "Yourself"
       : displayNameFor(state.replyingToMessage.senderUid);
-    previewContainer.innerHTML = `
-      <div style="background: var(--bone); border-left: 2px solid var(--periwinkle); padding: 10px 16px; border-radius: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
-        <div style="font-size: 14px; font-weight: 350; color: var(--aubergine); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;">
-          <b>Replying to ${escapeHtml(name)}:</b><br>${escapeHtml(state.replyingToMessage.text)}
-        </div>
-        <div onclick="window.cancelReply()" style="cursor: pointer; margin-left: 10px; font-size: 20px;"><i class='bx bx-x'></i></div>
-      </div>`;
+    previewContainer.innerHTML = composeNote({
+      icon: "bx-reply",
+      title: "Replying to " + name,
+      body: state.replyingToMessage.text,
+      cancel: "window.cancelReply()"
+    });
   } else {
     previewContainer.innerHTML = "";
   }
+}
+
+/** The little bar above the input. Text in, escaped, no colours here. */
+function composeNote({ icon, title, body, cancel, variant = "" }) {
+  return `
+    <div class="compose-note ${variant}">
+      <div class="compose-note-body">
+        <b><i class='bx ${icon}'></i>${escapeHtml(title)}</b>
+        <span>${escapeHtml(body)}</span>
+      </div>
+      <div class="compose-note-x" onclick="${cancel}" role="button" aria-label="Cancel">×</div>
+    </div>`;
 }
 
 // ---------- Message stream ----------
@@ -714,23 +1019,46 @@ function renderMessages(msgs, { keepScroll = null } = {}) {
     const sameNext = next && next.senderUid === m.senderUid;
     const shape = samePrev && sameNext ? "middle" : !samePrev && sameNext ? "first" : samePrev && !sameNext ? "last" : "single";
 
-    const rawText = String(m.text || "").trim();
+    // A retracted message keeps its place in the thread as a tombstone.
+    // Nothing about it is interactive any more: no quoted reply, no
+    // swipe, no long press, no text to copy.
+    const gone = isDeleted(m);
+    const rawText = gone ? "" : String(m.text || "").trim();
     const encodedText = encodeURIComponent(rawText);
-    const isMediaOnly =
+    const isMediaOnly = !gone &&
       /^https?:\/\/[^\s]+$/.test(rawText) &&
       /(youtube\.com|youtu\.be|open\.spotify\.com)/.test(rawText);
 
     // ---- Quoted reply ----
     let replyBlock = "";
-    if (m.replyTo) {
+    if (m.replyTo && !gone) {
       const replyName = m.replyTo.senderUid === state.uid ? "You" : displayNameFor(m.replyTo.senderUid);
       const timeAttr = m.replyTo.time ? `data-target-time="${escapeHtml(m.replyTo.time)}"` : "";
       replyBlock = `<div class="msg-replied-to" ${timeAttr}><b>${escapeHtml(replyName)}:</b> ${escapeHtml(m.replyTo.text)}</div>`;
     }
 
-    const swipeIconHTML = isMe
-      ? `<div class="swipe-reply-icon right"><i class='bx bx-reply' style="transform: scaleX(-1);"></i></div>`
-      : `<div class="swipe-reply-icon left"><i class='bx bx-reply'></i></div>`;
+    const swipeIconHTML = gone
+      ? ""
+      : isMe
+        ? `<div class="swipe-reply-icon right"><i class='bx bx-reply' style="transform: scaleX(-1);"></i></div>`
+        : `<div class="swipe-reply-icon left"><i class='bx bx-reply'></i></div>`;
+
+    // "edited" rides inside the bubble, where it is read as part of
+    // the message. An embed-only bubble has no room, so its tag goes
+    // on the timestamp line instead.
+    const edited = isEdited(m);
+    const editedTag = edited && !isMediaOnly
+      ? `<span class="msg-edited">edited</span>`
+      : "";
+
+    const bodyHTML = gone
+      ? `<span class="msg-gone"><i class='bx bx-block'></i>This message was deleted</span>`
+      : formatMessage(rawText, isMediaOnly);
+
+    // Tapping shows when it was sent — and, if it was rewritten, when.
+    const timeLine = edited
+      ? `${escapeHtml(formatTime(m.time))} \u00b7 edited ${escapeHtml(formatTime(m.editedAt))}`
+      : escapeHtml(formatTime(m.time));
 
     // ---- Sender label in event chats ----
     let nameTagHTML = "";
@@ -747,17 +1075,20 @@ function renderMessages(msgs, { keepScroll = null } = {}) {
       <div id="msg-${escapeHtml(m.time)}" class="msg-wrapper" style="animation-delay:${enterDelay}s;"
            data-sender-uid="${escapeHtml(m.senderUid)}"
            data-time="${escapeHtml(m.time)}"
+           data-msg-id="${safeId(m.id)}"
            data-text="${escapeHtml(encodedText)}"
+           data-deleted="${gone ? "1" : ""}"
            data-align="${isMe ? "end" : "start"}"
            onclick="window.handleMessageTap(event, this)">
         ${swipeIconHTML}
         ${nameTagHTML}
-        <div class="${isMediaOnly ? "msg-bubble media-only" : "msg-bubble"} ${isMe ? "msg-sent" : "msg-received"} ${shape}">
+        <div class="${isMediaOnly ? "msg-bubble media-only" : "msg-bubble"} ${gone ? "msg-gone-bubble" : ""} ${isMe ? "msg-sent" : "msg-received"} ${shape}">
            ${replyBlock}
-           ${formatMessage(rawText, isMediaOnly)}
+           ${bodyHTML}
+           ${editedTag}
         </div>
         <div class="msg-time" style="text-align: ${isMe ? "right" : "left"}">
-           ${formatTime(m.time)}
+           ${timeLine}
         </div>
       </div>`;
 

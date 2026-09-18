@@ -35,10 +35,11 @@ js/app.js           entry: imports, window bindings, boot, back button
 js/config/          firebase init + offline persistence
 js/state/store.js   one mutable object, plus resetState() on logout
 js/services/        auth, events, chat, profile, follow, orbit, block,
-                    search, user, limits
+                    search, user, limits — plus the pure rule files
+                    recapRules, aboutRules, messageRules
 js/utils/           ui (screens/toasts/repaint registry), confirm, overlays,
                     formatters, viewport
-js/interactions/    search screen, swipe-to-reply
+js/interactions/    search screen, message gestures (swipe, hold)
 firestore.rules     ~700 lines, the real access control
 test/               stub.js + smoke.mjs
 ```
@@ -57,6 +58,24 @@ test/               stub.js + smoke.mjs
 - **`allow get` and `allow list` are different.** A list rule is checked
   against the *query*, before documents are read, so it must mirror the
   query's own constraint. Splitting these is what fixed chats not appearing.
+- **What you may still do to a message you sent is
+  `js/services/messageRules.js`.** Two shapes, and only two: an EDIT,
+  which has 15 minutes on it and always leaves "edited" on the bubble,
+  and a RETRACTION, which has no clock but leaves the bubble in place
+  reading "This message was deleted". The 15 minutes is mirrored in
+  `firestore.rules` (`messageEditWindow`) — change it in both or the
+  app will offer an edit the server then refuses. The rules enforce
+  both shapes with `hasOnly()`, so `senderUid`, `time` and the quoted
+  reply still cannot move, and `deleted` is one-way.
+
+  A tombstone, not a real delete, because a message that can vanish is
+  a way out of the icebreaker: send your one opening message, delete
+  it, send another. `icebreakerUsed` is one-way so the rules refuse the
+  second message anyway — but the client decides whether to lock the
+  box by counting messages on screen, and a row that disappears makes
+  that count lie. The host's delete on an event message is still a real
+  delete: moderation is not the same act as taking back your own words,
+  and a tombstone over a slur is a worse outcome than a gap.
 - **How long Recap keeps an event is `js/services/recapRules.js`.** Pure
   functions, no imports: 6h + 8h x log2(1 + guests + hype/2), capped at
   48h; your own events stay 24h for you. Change the numbers there and in
@@ -138,12 +157,26 @@ something breaks.
   flame, arrows) is inline SVG now, because an icon font that fails to
   load leaves an invisible control.
 - **Specificity beats source order.** `.empty-state p { margin: 0 }` quietly
-  outranked a later `.starter-foot` rule.
+  outranked a later `.starter-foot` rule. It bites from the other side
+  too: `.modal-content { text-align: center }` and
+  `.modal-content button { margin-bottom: 8px }` outrank a plain
+  `.action-row` wherever you put it, which is why the message sheet is
+  written as `.modal-content.action-sheet` and `.action-sheet
+  .action-row`.
 - **Zoom is switched off on purpose** (the user's call): viewport meta
   `maximum-scale=1, user-scalable=no`, `touch-action: pan-x pan-y` on
   `html`, and `lockZoom()` in `utils/viewport.js` for iOS, which ignores
   both. Inputs stay 16px on `(pointer: coarse)` anyway — belt and braces
   against iOS focus-zoom.
+- **Messages are not quite immutable any more, and the live window is
+  why that matters.** Only the newest 25 have a listener; older pages
+  are fetched once with `get()` and never watched. So when you edit or
+  retract a message that has scrolled out of that window,
+  `patchLocalMessage` updates the copy on screen itself — there is no
+  listener to do it. The other person sees the change the next time
+  they open the chat. Widening the listener to fix that would re-read
+  the whole thread on every change, which is the cost the window
+  exists to avoid.
 - **The feed is diffed, not rebuilt.** `syncList` replaces only cards whose
   markup changed. Rebuilding replayed the entry animation on every card,
   which read as the card vanishing. Don't reintroduce `innerHTML =` there.
@@ -200,7 +233,8 @@ and reporting, request-to-join, host moderation, search, Orbit (mutual
 connections + vouches), follow/followers with private accounts and
 approval, rate limits, the icebreaker, the day-one empty state, public /
 private chosen at sign-up (and asked once of older accounts), remove a
-follower, going public lets waiting requests in.
+follower, going public lets waiting requests in, dark mode, editing and
+taking back a message (hold a bubble, or right-click on a desktop).
 
 Not built, roughly in the order I'd do them: push notifications (needs
 Blaze), share links for an event, report triage for the admin.

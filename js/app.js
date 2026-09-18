@@ -63,7 +63,10 @@ import {
   sendMessage,
   handleTyping,
   cancelReply,
+  cancelEdit,
   handleMessageTap,
+  openMessageActions,
+  closeMessageActions,
   onInboxSearch,
   clearInboxSearch
 } from './services/chatService.js';
@@ -232,7 +235,10 @@ Object.assign(window, {
   sendMessage,
   handleTyping,
   cancelReply,
+  cancelEdit,
   handleMessageTap,
+  openMessageActions,
+  closeMessageActions,
   toggleTime,
   onInboxSearch,
   clearInboxSearch,

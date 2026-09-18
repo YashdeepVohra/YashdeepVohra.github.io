@@ -51,6 +51,14 @@ export const state = {
   currentChatData: null,
   currentOtherUid: "",
   replyingToMessage: null,
+  // Set while the composer is rewriting a message already sent, not
+  // writing a new one: { id, text, time }. sendMessage() checks it
+  // first, so the same box and the same Enter key do both jobs.
+  editingMessage: null,
+  // A long press opens the message sheet and the browser then fires a
+  // click on the way up. Without this the sheet would open and the
+  // tap underneath would toggle the timestamp at the same time.
+  suppressNextTap: false,
   myMessageCount: 0,
 
   // Message paging: a small live window of the newest messages, plus
@@ -130,6 +138,8 @@ export function resetState() {
   state.currentOtherUid = "";
   state.currentProfileUid = "";
   state.replyingToMessage = null;
+  state.editingMessage = null;
+  state.suppressNextTap = false;
   state.messagesUnsubscribe = null;
   state.chatDocUnsubscribe = null;
   state.typingUnsubscribe = null;

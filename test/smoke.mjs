@@ -594,6 +594,163 @@ ok('interests stop at five', about.picked === 5 && about.sixthDisabled, JSON.str
 ok('saving cleans the bio and updates the profile', about.saved && about.shownOnOwn, JSON.stringify(about));
 
 /* ------------------------------------------------------------------ */
+group('editing and taking back a message');
+{
+  // The rules themselves: pure, so no DOM and no stub needed.
+  const r = await page.evaluate(async () => {
+    const mr = await import('/js/services/messageRules.js');
+    const t0 = 1000000000000;
+    const mine   = { id: 'm1', senderUid: 'me', text: 'hi',  time: t0 };
+    const theirs = { id: 'm2', senderUid: 'a',  text: 'yo',  time: t0 };
+    const old    = { id: 'm3', senderUid: 'me', text: 'old', time: t0 - 16 * 60 * 1000 };
+    const gone   = { id: 'm4', senderUid: 'me', text: '',    time: t0, deleted: true };
+    return {
+      mineNow:     mr.messageActions(mine, 'me', t0).join(','),
+      theirsNow:   mr.messageActions(theirs, 'me', t0).join(','),
+      mineLate:    mr.messageActions(old, 'me', t0).join(','),
+      tombstone:   mr.messageActions(gone, 'me', t0).length,
+      atEdge:      mr.canEdit(mine, 'me', t0 + 15 * 60 * 1000 - 1),
+      pastEdge:    mr.canEdit(mine, 'me', t0 + 15 * 60 * 1000 + 1),
+      retractLate: mr.canRetract(old, 'me'),
+      retractGone: mr.canRetract(gone, 'me'),
+      label:       mr.editWindowLabel(mine, t0 + 3 * 60 * 1000),
+      edited:      mr.isEdited({ ...mine, editedAt: t0 }),
+      editedGone:  mr.isEdited({ ...gone, editedAt: t0 })
+    };
+  });
+  ok('your own fresh message offers all four actions', r.mineNow === 'reply,copy,edit,delete', r.mineNow);
+  ok("somebody else's offers only reply and copy", r.theirsNow === 'reply,copy', r.theirsNow);
+  ok('past 15 minutes the edit is gone but delete is not', r.mineLate === 'reply,copy,delete', r.mineLate);
+  ok('a tombstone offers nothing at all', r.tombstone === 0);
+  ok('the window closes exactly at 15 minutes', r.atEdge === true && r.pastEdge === false);
+  ok('taking a message back has no clock on it', r.retractLate === true);
+  ok('a message already taken back cannot be taken back again', r.retractGone === false);
+  ok('the sheet says how long is left', r.label === '12 min left', r.label);
+  ok('"edited" shows on an edit, never on a tombstone', r.edited === true && r.editedGone === false);
+
+  // And the whole thing end to end, against the stub.
+  const dom = await page.evaluate(async () => {
+    const { state } = await import('/js/state/store.js');
+    const chat = await import('/js/services/chatService.js');
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const now = Date.now();
+
+    state.currentChat = 'a_me';
+    state.currentChatType = 'direct';
+    state.currentChatStatus = 'unlocked';
+    state.currentChatInitiatorUid = '';
+    state.currentChatData = { unreadByUid: '', typingUid: '' };
+    state.currentOtherUid = 'a';
+    window.switchScreen('chatScreen');
+
+    // One of mine, one of theirs already edited, one taken back.
+    window.__docs = [
+      { id: 'm1', data: () => ({ senderUid: 'me', text: 'typo heer', time: now - 60000 }) },
+      { id: 'm2', data: () => ({ senderUid: 'a', text: 'fixed?', time: now - 50000, editedAt: now - 40000 }) },
+      { id: 'm3', data: () => ({ senderUid: 'me', text: '', time: now - 30000, deleted: true, replyTo: null }) }
+    ];
+    chat.loadMessages();
+    await wait(200);
+
+    const out = {};
+    const box = document.getElementById('messages');
+    out.painted = box.querySelectorAll('.msg-wrapper').length;
+    out.tombstones = box.querySelectorAll('.msg-gone').length;
+    out.tombstoneText = (box.querySelector('.msg-gone')?.innerText || '').trim();
+    out.editedTags = box.querySelectorAll('.msg-edited').length;
+    out.tombstoneInert = !!box.querySelector('[data-deleted="1"]')
+      && !box.querySelector('[data-deleted="1"] .swipe-reply-icon');
+
+    const sheetRows = () => Array.from(document.querySelectorAll('#msgActionList .action-row'))
+      .map((b) => b.getAttribute('data-act')).join(',');
+
+    chat.openMessageActions('m1');
+    await wait(60);
+    out.mineRows = sheetRows();
+    out.quoted = document.getElementById('msgActionQuote')?.innerText || '';
+    chat.closeMessageActions();
+    await wait(120);
+
+    chat.openMessageActions('m2');
+    await wait(60);
+    out.theirRows = sheetRows();
+    chat.closeMessageActions();
+    await wait(120);
+
+    // A tombstone must not open the sheet at all.
+    chat.openMessageActions('m3');
+    await wait(60);
+    out.sheetOnTombstone = !document.getElementById('msgActionSheet').classList.contains('hidden');
+    await wait(60);
+
+    // ---- Edit ----
+    window.__updates = [];
+    chat.startEditMessage('m1');
+    await wait(80);
+    const input = document.getElementById('msgInput');
+    out.loadedIntoBox = input.value;
+    out.noteIsEditing = !!document.querySelector('.compose-note.editing');
+    out.sendBecameTick = !!document.querySelector('#inputWrapper button i.bx-check');
+
+    input.value = 'typo here';
+    await window.sendMessage();
+    await wait(120);
+    const edit = (window.__updates || []).slice(-1)[0] || {};
+    out.editKeys = (edit.keys || []).sort().join(',');
+    out.editText = edit.patch?.text;
+    out.editStamped = typeof edit.patch?.editedAt === 'number';
+    out.boxCleared = input.value === '';
+    out.noteGone = !document.querySelector('.compose-note');
+    out.editedOnScreen = box.querySelectorAll('.msg-edited').length;
+
+    // ---- Delete, through the sheet and the confirm ----
+    window.__updates = [];
+    chat.openMessageActions('m1');
+    await wait(60);
+    document.querySelector('#msgActionList .action-row[data-act="delete"]').click();
+    await wait(140);
+    out.asked = !document.getElementById('confirmSheet').classList.contains('hidden');
+    window.confirmYes();
+    await wait(200);
+    const del = (window.__updates || []).slice(-1)[0] || {};
+    out.deleteKeys = (del.keys || []).sort().join(',');
+    out.deleteBlanks = del.patch?.text === '' && del.patch?.deleted === true && del.patch?.replyTo === null;
+    out.tombstonesAfter = box.querySelectorAll('.msg-gone').length;
+    out.stillThere = box.querySelectorAll('.msg-wrapper').length;
+
+    chat.closeChat({ silent: true });
+    window.showTab('events');
+    await wait(120);
+    return out;
+  });
+
+  ok('three messages paint', dom.painted === 3, String(dom.painted));
+  ok('a deleted message reads "This message was deleted"', dom.tombstones === 1
+     && /This message was deleted/.test(dom.tombstoneText), dom.tombstoneText);
+  ok('an edited message is marked edited', dom.editedTags === 1, String(dom.editedTags));
+  ok('a tombstone cannot be swiped to reply', dom.tombstoneInert === true);
+  ok('the sheet offers edit and delete on your own message',
+     dom.mineRows === 'reply,copy,edit,delete', dom.mineRows);
+  ok('the sheet quotes the message it is acting on', /typo heer/.test(dom.quoted), dom.quoted);
+  ok("the sheet offers neither on somebody else's", dom.theirRows === 'reply,copy', dom.theirRows);
+  ok('the sheet refuses to open on a tombstone', dom.sheetOnTombstone === false);
+  ok('editing loads the message into the box', dom.loadedIntoBox === 'typo heer', dom.loadedIntoBox);
+  ok('the composer says it is editing', dom.noteIsEditing === true && dom.sendBecameTick === true,
+     JSON.stringify({ n: dom.noteIsEditing, s: dom.sendBecameTick }));
+  ok('saving writes only text and editedAt', dom.editKeys === 'editedAt,text', dom.editKeys);
+  ok('saving writes the new text, stamped', dom.editText === 'typo here' && dom.editStamped,
+     JSON.stringify({ t: dom.editText, s: dom.editStamped }));
+  ok('the composer goes back to normal after saving', dom.boxCleared && dom.noteGone);
+  ok('the edited message is marked edited on screen', dom.editedOnScreen === 2, String(dom.editedOnScreen));
+  ok('deleting asks first, in the app, not the browser', dom.asked === true);
+  ok('deleting writes only the tombstone fields',
+     dom.deleteKeys === 'deleted,deletedAt,replyTo,text', dom.deleteKeys);
+  ok('deleting blanks the text and drops the quote', dom.deleteBlanks === true);
+  ok('the row stays behind as a tombstone', dom.tombstonesAfter === 2 && dom.stillThere === 3,
+     JSON.stringify({ t: dom.tombstonesAfter, s: dom.stillThere }));
+}
+
+/* ------------------------------------------------------------------ */
 group('mobile keyboard and zoom');
 {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });

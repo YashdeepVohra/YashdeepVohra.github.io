@@ -149,6 +149,85 @@ service cloud.firestore {
       return value is string && value.size() > 0 && value.size() <= maxLen;
     }
 
+    // ---------------------------------------------------------------
+    // EDITING AND RETRACTING A MESSAGE
+    // ---------------------------------------------------------------
+    //
+    // Messages used to be flatly immutable (`allow update: if false`)
+    // and that was the right default: nobody rewrites history. What
+    // follows is the smallest possible hole in it.
+    //
+    // Only the sender may touch a message, and only in one of two
+    // shapes:
+    //
+    //   an EDIT       new text plus an `editedAt` stamp, inside 15
+    //                 minutes of sending, on a message that has not
+    //                 been retracted. The stamp is what puts "edited"
+    //                 on the bubble, so it is required — an edit
+    //                 cannot be made silently.
+    //
+    //   a RETRACTION  text blanked, `deleted: true`, one way only.
+    //                 The document stays, as a tombstone, which is
+    //                 deliberate: see the note on the icebreaker below.
+    //
+    // Everything else on a message is still frozen — senderUid, time,
+    // and the quoted reply cannot move, because hasOnly() names the
+    // only keys a write may touch and neither shape names them.
+    //
+    // A tombstone rather than a real delete, because a deletable
+    // message is a way out of the icebreaker: send your one opening
+    // message, delete it, send another. The flag `icebreakerUsed` is
+    // already one-way so the rules would refuse the second message
+    // anyway, but the client counts messages on screen to decide
+    // whether to lock the box, and a row that vanishes makes that
+    // count lie. A tombstone keeps the count honest.
+    function messageEditWindow() {
+      return duration.value(15, 'm');
+    }
+
+    function isMessageSender() {
+      return signedIn() && resource.data.senderUid == uid();
+    }
+
+    function messageLives() {
+      return resource.data.get('deleted', false) == false;
+    }
+
+    // `time` is the client clock at send; request.time is the server's.
+    // Comparing them is a little loose, but it is loose in the safe
+    // direction: a device running slow gets a shorter window, not a
+    // longer one, and a device running fast cannot reopen the window
+    // on a message the server already saw arrive.
+    function insideEditWindow() {
+      return request.time < timestamp.value(resource.data.time) + messageEditWindow();
+    }
+
+    function isTextEdit() {
+      return changedKeys().hasOnly(['text', 'editedAt'])
+        && isString(request.resource.data.text, 2000)
+        && request.resource.data.editedAt is number
+        // A stamp that isn't roughly now is no use as a receipt.
+        && request.resource.data.editedAt >= resource.data.time
+        && timestamp.value(request.resource.data.editedAt) < request.time + duration.value(2, 'm')
+        && messageLives()
+        && insideEditWindow();
+    }
+
+    function isRetraction() {
+      return changedKeys().hasOnly(['text', 'replyTo', 'editedAt', 'deleted', 'deletedAt'])
+        && request.resource.data.deleted == true
+        && request.resource.data.text == ''
+        && request.resource.data.deletedAt is number
+        // One way. A tombstone never comes back to life.
+        && messageLives();
+    }
+
+    // No window on a retraction: taking something back is always
+    // allowed, it is only rewriting that has a clock on it.
+    function senderMayRewrite() {
+      return isMessageSender() && (isTextEdit() || isRetraction());
+    }
+
     // A block is stored once, under the two uids sorted and joined —
     // the same shape as a chat id, so for a direct chat the block doc
     // and the chat share a key.
@@ -602,12 +681,16 @@ service cloud.firestore {
           && isString(request.resource.data.text, 2000)
           && request.resource.data.time is number;
 
-        // Messages are immutable — nobody rewrites history.
-        allow update: if false;
+        // Your own message, and only as an edit or a retraction.
+        // See the block next to isString() for what those two shapes
+        // are and why a retraction leaves the document behind.
+        allow update: if senderMayRewrite();
 
-        // Sender can retract; host can moderate.
-        allow delete: if signedIn()
-          && (resource.data.senderUid == uid() || eventData(eventId).hostUid == uid());
+        // The host still gets a real delete, because moderation is not
+        // the same act as taking back something you said: a tombstone
+        // reading "this message was deleted" over a slur is a worse
+        // outcome than the row being gone.
+        allow delete: if signedIn() && eventData(eventId).hostUid == uid();
       }
     }
 
@@ -715,8 +798,16 @@ service cloud.firestore {
           && request.resource.data.time is number
           && icebreakerAllowed();
 
-        allow update: if false;
-        allow delete: if signedIn() && resource.data.senderUid == uid();
+        // Same two shapes as the event chat. Note there is no block
+        // check here: taking back or fixing something you already sent
+        // stays possible after one of you blocks the other, which is
+        // the right way round — being blocked should not pin your own
+        // words in somebody's thread.
+        allow update: if senderMayRewrite();
+
+        // Retraction is an update now, so the only delete left is a
+        // hard one, and nothing in the app asks for it.
+        allow delete: if false;
       }
     }
 

@@ -742,7 +742,18 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 }
 .floating-date.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-.msg-wrapper { display: flex; flex-direction: column; width: 100%; position: relative; cursor: pointer; touch-action: pan-y; outline: none !important; animation: rise 0.3s var(--ease) backwards; }
+/* -webkit-touch-callout and user-select are off because holding a
+   message is a gesture now: without these iOS puts up its own
+   selection magnifier and Copy / Look Up bubble over our sheet. Copy
+   lives in the sheet instead, which works the same on every device. */
+.msg-wrapper {
+  display: flex; flex-direction: column; width: 100%; position: relative;
+  cursor: pointer; touch-action: pan-y; outline: none !important;
+  animation: rise 0.3s var(--ease) backwards;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
 .msg-bubble {
   max-width: 76%;
   padding: 10px 15px;
@@ -768,6 +779,72 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 .msg-time { font-size: 11.5px; color: var(--fog); max-height: 0; opacity: 0; overflow: hidden; padding: 0 6px; transition: max-height var(--base) var(--ease), opacity var(--base) var(--ease), margin var(--base) var(--ease); }
 .msg-wrapper.show-time .msg-time { max-height: 24px; opacity: 1; margin-top: 4px; }
 .msg-status { align-self: flex-end; margin: 4px 4px var(--s-12); font-size: 11.5px; color: var(--fog); display: flex; align-items: center; gap: 4px; }
+
+/* ---- A message taken back ---- */
+.msg-gone-bubble, .msg-gone-bubble.msg-sent { background: var(--bone); box-shadow: none; }
+.msg-gone {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 14px; font-style: italic; color: var(--fog);
+}
+.msg-gone i { font-size: 15px; font-style: normal; }
+
+/* ---- A message rewritten ---- */
+.msg-edited {
+  display: inline-block; margin-left: 7px;
+  font-size: 11px; font-weight: 600; font-style: italic;
+  opacity: 0.62; vertical-align: baseline;
+}
+.media-only .msg-edited { display: block; margin: 2px 0 0 6px; color: var(--fog); opacity: 1; }
+
+/* ---- The bar above the composer: replying, or editing ---- */
+.compose-note {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 14px; margin-bottom: 10px;
+  background: var(--bone);
+  border-left: 3px solid var(--periwinkle);
+  border-radius: 12px;
+}
+.compose-note.editing { border-left-color: var(--mint); }
+.compose-note-body { flex: 1; min-width: 0; font-size: 13.5px; color: var(--aubergine); line-height: 1.35; }
+.compose-note-body b { display: flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 700; }
+.compose-note-body span { display: block; color: var(--fog); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* A literal ×, not an icon font: this is the only way out of edit
+   mode, and CLAUDE.md's rule is that anything load-bearing must still
+   be there when Boxicons fails to load. */
+.compose-note-x {
+  flex: none; cursor: pointer; color: var(--fog);
+  font-size: 22px; line-height: 1; padding: 0 2px;
+}
+.input-wrapper.editing input { border-color: var(--mint); }
+
+/* ---- The message sheet ---- */
+.modal-content.action-sheet { max-width: 340px; padding: var(--s-20); text-align: left; }
+.action-quote {
+  font-size: 13.5px; color: var(--fog); line-height: 1.4;
+  padding: 0 4px var(--s-12);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: var(--s-8);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.action-list { display: flex; flex-direction: column; gap: 2px; margin-bottom: var(--s-12); }
+/* Note the base sheet already makes every button flex, full width and
+   generously padded — see the note in CLAUDE.md. These only override
+   what that gives them. */
+.action-sheet .action-row {
+  justify-content: flex-start;
+  box-shadow: none;
+  gap: 12px;
+  padding: 13px 14px;
+  background: transparent;
+  color: var(--aubergine);
+  font-size: 15px; font-weight: 600;
+  border-radius: var(--r-sm);
+  margin-bottom: 0;
+}
+.action-row:hover { background: var(--bone); filter: none; box-shadow: none; transform: none; }
+.action-row i { font-size: 20px; color: var(--fog); }
+.action-row em { margin-left: auto; font-size: 11.5px; font-style: normal; font-weight: 500; color: var(--fog); }
+.action-row.danger, .action-row.danger i { color: var(--danger); }
 
 .msg-replied-to {
   padding: 6px 11px; margin-bottom: 6px;
