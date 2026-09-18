@@ -22,7 +22,9 @@ import { switchScreen, showTab, showNotification, toggleTime, toast } from '../u
 import { askConfirm } from '../utils/confirm.js';
 import { openOverlay, closeOverlay, isOverlayOpen } from '../utils/overlays.js';
 import {
-  isDeleted, isEdited, canEdit, canRetract, messageActions, editWindowLabel
+  isDeleted, isEdited, canEdit, canRetract, messageActions, editWindowLabel,
+  REACTIONS, reactionOf, canReact, nextReaction, reactionSummary,
+  hostActions, pinPayload
 } from './messageRules.js';
 import { openProfileScreen } from './profileService.js';
 import { isBlocked } from './blockService.js';
@@ -109,6 +111,8 @@ export function openChat(chatId, otherUid) {
   state.currentChatType = "direct";
   state.replyingToMessage = null;
   state.editingMessage = null;
+  state.pinnedMessage = null;
+  renderPinnedBar();
 
   const hAvatar = document.getElementById("chatHeaderAvatar");
   const hTitle = document.getElementById("chatWithTitle");
@@ -176,6 +180,10 @@ export function openEventChat(eventId) {
   state.currentChatData = null;
   state.replyingToMessage = null;
   state.editingMessage = null;
+  // Cleared before the listener attaches, so the previous event's pin
+  // never flashes at the top of this one.
+  state.pinnedMessage = null;
+  renderPinnedBar();
 
   const hAvatar = document.getElementById("chatHeaderAvatar");
   const hTitle = document.getElementById("chatWithTitle");
@@ -210,6 +218,16 @@ export function openEventChat(eventId) {
     if (hTitle) hTitle.innerText = state.currentEventData.title || "Event chat";
   }, (err) => console.error("Event chat error:", err.code || err.message));
 
+  // The pinned message, same reasoning as typing: a subcollection, so
+  // only the people in this chat pay for it.
+  if (state.pinnedUnsubscribe) state.pinnedUnsubscribe();
+  state.pinnedUnsubscribe = db.collection("events").doc(eventId)
+    .collection("pinned").doc("current")
+    .onSnapshot((doc) => {
+      state.pinnedMessage = doc.exists ? doc.data() : null;
+      renderPinnedBar();
+    }, () => {});
+
   // Typing lives in a subcollection so only this chat pays for it.
   if (state.typingUnsubscribe) state.typingUnsubscribe();
   state.typingUnsubscribe = db.collection("events").doc(eventId).collection("typing")
@@ -235,9 +253,13 @@ export function closeChat({ silent = false } = {}) {
   if (state.messagesUnsubscribe) state.messagesUnsubscribe();
   if (state.chatDocUnsubscribe) state.chatDocUnsubscribe();
   if (state.typingUnsubscribe) state.typingUnsubscribe();
+  if (state.pinnedUnsubscribe) state.pinnedUnsubscribe();
   state.messagesUnsubscribe = null;
   state.chatDocUnsubscribe = null;
   state.typingUnsubscribe = null;
+  state.pinnedUnsubscribe = null;
+  state.pinnedMessage = null;
+  renderPinnedBar();
   state.eventTypingUids = [];
 
   state.currentChat = null;
@@ -479,9 +501,18 @@ function patchLocalMessage(id, fields) {
 const ACTION_LABELS = {
   reply:  { icon: "bx-reply",    label: "Reply" },
   copy:   { icon: "bx-copy",     label: "Copy text" },
+  pin:    { icon: "bx-pin",      label: "Pin to the top" },
+  unpin:  { icon: "bx-pin",      label: "Unpin" },
   edit:   { icon: "bx-edit-alt", label: "Edit" },
   delete: { icon: "bx-trash",    label: "Delete", danger: true }
 };
+
+/** True when you are hosting the event this chat belongs to. */
+function amHostHere() {
+  return state.currentChatType === "event"
+    && !!state.currentEventData
+    && state.currentEventData.hostUid === state.uid;
+}
 
 /** Built here rather than in index.html, the same way confirm.js does. */
 function actionSheetEl() {
@@ -492,13 +523,22 @@ function actionSheetEl() {
   el.id = "msgActionSheet";
   el.className = "modal-overlay hidden";
   el.innerHTML = `
-    <div class="modal-content action-sheet">
-      <div class="action-quote" id="msgActionQuote"></div>
-      <div class="action-list" id="msgActionList"></div>
-      <button class="btn-ghost" data-act="cancel">Cancel</button>
-    </div>`;
+      <div class="modal-content action-sheet">
+        <div class="react-row" id="msgReactRow"></div>
+        <div class="action-quote" id="msgActionQuote"></div>
+        <div class="action-list" id="msgActionList"></div>
+        <button class="btn-ghost" data-act="cancel">Cancel</button>
+      </div>`;
   el.addEventListener("click", (e) => {
     if (e.target === el) return closeMessageActions();
+
+    const pick = e.target.closest("[data-react]");
+    if (pick) {
+      const id = actionTargetId;
+      closeMessageActions();
+      return toggleReaction(id, Number(pick.getAttribute("data-react")));
+    }
+
     const btn = e.target.closest("[data-act]");
     if (btn) runMessageAction(btn.getAttribute("data-act"));
   });
@@ -514,12 +554,32 @@ export function openMessageActions(messageId) {
   const acts = messageActions(msg, state.uid);
   if (!acts.length) return;          // nothing to offer on a tombstone
 
+  // The host's own row, which is about the thread rather than about
+  // who wrote the message. It goes after Copy and before Edit, so the
+  // destructive one stays last.
+  const host = hostActions(msg, {
+    isHost: amHostHere(),
+    pinnedId: state.pinnedMessage ? state.pinnedMessage.messageId : ""
+  });
+  if (host.length) acts.splice(2, 0, ...host);
+
   actionTargetId = messageId;
   actionSheetEl();
 
   // innerText, not innerHTML — this is somebody's own words.
   const quote = document.getElementById("msgActionQuote");
   if (quote) quote.innerText = String(msg.text || "").slice(0, 140);
+
+  // The emoji row carries indexes into the fixed list, never the
+  // emoji itself, for the same reason the chips do.
+  const row = document.getElementById("msgReactRow");
+  if (row) {
+    const mine = reactionOf(msg, state.uid);
+    row.classList.toggle("hidden", !canReact(msg));
+    row.innerHTML = REACTIONS.map((emoji, i) => `
+      <span class="react-pick${emoji === mine ? " on" : ""}" role="button"
+            data-react="${i}">${emoji}</span>`).join("");
+  }
 
   const list = document.getElementById("msgActionList");
   if (list) {
@@ -552,8 +612,97 @@ function runMessageAction(key) {
 
   if (key === "reply") return initiateReply(msg.senderUid, String(msg.text || ""), msg.time);
   if (key === "copy") return copyMessageText(msg);
+  if (key === "pin") return pinMessage(id);
+  if (key === "unpin") return unpinMessage();
   if (key === "edit") return startEditMessage(id);
   if (key === "delete") return confirmRetractMessage(id);
+}
+
+// ---------- The pinned message ----------
+//
+// Only in an event chat, only the host, and only ever one. Tapping the
+// bar jumps to the message if it is still on screen; if it has
+// scrolled past the live window it is not loaded, so the bar's own
+// copy of the text is all there is — which is exactly why it keeps
+// one.
+
+function pinnedRef(eventId = state.currentChat) {
+  if (!eventId) return null;
+  return db.collection("events").doc(eventId).collection("pinned").doc("current");
+}
+
+export async function pinMessage(messageId) {
+  if (!amHostHere()) return;
+  const body = pinPayload(findMessage(messageId), state.uid);
+  if (!body) return;
+
+  const ref = pinnedRef();
+  if (!ref) return;
+
+  const before = state.pinnedMessage;
+  state.pinnedMessage = body;
+  renderPinnedBar();
+
+  try {
+    await ref.set(body);
+    toast("Pinned to the top.");
+  } catch (e) {
+    console.error("Pin failed:", e.code || e.message);
+    state.pinnedMessage = before;
+    renderPinnedBar();
+    toast("Couldn't pin that.");
+  }
+}
+
+export async function unpinMessage() {
+  if (!amHostHere()) return;
+  const ref = pinnedRef();
+  if (!ref) return;
+
+  const before = state.pinnedMessage;
+  state.pinnedMessage = null;
+  renderPinnedBar();
+
+  try {
+    await ref.delete();
+  } catch (e) {
+    console.error("Unpin failed:", e.code || e.message);
+    state.pinnedMessage = before;
+    renderPinnedBar();
+    toast("Couldn't unpin that.");
+  }
+}
+
+/** Tapping the bar. Jumps to the message when it is loaded. */
+export function jumpToPinned() {
+  const pin = state.pinnedMessage;
+  if (!pin) return;
+  const msg = findMessage(pin.messageId);
+  if (!msg) return toast("That message is further back in the chat.");
+  scrollToMessage(msg.time);
+}
+
+export function renderPinnedBar() {
+  const bar = document.getElementById("pinnedBar");
+  if (!bar) return;
+
+  const pin = state.pinnedMessage;
+  if (!pin || state.currentChatType !== "event") {
+    bar.classList.add("hidden");
+    bar.innerHTML = "";
+    return;
+  }
+
+  const who = pin.senderUid === state.uid ? "You" : displayNameFor(pin.senderUid);
+  bar.classList.remove("hidden");
+  bar.innerHTML = `
+    <div class="pinned-body" onclick="window.jumpToPinned()">
+      <b><i class='bx bx-pin'></i>Pinned \u00b7 ${escapeHtml(who)}</b>
+      <span>${escapeHtml(pin.text)}</span>
+    </div>
+    ${amHostHere()
+      ? `<div class="pinned-x" role="button" aria-label="Unpin" onclick="window.unpinMessage()">\u00d7</div>`
+      : ""}`;
 }
 
 /** The async clipboard needs a secure context; the old way always works. */
@@ -578,6 +727,42 @@ async function copyMessageText(msg) {
   } catch (e) {
     toast("Couldn't copy that.");
   }
+}
+
+/**
+ * Set your reaction, or clear it if you tap the one you already gave.
+ * Optimistic, like follow and hype: a button that waits for a round
+ * trip reads as broken.
+ */
+export function toggleReaction(messageId, emojiIndex) {
+  const emoji = REACTIONS[Number(emojiIndex)];
+  const msg = findMessage(messageId);
+  if (!emoji || !canReact(msg)) return;
+
+  const want = nextReaction(msg, state.uid, emoji);
+  if (want === null) return;
+
+  const before = Object.assign({}, msg.reactions || {});
+  const after = Object.assign({}, before);
+  if (want) after[state.uid] = want;
+  else delete after[state.uid];
+
+  patchLocalMessage(messageId, { reactions: after });
+  if (navigator.vibrate) navigator.vibrate(12);
+
+  const chatId = state.currentChat;
+  const type = state.currentChatType;
+  // A dotted path so two people reacting at once don't overwrite each
+  // other's key — which is exactly what writing the whole map would do.
+  const field = "reactions." + state.uid;
+
+  messagesRef(chatId, type).doc(messageId)
+    .update({ [field]: want || FieldValue.delete() })
+    .catch((e) => {
+      console.error("Reaction failed:", e.code || e.message);
+      patchLocalMessage(messageId, { reactions: before });
+      toast("Couldn't add that reaction.");
+    });
 }
 
 export function startEditMessage(messageId) {
@@ -1055,6 +1240,18 @@ function renderMessages(msgs, { keepScroll = null } = {}) {
       ? `<span class="msg-gone"><i class='bx bx-block'></i>This message was deleted</span>`
       : formatMessage(rawText, isMediaOnly);
 
+    // Reaction chips sit under the bubble, on the bubble's own side.
+    // The emoji is never written into the handler — the chip carries
+    // the message id and the emoji's INDEX in the fixed list, so the
+    // markup still holds ids and numbers only.
+    const reacts = gone ? [] : reactionSummary(m, state.uid);
+    const reactsHTML = reacts.length
+      ? `<div class="msg-reacts">` + reacts.map((r) => `
+          <span class="react-chip${r.mine ? " mine" : ""}" role="button"
+                onclick="event.stopPropagation(); window.toggleReaction('${safeId(m.id)}', ${REACTIONS.indexOf(r.emoji)})"
+                >${r.emoji}<b>${r.count}</b></span>`).join("") + `</div>`
+      : "";
+
     // Tapping shows when it was sent — and, if it was rewritten, when.
     const timeLine = edited
       ? `${escapeHtml(formatTime(m.time))} \u00b7 edited ${escapeHtml(formatTime(m.editedAt))}`
@@ -1087,6 +1284,7 @@ function renderMessages(msgs, { keepScroll = null } = {}) {
            ${bodyHTML}
            ${editedTag}
         </div>
+        ${reactsHTML}
         <div class="msg-time" style="text-align: ${isMe ? "right" : "left"}">
            ${timeLine}
         </div>

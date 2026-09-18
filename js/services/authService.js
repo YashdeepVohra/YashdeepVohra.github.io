@@ -14,6 +14,7 @@
 
 import { auth, db, isLocalhost } from '../config/firebase.js';
 import { state, resetState } from '../state/store.js';
+import { clearReceipt } from './receiptService.js';
 import { switchScreen, setLoading, toast } from '../utils/ui.js';
 import { clearOverlays, openOverlay } from '../utils/overlays.js';
 import { renderAvatar } from '../utils/formatters.js';
@@ -168,6 +169,7 @@ export function initAuthListener() {
 
     if (!userAuth) {
       resetState();
+      clearReceipt();
       if (!localStorage.getItem(REDIRECT_KEY)) showLoggedOut();
       return;
     }
@@ -459,6 +461,7 @@ export function logout() {
   setLoading(true);
   switchScreen(null);
   resetState();
+  clearReceipt();
   clearProfileCache();
 
   auth.signOut()

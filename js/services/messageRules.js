@@ -85,3 +85,95 @@ export function editWindowLabel(msg, now = Date.now()) {
   const mins = Math.ceil(left / 60000);
   return mins <= 1 ? "under a minute left" : mins + " min left";
 }
+
+// ==========================================
+// REACTIONS
+// ==========================================
+//
+// Stored as a map on the message keyed by uid: { uid: emoji }. Keying
+// it by uid rather than by emoji is what makes the rule cheap — "you
+// may change your own key and nobody else's" is one diff check, the
+// same shape as selfToggleOnly() for the arrays elsewhere.
+//
+// One reaction per person, so tapping a different emoji moves yours
+// rather than adding a second. The list is fixed and mirrored in
+// firestore.rules: an open string field here would be a second place
+// to type anything into somebody else's thread.
+//
+// Cost: one write, and one read for each person watching that message
+// — and only messages inside the live window are watched at all.
+
+export const REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
+
+export function reactionOf(msg, uid) {
+  return (msg && msg.reactions && msg.reactions[uid]) || "";
+}
+
+export function canReact(msg) {
+  return !!msg && !isDeleted(msg);
+}
+
+/**
+ * Tapping an emoji sets yours, or clears it if it was already that
+ * one. Returns the emoji to store, or "" to remove the key.
+ */
+export function nextReaction(msg, uid, emoji) {
+  if (!REACTIONS.includes(emoji)) return null;
+  return reactionOf(msg, uid) === emoji ? "" : emoji;
+}
+
+/**
+ * The chips under a bubble: biggest group first, ties broken by the
+ * canonical order so they don't shuffle as counts change.
+ */
+export function reactionSummary(msg, uid) {
+  const map = (msg && msg.reactions) || {};
+  const counts = new Map();
+
+  Object.keys(map).forEach((who) => {
+    const emoji = map[who];
+    if (!REACTIONS.includes(emoji)) return;   // ignore anything unexpected
+    const row = counts.get(emoji) || { emoji, count: 0, mine: false };
+    row.count++;
+    if (who === uid) row.mine = true;
+    counts.set(emoji, row);
+  });
+
+  return [...counts.values()].sort((a, b) =>
+    b.count - a.count || REACTIONS.indexOf(a.emoji) - REACTIONS.indexOf(b.emoji));
+}
+
+export function reactionCount(msg) {
+  return reactionSummary(msg, "").reduce((n, r) => n + r.count, 0);
+}
+
+// ==========================================
+// PINNING, IN AN EVENT CHAT
+// ==========================================
+//
+// The host's actions are kept apart from messageActions() above
+// because they answer a different question. messageActions asks "what
+// may I do to something I wrote?"; this asks "what may I do to this
+// thread?" — and the answer depends on who is hosting, not on who
+// sent the message.
+
+export function hostActions(msg, { isHost = false, pinnedId = "" } = {}) {
+  if (!msg || isDeleted(msg) || !isHost) return [];
+  return [pinnedId && pinnedId === msg.id ? "unpin" : "pin"];
+}
+
+/** The copy that goes in events/{id}/pinned/current. */
+export function pinPayload(msg, byUid, now = Date.now()) {
+  if (!msg || isDeleted(msg)) return null;
+  const text = String(msg.text || "").trim();
+  if (!text) return null;
+  return {
+    messageId: String(msg.id),
+    // Capped because this is a copy, not the message: the bar shows
+    // two lines, and the rules bound it at 300 anyway.
+    text: text.slice(0, 300),
+    senderUid: String(msg.senderUid || ""),
+    byUid: String(byUid || ""),
+    at: now
+  };
+}

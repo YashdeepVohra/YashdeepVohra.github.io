@@ -751,6 +751,231 @@ group('editing and taking back a message');
 }
 
 /* ------------------------------------------------------------------ */
+group('reactions, pins and the receipt');
+{
+  const pure = await page.evaluate(async () => {
+    const mr = await import('/js/services/messageRules.js');
+    const rr = await import('/js/services/receiptRules.js');
+    const t0 = 1000000000000;
+    const [THUMB, HEART, CRY] = [mr.REACTIONS[0], mr.REACTIONS[1], mr.REACTIONS[2]];
+
+    const msg = { id: 'm1', senderUid: 'a', text: 'hi', time: t0,
+                  reactions: { me: HEART, b: HEART, c: CRY } };
+    const gone = { id: 'm2', senderUid: 'me', text: '', time: t0, deleted: true };
+
+    const ev = (id, mine, host, tag, at) => ({
+      id, tag, hostUid: host, startTime: at, expiresAt: at + 1000,
+      participantUids: mine
+    });
+    const now = t0 + 100000;
+
+    let r = rr.emptyReceipt();
+    r = rr.foldAll(r, [
+      ev('e1', ['me', 'a', 'b'], 'me', '\u2615 Chill', t0),
+      ev('e2', ['me', 'a'], 'a', '\u2615 Chill', t0 + 10),
+      ev('e3', ['me', 'a', 'c'], 'c', '\uD83C\uDF55 Food', t0 + 20)
+    ], 'me', now);
+    const again = rr.foldAll(r, [ev('e1', ['me', 'a', 'b'], 'me', '\u2615 Chill', t0)], 'me', now);
+    const notMine = rr.foldEvent(r, ev('e9', ['a', 'b'], 'a', '\u2615 Chill', t0), 'me', now);
+    const stillOn = rr.foldEvent(r, { id: 'e8', tag: 'x', participantUids: ['me'],
+                                      startTime: now, expiresAt: now + 90000 }, 'me', now);
+    const sum = rr.summarise(r, rr.monthKey(t0));
+
+    return {
+      // reactions
+      summary: mr.reactionSummary(msg, 'me').map((x) => x.emoji + x.count + (x.mine ? '*' : '')).join(' '),
+      toggleOff: mr.nextReaction(msg, 'me', HEART),
+      toggleOver: mr.nextReaction(msg, 'me', THUMB),
+      junk: mr.nextReaction(msg, 'me', 'X'),
+      reactGone: mr.canReact(gone),
+      // pinning
+      hostSees: mr.hostActions(msg, { isHost: true }).join(','),
+      hostSeesUnpin: mr.hostActions(msg, { isHost: true, pinnedId: 'm1' }).join(','),
+      guestSees: mr.hostActions(msg, { isHost: false }).length,
+      pinGone: mr.pinPayload(gone, 'me'),
+      pinBody: mr.pinPayload(msg, 'me', t0),
+      // the receipt
+      went: sum.went, hosted: sum.hosted, topTag: sum.topTag,
+      people: sum.people.map((x) => x.uid + ':' + x.count).join(','),
+      idempotent: again === r,
+      notMineIgnored: notMine === r,
+      stillOnIgnored: stillOn === r,
+      label: typeof sum.label === 'string' && sum.label.length > 2
+    };
+  });
+
+  ok('reaction chips are grouped, biggest first, yours marked',
+     pure.summary === '\u2764\uFE0F2* \uD83D\uDE021', pure.summary);
+  ok('tapping the emoji you already gave clears it', pure.toggleOff === '');
+  ok('tapping a different one moves yours', pure.toggleOver === '\uD83D\uDC4D', pure.toggleOver);
+  ok('an emoji outside the list is refused', pure.junk === null);
+  ok('a deleted message cannot be reacted to', pure.reactGone === false);
+
+  ok('only the host is offered a pin', pure.hostSees === 'pin' && pure.guestSees === 0, pure.hostSees);
+  ok('the pinned one is offered unpin instead', pure.hostSeesUnpin === 'unpin', pure.hostSeesUnpin);
+  ok('a deleted message cannot be pinned', pure.pinGone === null);
+  ok('the pin stores a copy, not just an id',
+     pure.pinBody && pure.pinBody.messageId === 'm1' && pure.pinBody.text === 'hi'
+     && pure.pinBody.senderUid === 'a', JSON.stringify(pure.pinBody));
+
+  ok('the receipt counts what you went to', pure.went === 3 && pure.hosted === 1,
+     JSON.stringify({ w: pure.went, h: pure.hosted }));
+  ok('it knows your usual vibe', pure.topTag === '\u2615 Chill', pure.topTag);
+  ok('and who you keep running into, more than once only',
+     pure.people === 'a:3', pure.people);
+  ok('folding the same event twice changes nothing', pure.idempotent === true);
+  ok("an event you weren't at doesn't count", pure.notMineIgnored === true);
+  ok('an event still running does not count yet', pure.stillOnIgnored === true);
+  ok('the month has a readable label', pure.label === true);
+
+  // ---- and on screen ----
+  const dom = await page.evaluate(async () => {
+    const { state } = await import('/js/state/store.js');
+    const chat = await import('/js/services/chatService.js');
+    const mr = await import('/js/services/messageRules.js');
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const out = {};
+    const now = Date.now();
+
+    // ---- reactions, in a direct chat ----
+    state.currentChat = 'a_me'; state.currentChatType = 'direct';
+    state.currentChatStatus = 'unlocked'; state.currentChatData = { unreadByUid: '' };
+    state.currentOtherUid = 'a'; state.currentEventData = null;
+    window.switchScreen('chatScreen');
+    window.__docs = [
+      { id: 'r1', data: () => ({ senderUid: 'a', text: 'lawn in 10?', time: now - 60000,
+                                 reactions: { b: mr.REACTIONS[1] } }) }
+    ];
+    chat.loadMessages();
+    await wait(200);
+
+    const box = document.getElementById('messages');
+    out.chips = box.querySelectorAll('.react-chip').length;
+    out.chipMine = box.querySelectorAll('.react-chip.mine').length;
+
+    window.__updates = [];
+    chat.openMessageActions('r1');
+    await wait(80);
+    out.pickers = document.querySelectorAll('#msgReactRow .react-pick').length;
+    document.querySelector('#msgReactRow .react-pick[data-react="0"]').click();
+    await wait(200);
+    const w = (window.__updates || []).slice(-1)[0] || {};
+    out.reactKey = (w.keys || []).join(',');
+    out.reactValue = w.patch ? w.patch['reactions.me'] : null;
+    out.chipsAfter = box.querySelectorAll('.react-chip').length;
+    out.mineAfter = box.querySelectorAll('.react-chip.mine').length;
+
+    // Tapping the same one again clears it.
+    chat.toggleReaction('r1', 0);
+    await wait(200);
+    const w2 = (window.__updates || []).slice(-1)[0] || {};
+    out.clearedOp = w2.patch ? (w2.patch['reactions.me'] || {}).__op : null;
+    out.mineCleared = box.querySelectorAll('.react-chip.mine').length;
+
+    // ---- the pin, in an event chat ----
+    state.eventCache.ev1 = { id: 'ev1', title: 'Lawn hang', hostUid: 'me',
+                             participantUids: ['me', 'a'], tag: '\u2615 Chill',
+                             startTime: now - 7200000, expiresAt: now - 3600000 };
+    chat.openEventChat('ev1');
+    await wait(150);
+    state.currentEventData = { hostUid: 'me', title: 'Lawn hang', participantUids: ['me', 'a'] };
+    window.__docs = [
+      { id: 'p1', data: () => ({ senderUid: 'me', text: 'north gate, by the bench', time: now - 90000 }) }
+    ];
+    chat.loadMessages();
+    await wait(200);
+
+    chat.openMessageActions('p1');
+    await wait(80);
+    out.hostRows = Array.from(document.querySelectorAll('#msgActionList .action-row'))
+      .map((b) => b.getAttribute('data-act')).join(',');
+    document.querySelector('#msgActionList .action-row[data-act="pin"]').click();
+    await wait(250);
+
+    const bar = document.getElementById('pinnedBar');
+    out.barShown = !bar.classList.contains('hidden');
+    out.barText = (bar.innerText || '').replace(/\s+/g, ' ').trim();
+
+    chat.openMessageActions('p1');
+    await wait(80);
+    out.rowsWhenPinned = Array.from(document.querySelectorAll('#msgActionList .action-row'))
+      .map((b) => b.getAttribute('data-act')).join(',');
+    chat.closeMessageActions();
+    await wait(140);
+
+    await chat.unpinMessage();
+    await wait(150);
+    out.barGone = document.getElementById('pinnedBar').classList.contains('hidden');
+
+    chat.closeChat({ silent: true });
+    out.barGoneOnClose = document.getElementById('pinnedBar').classList.contains('hidden');
+
+    // ---- the receipt ----
+    const events = await import('/js/services/eventsService.js');
+    const receipt = await import('/js/services/receiptService.js');
+    // Earlier groups have already been through the feed, so start the
+    // receipt from nothing to keep this measurable.
+    receipt.clearReceipt();
+
+    const ev = (id, who, host, tag) => ({ id, tag, hostUid: host, participantUids: who,
+                                          startTime: now - 7200000, expiresAt: now - 3600000 });
+    state.eventCache = {
+      a1: ev('a1', ['me', 'a', 'b'], 'me', '\u2615 Chill'),
+      a2: ev('a2', ['me', 'a'], 'a', '\u2615 Chill'),
+      a3: ev('a3', ['me', 'a', 'b'], 'b', '\uD83C\uDF55 Food')
+    };
+    state.eventOrder = []; state.recapOrder = [];
+    window.showTab('recap');
+    events.renderEvents();
+    await wait(450);
+
+    const card = document.getElementById('receiptCard');
+    out.receipt = (card.innerText || '').replace(/\s+/g, ' ').trim();
+    out.receiptPeople = card.querySelectorAll('.receipt-person').length;
+    out.summary = receipt.receiptSummary();
+
+    // Running the feed again must not count the same events twice.
+    const writesBefore = window.__writes;
+    events.renderEvents();
+    await wait(300);
+    out.wentAgain = receipt.receiptSummary().went;
+    out.extraWrites = window.__writes - writesBefore;
+
+    window.showTab('events');
+    await wait(100);
+    return out;
+  });
+
+  ok('somebody else\u2019s reaction shows as a chip', dom.chips === 1 && dom.chipMine === 0,
+     JSON.stringify({ c: dom.chips, m: dom.chipMine }));
+  ok('the sheet offers the six reactions', dom.pickers === 6, String(dom.pickers));
+  ok('reacting writes only your own key', dom.reactKey === 'reactions.me', dom.reactKey);
+  ok('reacting writes the emoji you picked', dom.reactValue === '\uD83D\uDC4D', dom.reactValue);
+  ok('your reaction appears as its own chip', dom.chipsAfter === 2 && dom.mineAfter === 1,
+     JSON.stringify({ c: dom.chipsAfter, m: dom.mineAfter }));
+  ok('tapping it again deletes the key', dom.clearedOp === 'delete' && dom.mineCleared === 0,
+     JSON.stringify({ o: dom.clearedOp, m: dom.mineCleared }));
+
+  ok('the host gets Pin in the sheet', dom.hostRows === 'reply,copy,pin,edit,delete', dom.hostRows);
+  ok('pinning shows the bar with the message in it',
+     dom.barShown === true && /north gate/.test(dom.barText), dom.barText);
+  ok('the pinned message offers Unpin instead',
+     dom.rowsWhenPinned === 'reply,copy,unpin,edit,delete', dom.rowsWhenPinned);
+  ok('unpinning hides the bar', dom.barGone === true);
+  ok('leaving the chat clears the bar', dom.barGoneOnClose === true);
+
+  ok('the receipt card fills in from events already on screen',
+     /showed up/.test(dom.receipt) && /3 times/.test(dom.receipt)
+     && dom.summary.went === 3 && dom.summary.hosted === 1, dom.receipt);
+  ok('it names the people you keep running into', dom.receiptPeople === 2
+     && dom.summary.people.map((x) => x.uid + ':' + x.count).join(',') === 'a:3,b:2',
+     JSON.stringify(dom.summary.people));
+  ok('a second pass over the same feed counts nothing twice',
+     dom.wentAgain === 3 && dom.extraWrites === 0,
+     JSON.stringify({ w: dom.wentAgain, x: dom.extraWrites }));
+}
+
+/* ------------------------------------------------------------------ */
 group('mobile keyboard and zoom');
 {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });

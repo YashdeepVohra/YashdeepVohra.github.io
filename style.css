@@ -726,6 +726,83 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 .back-btn { width: 38px; height: 38px; flex-shrink: 0; padding: 0; font-size: 21px; border-radius: 50%; }
 .header-title { font-size: 16px; font-weight: 700; letter-spacing: -0.03em; color: var(--obsidian); }
 
+/* =====================================================================
+   THE RECAP RECEIPT
+   ===================================================================== */
+.receipt {
+  padding: var(--s-20);
+  margin-bottom: var(--s-16);
+  background: var(--paper);
+  border-radius: var(--r-card);
+  box-shadow: var(--lift-1);
+  border-top: 3px solid var(--periwinkle);
+}
+.receipt-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-12); }
+.receipt-head b { font-size: 12px; font-weight: 700; letter-spacing: var(--track); text-transform: uppercase; color: var(--periwinkle); }
+.receipt-head span { font-size: 12.5px; color: var(--fog); }
+
+.receipt-line { margin-top: var(--s-8); font-size: 17px; line-height: 1.45; color: var(--aubergine); }
+.receipt-line strong { font-weight: 700; }
+
+.receipt-people-head {
+  margin: var(--s-16) 0 var(--s-8);
+  font-size: 11.5px; font-weight: 700; letter-spacing: var(--track);
+  text-transform: uppercase; color: var(--fog);
+}
+.receipt-people { display: flex; flex-wrap: wrap; gap: var(--s-8); }
+.receipt-person {
+  display: flex; align-items: center; gap: 7px;
+  padding: 5px 11px 5px 5px;
+  background: var(--bone);
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  transition: background var(--fast) var(--ease);
+}
+.receipt-person:hover { background: var(--ash); }
+.receipt-person span { font-size: 13.5px; font-weight: 600; color: var(--aubergine); }
+.receipt-person b { font-size: 11.5px; font-weight: 700; color: var(--fog); }
+.receipt-face {
+  width: 26px; height: 26px; flex: none;
+  display: grid; place-items: center;
+  border-radius: 50%; overflow: hidden;
+  background: var(--lavender); font-size: 13px;
+  position: relative;
+}
+
+.receipt-note, .receipt-foot { margin-top: var(--s-12); font-size: 13px; color: var(--fog); line-height: 1.45; }
+.receipt-foot { padding-top: var(--s-12); border-top: 1px solid var(--border); }
+
+.receipt-empty { border-top-color: var(--ash); }
+.receipt-empty b { display: block; margin-bottom: 6px; font-size: 12px; font-weight: 700; letter-spacing: var(--track); text-transform: uppercase; color: var(--fog); }
+.receipt-empty p { font-size: 14px; color: var(--fog); line-height: 1.5; margin: 0; }
+
+/* ---- The pinned message, under the chat header ---- */
+.pinned-bar {
+  display: flex; align-items: center; gap: 10px;
+  flex: none;
+  padding: 9px var(--s-16);
+  background: var(--glass);
+  border-bottom: 1px solid var(--border);
+  border-left: 3px solid var(--periwinkle);
+}
+.pinned-body { flex: 1; min-width: 0; cursor: pointer; }
+.pinned-body b {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 11.5px; font-weight: 700; letter-spacing: var(--track);
+  text-transform: uppercase; color: var(--periwinkle);
+}
+.pinned-body span {
+  display: block; margin-top: 1px;
+  font-size: 13.5px; color: var(--aubergine);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* A literal multiplication sign, not an icon font — the only way for a
+   host to undo a pin has to survive Boxicons failing to load. */
+.pinned-x {
+  flex: none; cursor: pointer; color: var(--fog);
+  font-size: 22px; line-height: 1; padding: 0 2px;
+}
+
 #messages { flex: 1; overflow-y: auto; overflow-x: hidden; padding: var(--s-20) var(--s-16); display: flex; flex-direction: column; }
 
 .date-wrapper { text-align: center; margin: var(--s-20) 0 var(--s-12); }
@@ -787,6 +864,53 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   font-size: 14px; font-style: italic; color: var(--fog);
 }
 .msg-gone i { font-size: 15px; font-style: normal; }
+
+/* ---- Reactions ----
+   The chip is a span, not a button: the base sheet turns every button
+   into a full-width flex box, which is exactly wrong for something
+   this small (see CLAUDE.md). */
+.msg-reacts {
+  display: flex; flex-wrap: wrap; gap: 4px;
+  margin: -4px 2px 0;
+  position: relative; z-index: 1;
+}
+.msg-wrapper[data-align="end"] .msg-reacts { justify-content: flex-end; }
+.react-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px 2px 6px;
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  font-size: 12.5px; line-height: 1.6;
+  box-shadow: var(--lift-1);
+  cursor: pointer;
+  user-select: none;
+  transition: transform var(--fast) var(--ease), background var(--fast) var(--ease);
+}
+.react-chip:active { transform: scale(0.92); }
+.react-chip b { font-size: 11px; font-weight: 700; color: var(--fog); }
+.react-chip.mine { background: var(--lavender); border-color: var(--periwinkle); }
+.react-chip.mine b { color: var(--aubergine); }
+
+.react-row {
+  display: flex; justify-content: space-between; gap: 2px;
+  padding: 2px 0 var(--s-12);
+  margin-bottom: var(--s-8);
+  border-bottom: 1px solid var(--border);
+}
+.react-pick {
+  flex: 1;
+  display: flex; align-items: center; justify-content: center;
+  height: 44px;
+  font-size: 24px; line-height: 1;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  user-select: none;
+  transition: transform var(--fast) var(--spring), background var(--fast) var(--ease);
+}
+.react-pick:hover { background: var(--bone); }
+.react-pick:active { transform: scale(0.88); }
+.react-pick.on { background: var(--lavender); transform: scale(1.06); }
 
 /* ---- A message rewritten ---- */
 .msg-edited {

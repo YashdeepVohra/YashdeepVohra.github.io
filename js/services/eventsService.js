@@ -23,6 +23,7 @@ import { stampEvent, readLimits, limitMessage } from './limitsService.js';
 import { askConfirm } from '../utils/confirm.js';
 import { inOrbit, vouchersYouKnow } from './orbitService.js';
 import { RECAP_MAX_MS, inRecap, recapUntil, wasCalledOff } from './recapRules.js';
+import { harvestReceipt, renderReceipt } from './receiptService.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -646,6 +647,13 @@ export function renderEvents() {
   const liveList = document.getElementById("events");
   const recapList = document.getElementById("recapEvents");
   if (!liveList || !recapList) return;
+
+  // Fold anything that has finished into your receipt. This is free:
+  // every event it looks at is already in the cache because the feed
+  // or the recap paid for it, and countable() rejects anything
+  // counted before, so the usual outcome is no work and no write.
+  renderReceipt();
+  harvestReceipt();
 
   const order = state.eventOrder || [];
   const now = Date.now();

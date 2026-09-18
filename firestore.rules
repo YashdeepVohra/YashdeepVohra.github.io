@@ -228,6 +228,44 @@ service cloud.firestore {
       return isMessageSender() && (isTextEdit() || isRetraction());
     }
 
+    // ---------------------------------------------------------------
+    // REACTING TO A MESSAGE
+    // ---------------------------------------------------------------
+    //
+    // `reactions` is a map keyed by uid: { uid: emoji }. Keyed that way
+    // because it makes this rule one diff check — you may change your
+    // own key and nobody else's — instead of having to reason about
+    // who is inside which array. It is the same idea as
+    // selfToggleOnly() above, for a map.
+    //
+    // The emoji list is fixed and mirrored in
+    // js/services/messageRules.js. An open string here would be a
+    // second way to put arbitrary text into somebody's thread, one
+    // that skips every length and escaping rule the message body has.
+    //
+    // Anyone who can read the thread can react; the caller's own rule
+    // adds the membership check, because it differs between an event
+    // chat and a direct one.
+    function reactionSet() {
+      return ['👍', '❤️', '😂', '😮', '😢', '🔥'];
+    }
+
+    function reactionsBefore() {
+      return resource.data.get('reactions', {});
+    }
+
+    function isReactionToggle() {
+      return signedIn()
+        && changedKeys().hasOnly(['reactions'])
+        && messageLives()
+        // Exactly one key may move, and it must be yours.
+        && request.resource.data.reactions.diff(reactionsBefore())
+             .affectedKeys().hasOnly([uid()])
+        // Clearing yours removes the key; setting it must be one of ours.
+        && (!(uid() in request.resource.data.reactions)
+            || request.resource.data.reactions[uid()] in reactionSet());
+    }
+
     // A block is stored once, under the two uids sorted and joined —
     // the same shape as a chat id, so for a direct chat the block doc
     // and the chat share a key.
@@ -665,6 +703,39 @@ service cloud.firestore {
         allow write: if inEventChat() && typingUid == uid();
       }
 
+      // ---- The pinned message ----
+      //
+      // One document, always called `current`, holding a COPY of the
+      // pinned message: its id, its text, and who wrote it.
+      //
+      // Two decisions worth keeping. It is a subcollection rather than
+      // a field on the event, for the same reason typing moved down
+      // here: the event document is watched by everyone with the app
+      // open, so a field on it bills a read to the whole campus every
+      // time the host pins something. Down here only the people in
+      // that chat pay.
+      //
+      // And it holds a copy of the text rather than just the id,
+      // because the pinned message is usually the FIRST one ("meet by
+      // the north gate") and by then it has scrolled out of the live
+      // window — an id alone would cost a second read to display, on
+      // every open, forever.
+      match /pinned/{pinId} {
+        function inEventChat() {
+          return signedIn() && uid() in eventData(eventId).participantUids;
+        }
+        allow read: if inEventChat();
+
+        // The host's call, and only ever the one document.
+        allow write: if signedIn()
+          && eventData(eventId).hostUid == uid()
+          && pinId == 'current'
+          && (request.method == 'delete'
+              || (isString(request.resource.data.text, 300)
+                  && isString(request.resource.data.messageId, 128)
+                  && request.resource.data.senderUid is string));
+      }
+
       // ---- Event group chat ----
       // Messages are a SUBCOLLECTION so one lookup of the parent event
       // authorises the whole query, instead of one lookup per message.
@@ -681,10 +752,11 @@ service cloud.firestore {
           && isString(request.resource.data.text, 2000)
           && request.resource.data.time is number;
 
-        // Your own message, and only as an edit or a retraction.
-        // See the block next to isString() for what those two shapes
-        // are and why a retraction leaves the document behind.
-        allow update: if senderMayRewrite();
+        // Your own message, and only as an edit or a retraction — or
+        // anybody in the event moving their own reaction. See the
+        // block next to isString() for all three shapes.
+        allow update: if (isMessageSender() && senderMayRewrite())
+          || (inEvent() && isReactionToggle());
 
         // The host still gets a real delete, because moderation is not
         // the same act as taking back something you said: a tombstone
@@ -798,12 +870,16 @@ service cloud.firestore {
           && request.resource.data.time is number
           && icebreakerAllowed();
 
-        // Same two shapes as the event chat. Note there is no block
-        // check here: taking back or fixing something you already sent
-        // stays possible after one of you blocks the other, which is
-        // the right way round — being blocked should not pin your own
-        // words in somebody's thread.
-        allow update: if senderMayRewrite();
+        // Same shapes as the event chat. Note there is no block check
+        // on the rewrite: taking back or fixing something you already
+        // sent stays possible after one of you blocks the other, which
+        // is the right way round — being blocked should not pin your
+        // own words in somebody's thread. Reacting is different: that
+        // is speaking to them, so it is blocked like any other write.
+        allow update: if (inThisChat() && senderMayRewrite())
+          || (inThisChat()
+              && !exists(/databases/$(database)/documents/blocks/$(chatId))
+              && isReactionToggle());
 
         // Retraction is an update now, so the only delete left is a
         // hard one, and nothing in the app asks for it.

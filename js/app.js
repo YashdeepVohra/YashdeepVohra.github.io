@@ -67,6 +67,9 @@ import {
   handleMessageTap,
   openMessageActions,
   closeMessageActions,
+  toggleReaction,
+  jumpToPinned,
+  unpinMessage,
   onInboxSearch,
   clearInboxSearch
 } from './services/chatService.js';
@@ -122,6 +125,7 @@ import { pickAccountType } from './services/authService.js';
 import { initTheme, setThemeChoice, syncThemeUI } from './utils/theme.js';
 import { confirmYes, confirmNo } from './utils/confirm.js';
 
+import { flushReceipt } from './services/receiptService.js';
 import { initSwipeListeners } from './interactions/swipeReply.js';
 import { initViewportFit, lockZoom } from './utils/viewport.js';
 import { popOverlay, anyOverlayOpen, clearOverlays } from './utils/overlays.js';
@@ -239,6 +243,9 @@ Object.assign(window, {
   handleMessageTap,
   openMessageActions,
   closeMessageActions,
+  toggleReaction,
+  jumpToPinned,
+  unpinMessage,
   toggleTime,
   onInboxSearch,
   clearInboxSearch,
@@ -350,10 +357,11 @@ function boot() {
   // A hype waits a moment before it is written, so anything still
   // waiting has to go when the app is put away — otherwise tapping and
   // immediately locking the phone would lose it.
+  const flushPending = () => { flushAllHype(); flushReceipt(); };
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "hidden") flushAllHype();
+    if (document.visibilityState === "hidden") flushPending();
   });
-  window.addEventListener("pagehide", flushAllHype);
+  window.addEventListener("pagehide", flushPending);
 
   // Page in more recap as it is scrolled, rather than all at once.
   const scroller = document.querySelector(".container");

@@ -35,8 +35,9 @@ js/app.js           entry: imports, window bindings, boot, back button
 js/config/          firebase init + offline persistence
 js/state/store.js   one mutable object, plus resetState() on logout
 js/services/        auth, events, chat, profile, follow, orbit, block,
-                    search, user, limits — plus the pure rule files
-                    recapRules, aboutRules, messageRules
+                    search, user, limits, receipt — plus the pure rule
+                    files recapRules, aboutRules, messageRules,
+                    receiptRules
 js/utils/           ui (screens/toasts/repaint registry), confirm, overlays,
                     formatters, viewport
 js/interactions/    search screen, message gestures (swipe, hold)
@@ -76,6 +77,35 @@ test/               stub.js + smoke.mjs
   that count lie. The host's delete on an event message is still a real
   delete: moderation is not the same act as taking back your own words,
   and a tombstone over a slur is a worse outcome than a gap.
+- **Reactions are a map keyed by uid**, `{ uid: emoji }`, on the
+  message. Keyed that way on purpose: "you may change your own key and
+  nobody else's" is one `diff().affectedKeys()` check in the rules, the
+  same idea as `selfToggleOnly()` for the arrays. One reaction per
+  person, from a fixed list in `messageRules.js` that is mirrored in
+  the rules — an open string field would be a second way to put
+  arbitrary text in somebody's thread, one that skips every length and
+  escaping rule the message body has. The client writes the dotted path
+  `reactions.<uid>`, never the whole map, so two people reacting at the
+  same moment don't overwrite each other.
+- **The pinned message lives in `events/{id}/pinned/current`, not on
+  the event.** Same reason typing moved off the event document: every
+  user with the app open is listening to the feed, so a field there
+  bills a read to the whole campus each time a host pins something.
+  It stores a COPY of the text, not just the message id, because the
+  pinned message is usually the first one ("meet by the north gate")
+  and by then it has scrolled out of the 25-message live window — an id
+  alone would cost a second read to display, on every open, forever.
+- **The receipt is folded out of events already on screen.**
+  `js/services/receiptRules.js` is the arithmetic, `receiptService.js`
+  is when it loads, saves and paints. It never queries anything: every
+  event it counts was already paid for by the feed or the recap, the
+  fold is idempotent per event id, and saves are debounced so a recap
+  page of twenty finished events is one write. It therefore cannot see
+  an event that expired while the app was closed — the honest trade for
+  a feature with no server, and why the card says "since you started
+  using this" rather than claiming to be complete. It lives under
+  `users/{uid}/private/`, which is already owner-only: how often
+  somebody goes out is nobody else's business.
 - **How long Recap keeps an event is `js/services/recapRules.js`.** Pure
   functions, no imports: 6h + 8h x log2(1 + guests + hype/2), capped at
   48h; your own events stay 24h for you. Change the numbers there and in
@@ -103,6 +133,8 @@ Decisions already made, with the reason, so they don't get undone:
 | Counts live as arrays on the profile | `followers.length` is free; a subcollection is a read per follower |
 | Recap query spans 48h, filtered client-side, max 3 pages per load | retention is computed from three fields; no server to store it |
 | Profile Hosted/Joined: two `get()`s, counts from the same docs | was a listener + two duplicate count queries |
+| Pinned message in a subcollection, holding a copy of the text | a field on the event bills the whole campus a read; an id alone costs a read to display |
+| The receipt folds events already in the cache, debounced | a history collection would be a write per event and a query per open |
 
 The remaining lever, if reads ever bite: drop `LIVE_LIMIT` to ~30. It cuts
 fan-out on everything at once.
@@ -234,7 +266,16 @@ connections + vouches), follow/followers with private accounts and
 approval, rate limits, the icebreaker, the day-one empty state, public /
 private chosen at sign-up (and asked once of older accounts), remove a
 follower, going public lets waiting requests in, dark mode, editing and
-taking back a message (hold a bubble, or right-click on a desktop).
+taking back a message (hold a bubble, or right-click on a desktop),
+reactions, a host's pinned message in an event chat, and the Recap
+receipt.
 
 Not built, roughly in the order I'd do them: push notifications (needs
-Blaze), share links for an event, report triage for the admin.
+Blaze — and it is the ceiling on everything else, since a live event
+nobody is told about is a feed nobody opens), share links for an event,
+report triage for the admin.
+
+Considered and parked: voice notes. Everything above costs *reads*,
+which have a 50k/day free tier. Voice notes cost storage and egress,
+which is a different meter, needs Blaze, and grows on its own — the
+first feature here whose bill goes up while nobody is using it.

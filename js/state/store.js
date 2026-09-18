@@ -44,6 +44,10 @@ export const state = {
   recapLoading: false,
 
   // ---- Active chat ----
+  // The pinned message in an event chat: a COPY (id, text, sender), so
+  // the bar can paint without a second read for a message that has
+  // usually scrolled out of the live window.
+  pinnedMessage: null,
   currentChat: null,       // chatId (direct) or eventId (event chat)
   currentChatType: "direct",
   currentChatStatus: "unlocked",
@@ -84,6 +88,7 @@ export const state = {
   messagesUnsubscribe: null,
   chatDocUnsubscribe: null,
   typingUnsubscribe: null,
+  pinnedUnsubscribe: null,
   chatListUnsubscribe: null,
   blocksUnsubscribe: null,
   orbitUnsubscribe: null,
@@ -102,6 +107,7 @@ export function resetState() {
     state.messagesUnsubscribe,
     state.chatDocUnsubscribe,
     state.typingUnsubscribe,
+    state.pinnedUnsubscribe,
     state.chatListUnsubscribe,
     state.blocksUnsubscribe,
     state.orbitUnsubscribe,
@@ -140,9 +146,11 @@ export function resetState() {
   state.replyingToMessage = null;
   state.editingMessage = null;
   state.suppressNextTap = false;
+  state.pinnedMessage = null;
   state.messagesUnsubscribe = null;
   state.chatDocUnsubscribe = null;
   state.typingUnsubscribe = null;
+  state.pinnedUnsubscribe = null;
   state.eventTypingUids = [];
   state.chatListUnsubscribe = null;
   state.blocksUnsubscribe = null;

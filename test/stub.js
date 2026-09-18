@@ -204,5 +204,5 @@ window.firebase = {
         }
       };
     } }),
-    { FieldPath: { documentId: () => '__name__' }, FieldValue: { arrayUnion: (v) => ({ __op: 'union', v }), arrayRemove: (v) => ({ __op: 'remove', v }), serverTimestamp: () => ({ __op: 'now' }) } }),
+    { FieldPath: { documentId: () => '__name__' }, FieldValue: { arrayUnion: (v) => ({ __op: 'union', v }), arrayRemove: (v) => ({ __op: 'remove', v }), serverTimestamp: () => ({ __op: 'now' }), delete: () => ({ __op: 'delete' }) } }),
 };
