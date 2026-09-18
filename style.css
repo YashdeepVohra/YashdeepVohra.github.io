@@ -647,6 +647,101 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 }
 
 /* =====================================================================
+   THE POSTER BAND
+   The band across the top of every event card, and the single reason
+   the feed stopped reading as a list of rows.
+
+   THE HALFTONE is two background layers and nothing else. A dot grid,
+   with a linear gradient painted OVER it that fades from transparent
+   (dots visible) to the solid band colour (dots swallowed). No image,
+   no mask, no extra element — so sixty cards down a feed cost one
+   paint each, which matters more here than anywhere because the feed
+   is the screen people keep open.
+
+   THE STAT is Caldera's idea: the one number worth reading at a glance
+   is set at poster scale in the display face, and everything else
+   shrinks to mono around it. On a live card that number is when; on a
+   recap stub it is how many turned up.
+   ===================================================================== */
+
+/* .card sets its own padding and sits LATER in this sheet, so this
+   needs the extra class to win — the trap CLAUDE.md warns about. */
+.card.poster-card { padding: 0; overflow: hidden; }
+.poster-card .card-body { padding: var(--s-16) var(--s-16) 0; }
+.poster-card .card-actions { margin-top: var(--s-16); padding: var(--s-12) var(--s-16) var(--s-12); }
+
+.poster {
+  position: relative;
+  padding: 11px var(--s-16) 12px;
+  color: var(--chip-ink);
+  /* The band's own colour. 40% is as much vibe as it can take and
+     still clear 4.5:1 for the ink on the worst of the five — checked
+     in test/contrast.mjs, which walks every vibe in both themes. */
+  --band: color-mix(in srgb, var(--vibe, var(--sage)) 40%, var(--paper));
+  background-color: var(--band);
+  /* Order matters: the wash is FIRST so it paints ON TOP of the dots.
+     It starts opaque almost immediately, which is what turns a uniform
+     dot grid into a halftone that decays out of one corner — a grid
+     left visible edge to edge reads as fabric, not as printing. */
+  background-image:
+    linear-gradient(118deg, transparent 2%, var(--band) 48%),
+    radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--vibe, var(--sage)) 72%, transparent) 1.4px, transparent 0);
+  background-size: cover, 7px 7px;
+  border-bottom: 1.5px solid color-mix(in srgb, var(--vibe, var(--sage)) 40%, var(--ash));
+}
+
+.poster-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--s-12);
+  margin-bottom: 6px;
+}
+/* The category, as a sticky note pinned to the poster. */
+.poster-tag {
+  flex-shrink: 0;
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 10px;
+  border-radius: var(--r-pill);
+  background: var(--paper);
+  border: 1px solid color-mix(in srgb, var(--vibe, var(--sage)) 45%, var(--ash));
+  font-family: var(--font-mono);
+  font-size: 10px; letter-spacing: var(--track-mono); text-transform: uppercase;
+  color: var(--chip-ink);
+  white-space: nowrap;
+}
+.poster-place {
+  display: flex; align-items: center; justify-content: flex-end; gap: 3px;
+  flex: 1 1 0;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 11px; letter-spacing: 0.03em;
+  color: color-mix(in srgb, var(--chip-ink) 78%, transparent);
+}
+.poster-place i { font-size: 13px; flex-shrink: 0; }
+/* The ellipsis has to live on the TEXT, not on the flex row. On the
+   row, a right-aligned overflow gets clipped at the start — you lose
+   the beginning of the place name and get no "…" either, which is the
+   worst of both. On the span it truncates at its own right edge. */
+.poster-place > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.poster-stat { display: flex; align-items: flex-end; gap: 9px; }
+.poster-value {
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  font-size: 40px; line-height: 0.82;
+  letter-spacing: -0.045em;
+  text-transform: uppercase;
+  color: var(--chip-ink);
+}
+.poster-side { display: flex; flex-direction: column; gap: 1px; min-width: 0; padding-bottom: 3px; }
+.poster-label, .poster-sub {
+  font-family: var(--font-mono);
+  font-size: 10px; letter-spacing: var(--track-mono); text-transform: uppercase;
+  white-space: nowrap;
+}
+.poster-label { color: var(--chip-ink); font-weight: 500; }
+.poster-sub { color: color-mix(in srgb, var(--chip-ink) 78%, transparent); }
+
+/* =====================================================================
    FEED CARDS
    ===================================================================== */
 
@@ -667,16 +762,30 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 .event:active { transform: scale(0.992); }
 .event { position: relative; overflow: hidden; }
 .event:hover { border-color: var(--sage); }
-.event::before {
-  /* A hairline of the event's own colour down the leading edge —
-     enough to make a scrolling feed read as varied, not striped. */
-  content: "";
-  position: absolute; left: 0; top: 0; bottom: 0;
-  width: 3px;
-  background: var(--vibe, var(--sage));
-}
+/* The leading colour edge used to be how a scrolling feed read as
+   varied. The poster band does that far better, so it is gone — along
+   with the top wash and the corner watermark that used to sit under
+   it. Three fewer paints per card. */
 
 .card-top { display: flex; align-items: center; gap: var(--s-12); margin-bottom: var(--s-16); }
+
+/* The credit under the headline, not the headline itself. One line,
+   small avatar, everything after the name in mono. */
+.byline {
+  display: flex; align-items: center; gap: 7px;
+  flex-wrap: wrap;
+  margin-top: 9px;
+}
+.byline .av-ring { width: 24px; height: 24px; padding: 1.5px; }
+.byline .av-inner { border-width: 1.5px; font-size: 11px; }
+.byline-name { font-size: 13px; font-weight: 700; color: var(--ink); letter-spacing: -0.02em; }
+.byline-meta {
+  font-family: var(--font-mono);
+  font-size: 11px; letter-spacing: 0.03em; color: var(--fog);
+}
+.byline .trust-chip { margin-top: 0; padding: 2px 8px; font-size: 10.5px; }
+.byline .trust-chip i { font-size: 12px; }
+
 .av-ring {
   width: 42px; height: 42px; flex-shrink: 0;
   border-radius: 50%; padding: 2px;
@@ -721,10 +830,10 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
    the case it stays in. */
 .event-title {
   font-family: var(--font-display);
-  font-size: 21px; font-weight: var(--display-weight);
-  letter-spacing: -0.03em; line-height: 1.16;
+  font-size: 22px; font-weight: var(--display-weight);
+  letter-spacing: -0.035em; line-height: 1.14;
   color: var(--ink);
-  margin-bottom: 6px;
+  margin-bottom: 0;
 }
 .event-desc-box {
   display: none;
@@ -1445,9 +1554,10 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   100% { box-shadow: var(--lift-1); }
 }
 
-/* Recap cards read as past tense */
-.event.recap { opacity: 0.88; }
-.event.recap .event-title { color: var(--fog); }
+/* A stub reads as past tense through its drained band, not by dimming
+   the whole card — a greyed-out title is harder to read, and you still
+   want to read it. */
+.event.stub .event-title { color: var(--ink); }
 
 /* =====================================================================
    AMBIENT LAYER
@@ -1499,58 +1609,23 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
    EVENT CARDS — the good stuff
    ===================================================================== */
 
-/* A wash of the event's own colour bleeding down from the top edge */
-.event::after {
-  content: "";
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 96px;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--vibe, var(--sage)) 10%, transparent), transparent);
-  pointer-events: none;
-  z-index: 0;
-}
 .event > * { position: relative; z-index: 1; }
 
-/* Oversized vibe glyph tucked into the corner, mostly transparent —
-   texture and category recognition in one mark */
-.vibe-watermark {
-  position: absolute;
-  top: -12px; right: -10px;
-  font-size: 84px;
-  line-height: 1;
-  opacity: 0.07;
-  transform: rotate(14deg);
-  pointer-events: none;
-  z-index: 0 !important;
-  transition: transform 0.5s var(--ease), opacity 0.5s var(--ease);
-}
-.event:hover .vibe-watermark { transform: rotate(6deg) scale(1.06); opacity: 0.11; }
+/* The colour wash, the corner watermark and the leading accent bar all
+   used to live here, layered under the content to make a scrolling
+   feed read as varied rather than striped. The poster band does that
+   job outright, so all three are gone: three fewer paints on every one
+   of up to sixty cards, and no z-index stack to reason about.
 
-/* The leading accent bar swells on hover */
-.event::before { transition: width var(--base) var(--ease); }
-.event:hover::before { width: 6px; }
-
-/* Live used to also outline the whole card. Between the ember chip,
-   the ember avatar ring and the ember dot in the rail, a fourth ember
-   mark around the perimeter stopped adding meaning and started making
-   every second card look like a warning. The edge is gone; the border
-   stays neutral and those three marks carry it. */
+   The live perimeter went earlier and for a different reason — between
+   the ember stat, the ember avatar ring and the ember dot in the rail,
+   a fourth ember mark around the card stopped adding meaning and
+   started making every second card look like a warning. */
 .event.is-live { isolation: isolate; }
-.event.is-live > .live-edge { display: none; }
-.event.is-live > .live-edge {
-  content: "";
-  position: absolute; inset: 0;
-  border-radius: inherit;
-  padding: 1.6px;
-  background: var(--ember-line);
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  mask-composite: exclude;
-  pointer-events: none;
-  z-index: 2 !important;
-  opacity: 1;
-}
+
+/* A live card earns one mark the others don't: the band's own top edge
+   burns. One property, no extra element. */
+.event.is-live .poster { box-shadow: inset 0 3px 0 var(--ember); }
 
 /* Hype burst: little dots thrown outward on tap */
 .burst {
@@ -2575,37 +2650,70 @@ html:not(.kb-open) .chat-footer {
 .confirm-sheet .danger-btn { background: var(--danger-fill); color: var(--on-danger); }
 
 /* =====================================================================
-   RECAP CARDS
-   A live card has an edge all the way round; a recap card only had
-   the 3px leading hairline, so it read as a card with a stripe down
-   one side. It gets the whole outline now — quieter than the live
-   one, in the event's own colour, and it doesn't swell on hover
-   because there is nothing left to do with it.
+   RECAP CARDS — the ticket stub
+
+   A finished event is not a live card with the lights off, it is
+   something you tore off and kept. So the band drains to grey, the
+   stat stops being when-it-starts and becomes how-many-turned-up, and
+   the card gets notched at the tear line.
+
+   The notches are a mask: two radial gradients, each opaque except
+   for a transparent circle at one edge, intersected. Where both are
+   opaque the card paints; where either circle falls, nothing does —
+   including the border, which is what makes it read as punched
+   through rather than drawn on. Same technique the live perimeter used
+   to use, so it is already proven in this codebase, and a browser
+   without mask support simply gets a card with straight sides.
+
+   --tear is the y of the band's bottom edge. It has to be a constant,
+   which is why the band is a fixed height: a notch that does not land
+   exactly on the tear line looks like a mistake rather than a stub.
    ===================================================================== */
 
-.event.recap::before,
-.event.recap:hover::before {
-  inset: 0;
-  width: auto;
-  background: none;
-  border: 1.5px solid color-mix(in srgb, var(--vibe, var(--sage)) 42%, var(--ash));
-  border-radius: inherit;
-  pointer-events: none;
-  z-index: 2;
+.stub {
+  --tear: 92px;
+  --notch: 9px;
+  -webkit-mask-image:
+    radial-gradient(circle var(--notch) at 0 var(--tear), transparent 97%, #000 100%),
+    radial-gradient(circle var(--notch) at 100% var(--tear), transparent 97%, #000 100%);
+  -webkit-mask-composite: source-in;
+  mask-image:
+    radial-gradient(circle var(--notch) at 0 var(--tear), transparent 97%, #000 100%),
+    radial-gradient(circle var(--notch) at 100% var(--tear), transparent 97%, #000 100%);
+  mask-composite: intersect;
 }
+
+/* Fixed height, so the notches land on the seam. */
+.stub .poster { height: var(--tear); display: flex; flex-direction: column; justify-content: space-between; }
+
+/* Drained. The dots stay — a stub is still printed on something — but
+   the colour goes out of them, which is what says "this is over"
+   without dimming the text you still want to read. */
+.stub .poster.spent {
+  background-color: var(--bone);
+  background-image:
+    linear-gradient(112deg, transparent 18%, var(--bone) 86%),
+    radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--vibe, var(--sage)) 30%, var(--ash)) 1.5px, transparent 0);
+  border-bottom: 1.5px dashed var(--ash);
+  color: var(--fog);
+}
+.stub .poster.spent .poster-value { color: var(--ink); }
+.stub .poster.spent .poster-label { color: var(--fog); }
+.stub .poster.spent .poster-tag { background: var(--paper); border-color: var(--ash); color: var(--fog); }
+.stub .poster.spent .poster-place { color: var(--fog); }
 
 .status-chip.ended { background: var(--bone); color: var(--fog); font-weight: 600; }
 
-/* The last two hours: the outline thins out and it says so. */
-.event.recap.fading { opacity: 0.74; }
-.event.recap.fading::before { border-style: dashed; }
+/* The last two hours before it expires: the stub fades and says so. */
+.event.stub.fading { opacity: 0.72; }
 .recap-leaves {
   display: flex; align-items: center; gap: 5px;
   margin-top: var(--s-12);
-  font-size: 12px; font-weight: 500;
+  font-family: var(--font-mono);
+  font-size: 10.5px; letter-spacing: var(--track-mono); text-transform: uppercase;
   color: var(--fog);
 }
-.recap-leaves i { font-size: 14px; }
+.recap-leaves i { font-size: 13px; }
 
 /* =====================================================================
    PROFILE — HOSTED / JOINED

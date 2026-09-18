@@ -75,6 +75,25 @@ const CHECKS = [
   ['a hairline against a card',  'ash',        'paper',      1.15]
 ];
 
+/**
+ * The poster band is the one surface whose colour is COMPUTED rather
+ * than declared: `color-mix(vibe BAND_MIX%, paper)`, once per vibe. So
+ * it needs checking per vibe, in both themes — five more pairs each
+ * that no static token list would cover, and the exact ones that break
+ * if somebody adds a sixth category or dials the mix up.
+ */
+const BAND_MIX = (() => {
+  // Not [^)]* — `var(--vibe, var(--sage))` nests a paren and that
+  // stops at the wrong one. Take the first percentage after --band:.
+  const m = css.match(/--band:[^;]*?(\d+)%/);
+  return m ? Number(m[1]) / 100 : null;
+})();
+
+function mix(a, b, p) {
+  const A = hex(a), B = hex(b);
+  return '#' + [0, 1, 2].map((i) => Math.round(A[i] * p + B[i] * (1 - p)).toString(16).padStart(2, '0')).join('');
+}
+
 let failures = 0;
 for (const theme of ['light', 'dark']) {
   console.log('\n' + theme);
@@ -86,5 +105,24 @@ for (const theme of ['light', 'dark']) {
     else { failures++; console.log('  ✗ ' + r.toFixed(2).padStart(5) + '  ' + name + ' — needs ' + min + ' (' + t[fg] + ' on ' + t[bg] + ')'); }
   }
 }
+// ---- the poster band, per vibe ----
+if (BAND_MIX === null) {
+  failures++;
+  console.log('\n✗ could not find the --band mix in style.css');
+} else {
+  for (const theme of ['light', 'dark']) {
+    console.log('\n' + theme + ' — poster band at ' + Math.round(BAND_MIX * 100) + '% vibe');
+    const t = THEMES[theme];
+    for (const name of ['chill', 'food', 'party', 'study', 'sports']) {
+      const vibe = t['vibe-' + name];
+      if (!vibe) { failures++; console.log('  ✗ missing --vibe-' + name); continue; }
+      const band = mix(vibe, t.paper, BAND_MIX);
+      const r = ratio(t['chip-ink'], band);
+      if (r >= 4.5) console.log('  ✓ ' + r.toFixed(2).padStart(5) + '  the band\'s text on ' + name);
+      else { failures++; console.log('  ✗ ' + r.toFixed(2).padStart(5) + '  the band\'s text on ' + name + ' — needs 4.5 (' + t['chip-ink'] + ' on ' + band + ')'); }
+    }
+  }
+}
+
 console.log(failures ? '\n' + failures + ' failing' : '\nall good');
 process.exit(failures ? 1 : 0);

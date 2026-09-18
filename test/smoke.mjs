@@ -262,12 +262,20 @@ const recap = await page.evaluate(async ({ events }) => {
   await ev.loadRecap({ reset: true });
   const ids = [...document.querySelectorAll('#recapEvents .event')].map((n) => n.id.replace('event-', ''));
   const card = document.querySelector('#event-busy');
-  const cs = card && getComputedStyle(card, '::before');
+  const live = document.querySelector('#recapEvents #event-live');
   return {
     ids,
-    chip: card?.querySelector('.status-chip')?.innerText.trim(),
+    // Nothing on a finished card may claim it is still on.
     liveRing: !!card?.querySelector('.av-ring.live'),
-    border: cs && [cs.borderTopWidth, cs.borderRightWidth, cs.borderBottomWidth, cs.borderLeftWidth],
+    liveDot: !!card?.querySelector('.live-dot'),
+    liveClass: !!card?.classList.contains('is-live'),
+    // And it has to LOOK different from a live one at a glance: it is a
+    // stub, its band is spent, and the big number is the turnout.
+    isStub: !!card?.classList.contains('stub'),
+    spentBand: !!card?.querySelector('.poster.spent'),
+    stat: card?.querySelector('.poster-value')?.innerText.trim(),
+    statLabel: card?.querySelector('.poster-label')?.innerText.trim(),
+    leakedLive: !!live,
     fading: !!document.querySelector('#event-quiet.fading'),
   };
 }, { events: [
@@ -279,9 +287,17 @@ const recap = await page.evaluate(async ({ events }) => {
 ]});
 ok('recap holds what earned its time and drops what did not',
    recap.ids.join() === 'quiet,busy,mine', recap.ids.join());
-ok('a recap card says Ended, not Live', /^Ended/.test(recap.chip || '') && !recap.liveRing, recap.chip);
-ok('the recap outline goes all the way round',
-   recap.border && recap.border.every((w) => parseFloat(w) >= 1), JSON.stringify(recap.border));
+// An ended event had started too, so `now >= startTime` is still true
+// for it — which is exactly how a Live chip and a live ring ended up on
+// every card in Recap once. Nothing on a finished card may say "on".
+ok('nothing on a recap card claims it is still live',
+   !recap.liveRing && !recap.liveDot && !recap.liveClass && !recap.leakedLive,
+   JSON.stringify({ r: recap.liveRing, d: recap.liveDot, c: recap.liveClass, l: recap.leakedLive }));
+// A finished event is a torn-off stub, not a live card with the lights
+// off: the band drains and the big number becomes the turnout.
+ok('a recap card is a spent stub with the turnout as its stat',
+   recap.isStub && recap.spentBand && recap.stat === '7' && /went/i.test(recap.statLabel || ''),
+   JSON.stringify({ s: recap.isStub, b: recap.spentBand, n: recap.stat, l: recap.statLabel }));
 ok('one about to leave says so', recap.fading);
 
 /* ------------------------------------------------------------------ */

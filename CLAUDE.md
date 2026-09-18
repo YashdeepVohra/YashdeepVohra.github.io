@@ -141,6 +141,32 @@ test/               stub.js + smoke.mjs + contrast.mjs
   `--aubergine`, `--periwinkle`, `--lavender` or `--plum` — they were
   briefly kept as aliases during the redesign and are gone. If you find
   one in a branch, it is stale.
+- **An event card is a poster, and a recap card is the stub you tore
+  off it.** Both are built around one band across the top.
+
+  The band is a halftone in the event's own `--vibe`: two background
+  layers, a dot grid with a linear gradient painted OVER it that goes
+  opaque within half the width. That decay is the whole trick — a dot
+  grid left visible edge to edge reads as fabric, not as printing. No
+  image, no mask, no extra element, so sixty cards cost one paint each.
+  The band replaced the leading colour edge, the top wash AND the
+  corner watermark, which is three fewer paints per card than before.
+
+  Inside it, one number at poster scale: on a live card the time
+  (`timeStat()`), on a stub the turnout. Everything else in the band
+  shrinks to mono around it. The band colour is
+  `color-mix(vibe 40%, paper)` — 40% is as much vibe as it can take and
+  still clear 4.5:1 for the ink on the worst of the five categories,
+  which `test/contrast.mjs` checks for every vibe in both themes. Add a
+  sixth category and that check is what tells you if it works.
+
+  The stub's notches are a mask: two radial gradients, each opaque
+  except for a circle at one edge, intersected. Where either circle
+  falls nothing paints — including the border, which is what makes it
+  read as punched through rather than drawn on. `--tear` has to match
+  the band's height exactly, which is why `.stub .poster` is a fixed
+  height; a notch a few pixels off the seam looks like a bug. A browser
+  without mask support just gets straight sides.
 - **Blocking is total.** Filter `isBlocked` everywhere — lists, counts,
   the feed, vouches. A count that disagrees with the list under it is a bug.
 
@@ -325,7 +351,7 @@ private chosen at sign-up (and asked once of older accounts), remove a
 follower, going public lets waiting requests in, dark mode, editing and
 taking back a message (hold a bubble, or right-click on a desktop),
 reactions, a host's pinned message in an event chat, the Recap
-receipt, and the sage-on-paper redesign.
+receipt, the sage-on-paper redesign, and the poster/stub cards.
 
 Not built, roughly in the order I'd do them: push notifications (needs
 Blaze — and it is the ceiling on everything else, since a live event

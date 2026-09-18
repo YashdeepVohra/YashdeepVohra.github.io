@@ -405,6 +405,71 @@ function relTime(ms, now = Date.now()) {
   return ahead ? `in ${label}` : `${label} ago`;
 }
 
+/**
+ * THE POSTER STAT.
+ *
+ * A card's most important fact is WHEN, and until now it was eleven
+ * pixels of grey next to the handle. This is Caldera's stat card
+ * applied to it: a small mono label, then one short value set in the
+ * display face at poster scale.
+ *
+ * It has to stay SHORT — two or three characters wherever possible —
+ * because the whole point is that you read it at a glance while
+ * scrolling. Hence "45M" rather than "in 45 minutes", and the actual
+ * clock time demoted to the line underneath, which is what you need
+ * only once you have decided you care.
+ */
+function timeStat(e, now) {
+  const clock = new Date(e.startTime).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+
+  if (e.expiresAt <= now) {
+    return { label: "Ended", value: relTime(e.expiresAt, now).replace(" ago", ""), sub: "ago" };
+  }
+  if (now >= e.startTime) {
+    // Live. The useful number is how long is left, not how long it has
+    // been running: you are deciding whether it is worth walking over.
+    const leftMins = Math.max(0, Math.round((e.expiresAt - now) / 60000));
+    const left = leftMins < 60 ? leftMins + "m" : Math.round(leftMins / 60) + "h";
+    return { label: "Happening", value: "Now", sub: left + " left" };
+  }
+  const mins = Math.round((e.startTime - now) / 60000);
+  const value = mins < 1 ? "Now"
+    : mins < 60 ? mins + "m"
+    : mins < 1440 ? Math.round(mins / 60) + "h"
+    : Math.round(mins / 1440) + "d";
+  return { label: "Starts in", value, sub: clock };
+}
+
+/**
+ * The band across the top of a card: a halftone field in the event's
+ * own colour, the category, and the stat.
+ *
+ * The halftone is two background layers and nothing else — a dot grid,
+ * with a linear gradient painted OVER it that fades from transparent
+ * to the solid band colour. No image, no mask, no extra element, so
+ * sixty of them down a feed cost one paint each. `--vibe` is already
+ * on the card, so the colour comes along for free.
+ */
+function posterBand(e, now, { stat, spent = false } = {}) {
+  const s = stat || timeStat(e, now);
+  const glyph = (e.tag || "").trim().split(" ")[0];
+  const word = (e.tag || "").trim().split(" ").slice(1).join(" ");
+  return `
+    <div class="poster${spent ? " spent" : ""}">
+      <div class="poster-head">
+        ${e.tag ? `<span class="poster-tag">${escapeHtml(glyph)} ${escapeHtml(word)}</span>` : ""}
+        <span class="poster-place"><i class='bx bx-map-pin'></i><span>${escapeHtml(e.place)}</span></span>
+      </div>
+      <div class="poster-stat">
+        <span class="poster-value">${escapeHtml(s.value)}</span>
+        <span class="poster-side">
+          <span class="poster-label">${escapeHtml(s.label)}</span>
+          ${s.sub ? `<span class="poster-sub">${escapeHtml(s.sub)}</span>` : ""}
+        </span>
+      </div>
+    </div>`;
+}
+
 /** Overlapping avatar stack, capped at four plus a counter. */
 function avatarStack(uids) {
   const shown = uids.slice(0, 4);
@@ -716,25 +781,21 @@ export function renderEvents() {
       }
     }
 
-    const header = `
-      <div class="card-top">
+    // THE BYLINE. The host used to be the top line of the card, above
+    // the title, which made a feed of events read as a feed of people.
+    // The event is the headline now and the host is the credit under
+    // it — smaller, on one line, still a tap away from their profile.
+    const byline = `
+      <div class="byline">
         <div class="av-ring ${isLive ? "live" : ""} tappable" ${openHost}>
           <div class="av-inner">${renderAvatar(avatarFor(e.hostUid))}</div>
         </div>
-        <div class="card-who">
-          <div class="who-line">
-            <span class="who-name tappable" ${openHost}>${escapeHtml(displayNameFor(e.hostUid))}</span>
-            <span class="who-meta">@${escapeHtml(usernameFor(e.hostUid))} · ${escapeHtml(relTime(e.startTime, now))}</span>
-          </div>
-          <div class="who-place"><i class='bx bx-map-pin'></i> ${escapeHtml(e.place)}</div>
-          ${trust}
-        </div>
-        ${ended
-          ? `<span class="status-chip ended">${wasCalledOff(e) ? "Called off" : `Ended ${escapeHtml(relTime(e.expiresAt, now))}`}</span>`
-          : isLive
-            ? `<span class="status-chip live"><span class="live-dot"></span> Live</span>`
-            : `<span class="status-chip soon">Soon</span>`}
+        <span class="byline-name tappable" ${openHost}>${escapeHtml(displayNameFor(e.hostUid))}</span>
+        <span class="byline-meta">@${escapeHtml(usernameFor(e.hostUid))}</span>
+        ${trust}
       </div>`;
+
+
 
     const desc = e.description
       ? `<div class="event-desc-box">${escapeHtml(e.description)}</div>
@@ -799,9 +860,10 @@ export function renderEvents() {
       </div>`;
 
     const body = `
+      <div class="card-body">
       <div class="event-title">${escapeHtml(e.title)}</div>
       ${desc}
-      ${e.tag ? `<div class="vibe-chip">${escapeHtml(e.tag)}</div>` : ""}
+      ${byline}
       ${needsApproval && !isHost && !hasJoined ? `<div class="approval-note"><i class='bx bx-lock-alt'></i> The host approves who joins</div>` : ""}
       ${iMustConfirm ? `
         <div class="changed-note">
@@ -818,19 +880,22 @@ export function renderEvents() {
         ${avatarStack(withoutBlocked(confirmedGoing))}
         <span class="going-text">${goingText(withoutBlocked(confirmedGoing), unconfirmed.length)}</span>
       </div>
-      ${capacity}`;
+      ${capacity}
+      </div>`;
 
     // Every card is built, whatever the active filter — applyFilter()
     // below decides what is on screen, and can change its mind for free.
     const tagAttr = ` data-tag="${escapeHtml(e.tag || "")}"`;
 
     if (e.expiresAt > now) {
-      const glyph = (e.tag || "").trim().split(" ")[0];
+      // The band carries the vibe colour, the glyph and the time, so
+      // the old leading edge, corner watermark and top wash have all
+      // gone with it — three paints per card saved, and a composition
+      // instead of a stack of rows.
       liveCards.push({ id, html: `
-        <article class="event card ${isLive ? "is-live" : ""}" id="event-${id}"${tagAttr} style="--vibe:${vibe}">
-          ${isLive ? `<span class="live-edge"></span>` : ""}
-          <span class="vibe-watermark">${escapeHtml(glyph)}</span>
-          ${header}${body}${actions}
+        <article class="event card poster-card ${isLive ? "is-live" : ""}" id="event-${id}"${tagAttr} style="--vibe:${vibe}">
+          ${posterBand(e, now)}
+          ${body}${actions}
         </article>` });
     } else if (inRecap(e, now, state.uid)) {
       // What it earned, said plainly — see recapRules.js for the sums.
@@ -848,17 +913,34 @@ export function renderEvents() {
         ? `<div class="recap-leaves"><i class='bx bx-time-five'></i> Leaves recap ${escapeHtml(relTime(now + left, now))}</div>`
         : "";
 
+      // A RECAP CARD IS A TICKET STUB. The band is the same one, drained
+      // of its colour because this already happened, and the stat is no
+      // longer when it starts — it is how many turned up, which is the
+      // only number that matters once it is over. Notches are punched
+      // into the sides on the tear line, so a finished event reads as
+      // something torn off and kept rather than a live card with the
+      // lights out.
+      const turnout = wasCalledOff(e)
+        ? { label: "Called off", value: "\u2014", sub: "before it started" }
+        : { label: shownGuests.length === 1 ? "person went" : "people went",
+            value: String(shownGuests.length),
+            sub: hypeCount ? hypeCount + " hyped" : "" };
+
       recapCards.push({ id, html: `
-        <article class="event card recap${fading ? " fading" : ""}" id="event-${id}"${tagAttr} style="--vibe:${vibe}">
-          <span class="vibe-watermark">${escapeHtml((e.tag || "").trim().split(" ")[0])}</span>
-          ${header}
-          <div class="event-title">${escapeHtml(e.title)}</div>
-          ${e.tag ? `<div class="vibe-chip">${escapeHtml(e.tag)}</div>` : ""}
-          <div class="going-row">
-            ${shownGuests.length ? avatarStack(shownGuests) : ""}
-            <span class="going-text">${wentText}${hypeCount ? ` · ${hypeCount} hyped` : ""}</span>
+        <article class="event card poster-card stub${fading ? " fading" : ""}" id="event-${id}"${tagAttr} style="--vibe:${vibe}">
+          ${posterBand(e, now, { stat: turnout, spent: true })}
+          <div class="card-body">
+            <div class="event-title">${escapeHtml(e.title)}</div>
+            <div class="byline">
+              <div class="av-ring tappable" ${openHost}>
+                <div class="av-inner">${renderAvatar(avatarFor(e.hostUid))}</div>
+              </div>
+              <span class="byline-name tappable" ${openHost}>${escapeHtml(displayNameFor(e.hostUid))}</span>
+              <span class="byline-meta">${escapeHtml(relTime(e.expiresAt, now))}</span>
+            </div>
+            ${shownGuests.length ? `<div class="going-row">${avatarStack(shownGuests)}<span class="going-text">${escapeHtml(wentText)}</span></div>` : ""}
+            ${leaves}
           </div>
-          ${leaves}
         </article>` });
     }
   });
