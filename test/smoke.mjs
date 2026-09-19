@@ -1452,6 +1452,370 @@ group('dark mode');
 }
 
 /* ------------------------------------------------------------------ */
+group('search that forgives a typo');
+{
+  // Search used to be exact on both sides: people by username prefix,
+  // events by literal substring. "chia" found nothing, "sanchitt"
+  // found nothing, and looking someone up by the name printed on their
+  // card — rather than their handle — found nothing either.
+  const m = await page.evaluate(async () => {
+    const mr = await import('/js/services/matchRules.js');
+    const s = (q, t) => mr.scoreMatch(q, t);
+    return {
+      exactBeatsEverything: s('chai', 'chai') > s('chai', 'chai latte') &&
+                            s('chai', 'chai latte') > s('chai', 'masala chai'),
+      // The most common typo of all is two letters the wrong way round,
+      // and plain Levenshtein scores that as TWO edits — far enough to
+      // miss at any sane threshold. This is the one that proves the
+      // distance function counts a swap as one.
+      swapIsOneEdit: mr.editDistance('chia', 'chai', 1) === 1,
+      typoFound: s('chia', 'Chai + assignment panic') !== null,
+      doubledLetter: s('studdy', 'Study grind') !== null,
+      droppedLetter: s('stdy', 'Study grind') !== null,
+      wordsInAnyOrder: s('panic chai', 'Chai + assignment panic') !== null,
+      initialsish: s('sncht', 'Sanchit Kumar') !== null,
+      // Forgiving is not the same as indiscriminate.
+      nonsenseStillMisses: s('cricket', 'Chai + assignment panic') === null,
+      shortQueryIsStrict: mr.slackFor('ab') === 0,
+      // And it must give up early rather than fill a matrix for every
+      // cached person on every keystroke.
+      boundedDistance: mr.editDistance('abcdefgh', 'zzzzzzzz', 2) === 3
+    };
+  });
+
+  ok('an exact hit still outranks a near one', m.exactBeatsEverything);
+  ok('two letters the wrong way round count as one typo, not two', m.swapIsOneEdit);
+  ok('"chia" finds the chai', m.typoFound);
+  ok('a doubled letter is forgiven', m.doubledLetter);
+  ok('a dropped letter is forgiven', m.droppedLetter);
+  ok('the words can come in any order', m.wordsInAnyOrder);
+  ok('dropped vowels still land', m.initialsish);
+  ok('but something unrelated still matches nothing', m.nonsenseStillMisses);
+  ok('a two-letter query gets no slack at all', m.shortQueryIsStrict);
+  ok('the distance function gives up early', m.boundedDistance);
+
+  // And the same thing through the real event search.
+  const found = await page.evaluate(async () => {
+    const { state } = await import('/js/state/store.js');
+    const search = await import('/js/services/searchService.js');
+    const now = Date.now();
+    state.eventCache = {}; state.eventOrder = [];
+    const add = (id, title, place, tag) => {
+      state.eventCache[id] = { id, title, place, tag, hostUid: 'a',
+        participantUids: [], hypedUids: [], startTime: now - 6e4,
+        expiresAt: now + 36e5, description: '', pendingUids: [], unconfirmedUids: [] };
+      state.eventOrder.push(id);
+    };
+    add('f1', 'Chai + assignment panic', 'Nescafe', '☕ Chill');
+    add('f2', 'Football, whoever turns up', 'Main ground', '\u{1F3C0} Sports');
+    add('f3', 'Study grind', 'Library 303', '\u{1F4DA} Study');
+    const ids = (q) => search.searchEvents(q).map((e) => e.id);
+    return {
+      exact: ids('chai'), typo: ids('chia'), place: ids('nescafee'),
+      swapped: ids('fotball'), nonsense: ids('quidditch'), tooShort: ids('c')
+    };
+  });
+
+  ok('the event search finds the exact thing first', found.exact[0] === 'f1', JSON.stringify(found.exact));
+  ok('and finds it when it is typed wrong', found.typo[0] === 'f1', JSON.stringify(found.typo));
+  ok('a misspelt place still finds the event', found.place[0] === 'f1', JSON.stringify(found.place));
+  ok('a missing letter in the title still finds it', found.swapped[0] === 'f2', JSON.stringify(found.swapped));
+  ok('and nothing matches nothing', found.nonsense.length === 0, JSON.stringify(found.nonsense));
+  ok('one character is still too little to search on', found.tooShort.length === 0);
+}
+
+/* ------------------------------------------------------------------ */
+group('opening an event somebody shared');
+{
+  // There is no separate detail view for an event — the card in the
+  // feed IS the event — so View has always gone to the feed. What it
+  // also did, at every width, was close the conversation. On a laptop
+  // the thread and the feed are different COLUMNS, so that threw away
+  // the place you were reading for nothing.
+  const wideCtx = await browser.newContext({ viewport: { width: 1280, height: 860 } });
+  const wide = await wideCtx.newPage();
+  await wide.addInitScript({ path: fileURLToPath(new URL('./stub.js', import.meta.url)) });
+  await wide.goto(APP_URL, { waitUntil: 'domcontentloaded' });
+  await wide.waitForTimeout(1500);
+
+  const desk = await wide.evaluate(async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const { state } = await import('/js/state/store.js');
+    const ev = await import('/js/services/eventsService.js');
+    const now = Date.now();
+    window.__authSingleton.currentUser = { uid: 'me' };
+    state.uid = 'me'; state.blockedUids = []; state.privacyChosen = true;
+    const mk = (u) => ({ uid: u, username: u, displayName: u, avatar: 'x', followers: [], following: [], vouchedBy: [] });
+    state.userCache = Object.fromEntries(['me', 'a'].map((u) => [u, mk(u)]));
+    state.following = []; state.orbitUids = [];
+    state.eventCache = { sh1: { id: 'sh1', title: 'Chai + assignment panic', place: 'Nescafe',
+      tag: '☕ Chill', hostUid: 'a', participantUids: [], hypedUids: [],
+      startTime: now - 6e4, expiresAt: now + 36e5, description: '', pendingUids: [], unconfirmedUids: [] } };
+    state.eventOrder = ['sh1'];
+    state.recapOrder = []; state.recapDone = true; state.currentLiveFilter = 'All';
+    document.getElementById('loading-screen').classList.add('hidden');
+    document.querySelector('.app-frame').classList.remove('hidden');
+
+    state.currentChat = 'a_me'; state.currentChatType = 'direct';
+    state.currentChatStatus = 'unlocked'; state.currentChatData = { unreadByUid: '' };
+    state.currentOtherUid = 'a'; state.currentEventData = null;
+    window.switchScreen('chatScreen');
+    await wait(200);
+
+    ev.showSharedEvent('sh1');
+    await wait(400);
+    return {
+      chatStillOpen: !document.getElementById('chatScreen').classList.contains('hidden'),
+      feedShowing: !document.getElementById('eventsTab').classList.contains('hidden'),
+      cardOnScreen: !!document.getElementById('event-sh1'),
+      noChip: !document.getElementById('returnChip')
+    };
+  });
+  await wideCtx.close();
+
+  ok('on a laptop the conversation stays open', desk.chatStillOpen);
+  ok('and the feed comes up beside it', desk.feedShowing && desk.cardOnScreen,
+     JSON.stringify(desk));
+  ok('with no way-back chip, because you never left', desk.noChip);
+
+  // On a phone only one of them fits, so the chat does go — but it
+  // leaves a way back rather than just vanishing.
+  const narrowCtx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const narrow = await narrowCtx.newPage();
+  await narrow.addInitScript({ path: fileURLToPath(new URL('./stub.js', import.meta.url)) });
+  await narrow.goto(APP_URL, { waitUntil: 'domcontentloaded' });
+  await narrow.waitForTimeout(1500);
+
+  const ph = await narrow.evaluate(async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const { state } = await import('/js/state/store.js');
+    const ev = await import('/js/services/eventsService.js');
+    const now = Date.now();
+    window.__authSingleton.currentUser = { uid: 'me' };
+    state.uid = 'me'; state.blockedUids = []; state.privacyChosen = true;
+    const mk = (u, n) => ({ uid: u, username: u, displayName: n || u, avatar: 'x', followers: [], following: [], vouchedBy: [] });
+    state.userCache = { me: mk('me'), a: mk('a', 'Riya') };
+    state.following = []; state.orbitUids = [];
+    state.eventCache = { sh1: { id: 'sh1', title: 'Chai + assignment panic', place: 'Nescafe',
+      tag: '☕ Chill', hostUid: 'a', participantUids: [], hypedUids: [],
+      startTime: now - 6e4, expiresAt: now + 36e5, description: '', pendingUids: [], unconfirmedUids: [] } };
+    state.eventOrder = ['sh1'];
+    state.recapOrder = []; state.recapDone = true; state.currentLiveFilter = 'All';
+    document.getElementById('loading-screen').classList.add('hidden');
+    document.querySelector('.app-frame').classList.remove('hidden');
+
+    state.currentChat = 'a_me'; state.currentChatType = 'direct';
+    state.currentChatStatus = 'unlocked'; state.currentChatData = { unreadByUid: '' };
+    state.currentOtherUid = 'a'; state.currentEventData = null;
+    window.switchScreen('chatScreen');
+    await wait(200);
+
+    ev.showSharedEvent('sh1');
+    await wait(700);
+    const chip = document.getElementById('returnChip');
+    const fab = document.querySelector('.fab');
+    const overlapping = (() => {
+      if (!chip || !fab || getComputedStyle(fab).display === 'none') return false;
+      const a = chip.getBoundingClientRect(), b = fab.getBoundingClientRect();
+      return a.right > b.left && a.left < b.right && a.bottom > b.top && a.top < b.bottom;
+    })();
+    return {
+      chatClosed: document.getElementById('chatScreen').classList.contains('hidden'),
+      cardOnScreen: !!document.getElementById('event-sh1'),
+      chipText: chip ? chip.innerText.trim() : '',
+      // The name belongs to another student: it must be text, never markup.
+      chipIsText: chip ? !/<|>/.test(chip.innerHTML.replace(/<i [^>]*><\/i>/, '')) : false,
+      overlapping,
+      // And it must not outlive the screen it belongs to.
+      clearedOnNavigate: (() => { window.switchScreen('home'); return !document.getElementById('returnChip'); })()
+    };
+  });
+  await narrowCtx.close();
+
+  ok('on a phone the chat does close, because only one fits', ph.chatClosed);
+  ok('and the shared card is the one on screen', ph.cardOnScreen);
+  ok('but it leaves a way back, by name', /Back to Riya/.test(ph.chipText), ph.chipText);
+  ok('the name goes in as text, never markup', ph.chipIsText);
+  ok('the chip does not sit under the compose button', !ph.overlapping);
+  ok('and it does not outlive the screen it belongs to', ph.clearedOnNavigate);
+}
+
+/* ------------------------------------------------------------------ */
+group('nothing is cut off');
+{
+  // Four separate bugs lived here at once, and none of them was visible
+  // at the width anyone develops at:
+  //
+  //   1. A 320px phone sliced "GOING" off the poster band. The halftone
+  //      column had already given up all its width, and the type column
+  //      is deliberately un-shrinkable, so the band ran out past the
+  //      card's own overflow: hidden.
+  //   2. Opening a chat on a laptop put the feed in a 330px column that
+  //      was sized for the chat LIST, which cut the band the same way.
+  //   3. The live rail bleeds out by one gutter to run edge to edge.
+  //      The gutter was hard-coded in three places, and the chat-open
+  //      layout changed one of them — so the rail hung 7px over the
+  //      divider and into the conversation.
+  //   4. The swipe-to-reply icons parked 42px outside the thread, which
+  //      left #messages permanently wider than its own box.
+  //
+  // So this does not test any of those four causes. It renders the app
+  // and asks the only question that matters: is anything on screen
+  // being sliced off, or reaching somewhere it shouldn't? Each of the
+  // four was re-introduced one at a time and this caught all four.
+  const look = async (width, height, mode) => {
+    const ctx = await browser.newContext({ viewport: { width, height } });
+    const p = await ctx.newPage();
+    const errs = [];
+    p.on('pageerror', (e) => errs.push(e.message.slice(0, 120)));
+    await p.addInitScript({ path: fileURLToPath(new URL('./stub.js', import.meta.url)) });
+    await p.goto(APP_URL, { waitUntil: 'domcontentloaded' });
+    await p.waitForTimeout(1500);
+
+    const rows = await p.evaluate(async (mode) => {
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+      const { state } = await import('/js/state/store.js');
+      const ev = await import('/js/services/eventsService.js');
+      const chat = await import('/js/services/chatService.js');
+      const now = Date.now();
+      window.__authSingleton.currentUser = { uid: 'me' };
+      state.uid = 'me'; state.blockedUids = []; state.privacyChosen = true;
+      state.userAvatar = '\u{1F43C}'; state.username = 'you';
+      const mk = (u) => ({ uid: u, username: u, displayName: u === 'a' ? 'Sanchit Kumar' : u,
+                           avatar: '\u{1F98A}', followers: [], following: [], vouchedBy: [] });
+      state.userCache = Object.fromEntries(['me', 'a', 'b', 'c'].map((u) => [u, mk(u)]));
+      state.following = []; state.orbitUids = [];
+      const tags = ['☕ Chill', '\u{1F355} Food', '\u{1F389} Party', '\u{1F4DA} Study', '\u{1F3C0} Sports'];
+      state.eventCache = {}; state.eventOrder = [];
+      for (let i = 0; i < 6; i++) {
+        const id = 'o' + i;
+        state.eventCache[id] = { id, title: 'Chai + assignment panic ' + i, place: 'Nescafe, back lawn',
+          tag: tags[i % 5], hostUid: 'a', participantUids: ['a', 'b'], hypedUids: ['a'],
+          startTime: now - 6e4, expiresAt: now + 36e5, description: '', pendingUids: [], unconfirmedUids: [] };
+        state.eventOrder.push(id);
+      }
+      state.recapOrder = []; state.recapDone = true; state.currentLiveFilter = 'All';
+      document.getElementById('loading-screen').classList.add('hidden');
+      document.querySelector('.app-frame').classList.remove('hidden');
+      window.switchScreen('home'); ev.renderEvents();
+      await wait(300);
+
+      if (mode !== 'feed') {
+        state.currentChat = 'a_me'; state.currentChatType = 'direct';
+        state.currentChatStatus = 'unlocked'; state.currentChatData = { unreadByUid: '' };
+        state.currentOtherUid = 'a'; state.currentEventData = null;
+        window.switchScreen('chatScreen');
+        const m = (id, senderUid, text, extra = {}) =>
+          ({ id, data: () => Object.assign({ senderUid, text, time: now - 1000 }, extra) });
+        window.__docs = [
+          m('x1', 'a', 'you free tonight?'),
+          m('x2', 'me', 'u shut up snake', { reactions: { a: '\u{1F62E}' } }),
+          m('x3', 'me', 'hello', { editedAt: now - 500, reactions: { a: '\u{1F525}' } }),
+          m('x4', 'me', 'https://livesociya.com/?e=o0'),
+          m('x5', 'a', 'https://example.com/a/very/long/url/that/will/not/wrap/at/all/ever/no/spaces/here'),
+          m('x6', 'me', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+        ];
+        chat.loadMessages();
+        await wait(450);
+      }
+      // The state a laptop lands in when a chat is open and the sidebar
+      // is used to go back to Live Now: both columns on screen at once.
+      if (mode === 'both') {
+        window.showTab('events');
+        document.querySelector('.app-frame').classList.add('chat-open');
+        document.getElementById('chatScreen').classList.remove('hidden');
+        document.getElementById('home').classList.remove('hidden');
+        ev.renderEvents();
+        await wait(300);
+      }
+
+      const out = [];
+      const nameOf = (e) => e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') +
+        (typeof e.className === 'string' && e.className
+          ? '.' + e.className.trim().split(/\s+/).slice(0, 2).join('.') : '');
+      const shows = (e) => {
+        const s = getComputedStyle(e);
+        if (s.display === 'none' || s.visibility === 'hidden' || s.opacity === '0') return false;
+        const r = e.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+      };
+      const clipperOf = (e) => {
+        for (let q = e.parentElement; q; q = q.parentElement) {
+          if (getComputedStyle(q).overflowX !== 'visible') return q;
+        }
+        return null;
+      };
+      document.querySelectorAll('*').forEach((e) => {
+        if (!shows(e)) return;
+        const s = getComputedStyle(e);
+        const r = e.getBoundingClientRect();
+        const c = clipperOf(e);
+        const cs = c ? getComputedStyle(c) : null;
+        // A horizontal scroller is SUPPOSED to hold wider content.
+        const scroller = cs && (cs.overflowX === 'auto' || cs.overflowX === 'scroll');
+        const limit = c ? c.getBoundingClientRect().right : document.documentElement.clientWidth;
+        if (!scroller && r.right > limit + 1) {
+          out.push({ why: 'reaches past ' + (c ? nameOf(c) : 'the window'), el: nameOf(e), by: Math.round(r.right - limit) });
+        }
+        // An element that CLIPS, holding content wider than itself, is
+        // the only case where something is actually sliced. Visible
+        // overflow is just layout, and the check above judges where it
+        // lands. One-line ellipsis and line-clamp are on purpose.
+        const onPurpose = (s.textOverflow === 'ellipsis' && s.whiteSpace === 'nowrap') ||
+                          (s.webkitLineClamp && s.webkitLineClamp !== 'none');
+        const clips = s.overflowX === 'hidden' || s.overflowX === 'clip';
+        if (clips && !onPurpose && e.scrollWidth > e.clientWidth + 2) {
+          out.push({ why: 'slices its own content', el: nameOf(e), by: e.scrollWidth - e.clientWidth });
+        }
+      });
+      // And nothing in the feed column may reach past the column: a
+      // full-bleed row escapes its padding on purpose, but past the
+      // column it is over the divider and into the chat.
+      const home = document.getElementById('home');
+      if (home && !home.classList.contains('hidden')) {
+        const edge = home.getBoundingClientRect().right;
+        const inScroller = (e) => {
+          for (let q = e.parentElement; q && q !== home; q = q.parentElement) {
+            const o = getComputedStyle(q).overflowX;
+            if (o === 'auto' || o === 'scroll') return true;
+          }
+          return false;
+        };
+        home.querySelectorAll('*').forEach((e) => {
+          if (!shows(e) || inScroller(e)) return;
+          const r = e.getBoundingClientRect();
+          if (r.right > edge + 1) out.push({ why: 'past the feed column', el: nameOf(e), by: Math.round(r.right - edge) });
+        });
+      }
+      const seen = new Map();
+      out.forEach((o) => { const k = o.why + '|' + o.el; if (!seen.has(k) || seen.get(k).by < o.by) seen.set(k, o); });
+      return [...seen.values()].sort((a, b) => b.by - a.by).slice(0, 4);
+    }, mode);
+
+    await ctx.close();
+    return { rows, errs };
+  };
+
+  const small = await look(320, 700, 'feed');
+  ok('a 320px phone slices nothing off the feed', small.rows.length === 0, JSON.stringify(small.rows));
+
+  const smallChat = await look(320, 700, 'chat');
+  ok('and nothing off a thread either, shared cards and long links included',
+     smallChat.rows.length === 0, JSON.stringify(smallChat.rows));
+
+  const phone = await look(390, 844, 'chat');
+  ok('a normal phone thread is clean', phone.rows.length === 0, JSON.stringify(phone.rows));
+
+  const beside = await look(1280, 860, 'both');
+  ok('the feed still fits when a chat is open beside it',
+     beside.rows.length === 0, JSON.stringify(beside.rows));
+
+  ok('no errors while measuring any of that',
+     [small, smallChat, phone, beside].every((r) => r.errs.length === 0),
+     [small, smallChat, phone, beside].flatMap((r) => r.errs).join(' | '));
+}
+
+/* ------------------------------------------------------------------ */
 group('overall');
 ok('no errors, no native dialogs, all the way through', errors.length === 0, errors.join(' | '));
 

@@ -128,6 +128,16 @@
   --rail-w: 304px;
   --feed-max: 620px;
 
+  /* The feed's side gutter. THREE things have to agree on this number:
+     the container's padding, the live rail's negative margin (it runs
+     edge to edge, so it bleeds back out by exactly one gutter), and the
+     rail's own inner padding (so the first avatar lines up with the
+     first card). They used to be three hard-coded 16s and 24s, which
+     drifted the moment a layout changed the padding and left the rail
+     hanging 8px past the column and over the divider. Change it here
+     and in the two media queries below; never at the call sites. */
+  --gut: var(--s-16);
+
   /* ---- Depth ----
      Almost nothing. Surfaces separate by colour and a 1px hairline;
      lift-3 exists only for the things that genuinely float above the
@@ -564,7 +574,7 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 .profileBtn:hover { background: var(--ash); filter: none; }
 
 .sidebar, .rail { display: none; }
-.container { flex: 1; width: 100%; padding: var(--s-16) var(--s-16) 132px; }
+.container { flex: 1; width: 100%; padding: var(--s-16) var(--gut) 132px; }
 
 .section-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s-12); margin-bottom: var(--s-16); }
 .section-head h3 { font-size: 26px; margin: 0; }
@@ -624,6 +634,38 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   box-shadow: var(--lift-3);
   animation: popIn 0.4s var(--spring) 0.2s backwards;
 }
+/* The way back to a conversation you left to look at an event. Sits
+   above the nav, left of the compose button so the two never collide,
+   and carries its own entrance rather than borrowing a card's. */
+.return-chip {
+  position: fixed;
+  /* Left-aligned, not centred: the compose button owns the right of
+     this row, and a centred chip long enough to hold a name lands
+     underneath it. 90px clears the button and its inset. */
+  left: var(--s-16);
+  bottom: calc(88px + env(safe-area-inset-bottom, 0px));
+  /* The base button rule makes every button full width — the same trap
+     as .action-row and the wordmark. A chip is as wide as its words. */
+  width: auto;
+  max-width: calc(100% - 90px);
+  z-index: 46;
+  display: flex; align-items: center; gap: 7px;
+  padding: 10px 16px;
+  background: var(--toast-bg); color: var(--toast-ink);
+  border: none; border-radius: var(--r-pill);
+  font-size: 14px; font-weight: 600; letter-spacing: -0.01em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  box-shadow: var(--lift-3);
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 0.26s var(--ease), transform 0.26s var(--spring);
+}
+.return-chip.in { opacity: 1; transform: translateY(0); }
+.return-chip:hover { filter: brightness(1.06); transform: translateY(-1px); box-shadow: var(--lift-3); }
+.return-chip:active { transform: scale(0.95); }
+.return-chip i { font-size: 18px; }
+@media (min-width: 1100px) { .return-chip { display: none; } }
+
 .fab:hover { filter: brightness(1.08); }
 .fab:active { transform: scale(0.92); }
 
@@ -632,10 +674,10 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
    only ever shows what is happening at this moment.
    ===================================================================== */
 
-.live-rail-wrap { margin: 0 -16px var(--s-20); }
+.live-rail-wrap { margin: 0 calc(-1 * var(--gut)) var(--s-20); }
 .live-rail-head {
   display: flex; align-items: center; gap: var(--s-8);
-  padding: 0 var(--s-16) var(--s-12);
+  padding: 0 var(--gut) var(--s-12);
   font-size: 12px; font-weight: 700; letter-spacing: 0.06em;
   text-transform: uppercase; color: var(--fog);
 }
@@ -658,7 +700,7 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 }
 .live-rail {
   display: flex; gap: var(--s-16);
-  padding: 6px var(--s-16) var(--s-12);
+  padding: 6px var(--gut) var(--s-12);
   overflow-x: auto;
   scrollbar-width: none; -ms-overflow-style: none;
   scroll-snap-type: x proximity;
@@ -720,7 +762,10 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 /* ---- An event posted into a chat ---- */
 .event-embed {
   display: flex; align-items: center; gap: var(--s-12);
-  min-width: 232px; max-width: 296px;
+  /* Wide enough that the title and the View button don't fight, but
+     min() so a 320px phone is allowed to win the argument — a fixed
+     232 pushed the card 2px past the thread there. */
+  min-width: min(232px, 100%); max-width: 296px;
   padding: 11px 13px;
   background: var(--paper);
   border: 1.5px solid var(--ash);
@@ -964,6 +1009,18 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 }
 .poster-label { color: var(--chip-ink); font-weight: 500; }
 .poster-sub { color: color-mix(in srgb, var(--chip-ink) 78%, transparent); }
+
+/* A band wants a 308px card. Below that the halftone has already given
+   up all its width (that is what it is for) and the type column, which
+   is deliberately un-shrinkable, runs out past the card's overflow:
+   hidden — so "GOING" gets sliced off mid-word. Measured: a 320px
+   phone loses 21px, a 300px one loses 41px.
+   The second stat is the one to drop, because it is the only thing on
+   the band that is said again lower down: the body row already names
+   who is going. The first stat — when it is — is said nowhere else. */
+@media (max-width: 349px) {
+  .poster-stat + .poster-stat { display: none; }
+}
 
 /* =====================================================================
    FEED CARDS
@@ -1519,8 +1576,16 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   border-radius: 50%; font-size: 16px;
   opacity: 0; transition: opacity var(--fast) var(--ease);
 }
-.swipe-reply-icon.left { left: -42px; }
-.swipe-reply-icon.right { right: -42px; }
+/* Parked INSIDE the row until it is wanted. The icon is invisible
+   until .ready-to-reply, so nobody can see the difference — but at
+   -42px it sat outside #messages, which made the thread's scrollWidth
+   wider than its box. overflow-x: hidden means that never becomes a
+   scrollbar, but it does mean scrollLeft can be moved (a focus inside
+   a wide row is enough) and then there is no way to scroll back. */
+.swipe-reply-icon.left { left: 0; }
+.swipe-reply-icon.right { right: 0; }
+.msg-wrapper.ready-to-reply .swipe-reply-icon.left { left: -42px; }
+.msg-wrapper.ready-to-reply .swipe-reply-icon.right { right: -42px; }
 .msg-wrapper.ready-to-reply .swipe-reply-icon { opacity: 1; }
 
 .typing-indicator {
@@ -1668,8 +1733,7 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   .container { max-width: 700px; margin: 0 auto; padding: var(--s-24) var(--s-24) 132px; }
   .topbar { padding: var(--s-12) var(--s-24); }
   .section-head h3 { font-size: 30px; }
-  .live-rail-wrap { margin-inline: -24px; }
-  .live-rail, .live-rail-head { padding-inline: var(--s-24); }
+  :root { --gut: var(--s-24); }
   .card { padding: var(--s-24); }
   .msg-bubble { max-width: 62%; }
   #messages, .chat-header, .chat-footer, .screen-header { padding-inline: var(--s-24); }
@@ -1720,9 +1784,8 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   .sidebar-me span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   #home, #profileScreen, #chatScreen { grid-column: 2; grid-row: 1; }
-  .container { max-width: var(--feed-max); padding: var(--s-32) var(--s-24) var(--s-64); margin: 0 auto; }
+  .container { max-width: var(--feed-max); padding: var(--s-32) var(--gut) var(--s-64); margin: 0 auto; }
   .section-head h3 { font-size: 32px; }
-  .live-rail-wrap { margin-inline: -24px; }
 
   .rail {
     display: flex; flex-direction: column; gap: var(--s-12);
@@ -1749,9 +1812,14 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   .profile-scroll-body { padding: var(--s-32) var(--s-24); max-width: var(--feed-max); }
   .profile-screen-wrapper .back-btn { display: none; }
 
-  .app-frame.chat-open { grid-template-columns: var(--sidebar-w) 330px minmax(0, 1fr); }
+  /* 360, not 330. The middle column was sized for the chat LIST, but
+     the sidebar can put the feed there too, and a poster band needs a
+     308px card before its stats start getting cut off by the card's
+     own overflow:hidden — 330 gave it 297. Measured, not guessed; the
+     "nothing is cut off" smoke group holds it. */
+  .app-frame.chat-open { grid-template-columns: var(--sidebar-w) 360px minmax(0, 1fr); --gut: var(--s-16); }
   .app-frame.chat-open .rail { display: none; }
-  .app-frame.chat-open .container { max-width: none; padding: var(--s-24) var(--s-16) var(--s-48); }
+  .app-frame.chat-open .container { max-width: none; padding: var(--s-24) var(--gut) var(--s-48); }
   .app-frame.chat-open #home { border-right: 1px solid var(--ash); min-height: 100dvh; }
   .app-frame.chat-open .section-head h3 { font-size: 24px; }
 

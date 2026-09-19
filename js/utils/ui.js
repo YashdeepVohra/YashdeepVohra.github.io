@@ -17,6 +17,9 @@ export function isWideLayout() {
  * layouts, and it lives here rather than in every caller.
  */
 export function switchScreen(screenId) {
+  // A way back to somewhere you are no longer coming from is worse
+  // than no way back at all.
+  clearReturnChip();
   const frame = document.querySelector(".app-frame");
   const wide = isWideLayout();
   const twoPaneChat = wide && screenId === "chatScreen";
@@ -102,6 +105,49 @@ export function refreshSocialUI() {
   socialPainters.forEach((paint) => {
     try { paint(); } catch (e) { console.error("Repaint failed:", e.message); }
   });
+}
+
+/* ---------------------------------------------------------------------
+   The way back
+   ---------------------------------------------------------------------
+   Tapping an event somebody shared in a chat takes you to the feed,
+   which is right — the card in the feed IS the event, there is no
+   separate detail view to open. But on a phone that means the
+   conversation is gone, and getting back to it is Chats, find the
+   thread, scroll. So leaving a conversation leaves a way back: one
+   chip, bottom of the screen where a thumb already is, gone on its own
+   after a few seconds.
+
+   On a laptop none of this is needed — the thread stays open beside
+   the feed — which is why only the phone branch calls it.
+   ------------------------------------------------------------------- */
+let chipTimer = 0;
+
+export function clearReturnChip() {
+  clearTimeout(chipTimer);
+  document.getElementById("returnChip")?.remove();
+}
+
+export function returnChip({ text, icon = "bx-left-arrow-alt", onTap }) {
+  clearReturnChip();
+  const el = document.createElement("button");
+  el.id = "returnChip";
+  el.className = "return-chip";
+  if (icon) {
+    const i = document.createElement("i");
+    i.className = "bx " + icon;
+    el.appendChild(i);
+  }
+  // Text, never markup: the name in here belongs to another student.
+  el.appendChild(document.createTextNode(String(text || "")));
+  el.onclick = () => { clearReturnChip(); onTap?.(); };
+  document.body.appendChild(el);
+  void el.offsetWidth;
+  el.classList.add("in");
+  chipTimer = setTimeout(() => {
+    el.classList.remove("in");
+    setTimeout(() => el.remove(), 300);
+  }, 9000);
 }
 
 /** The one place toasts are mounted, shared by every kind of toast. */

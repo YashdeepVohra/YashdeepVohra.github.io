@@ -225,13 +225,111 @@ test/               stub.js + smoke.mjs + contrast.mjs
   read per unseen event, de-duplicated through `pendingFetches` so ten
   copies of the same link in a thread are one read, not ten.
 
+- **Opening a shared event: two layouts, two right answers.** There is
+  no detail view for an event — the card in the feed IS the event — so
+  View has always gone to the feed. What it also did, at every width,
+  was close the conversation. On a laptop the thread and the feed are
+  different COLUMNS, so that threw away the place you were reading for
+  nothing: the wide branch now leaves the chat open and flashes the
+  card beside it. On a phone the chat does have to go, and it leaves a
+  `returnChip` behind — one tap back to the person, gone after nine
+  seconds, and cleared by `switchScreen` so it can never point at a
+  conversation you are no longer coming from.
+
+  The phone branch also has to call `switchScreen("home")` itself.
+  `closeChat({ silent: true })` deliberately does NOT swap screens, and
+  the thread is a full-screen layer on a phone — so before this, View
+  changed the tab underneath a conversation that was still covering it,
+  and looked like it did nothing at all.
+
 - **The wordmark is a button now, so it must shed the button styling.**
   `.brand-home` sits inside the topbar; the base `button` rule would give
   it a moss fill, padding and a shadow. It resets all three. Same trap as
   `.action-row` and `.card.poster-card` - see the specificity note below.
 
+- **One gutter, `--gut`, and three things that must agree on it.** The
+  container's side padding, the live rail's negative margin (it runs
+  edge to edge, so it bleeds back out by exactly one gutter) and the
+  rail's own inner padding (so the first avatar lines up with the first
+  card). Those used to be three hard-coded 16s and 24s. The chat-open
+  layout changed one of them and left the rail hanging 7px past the
+  column, over the divider and into the conversation — and the same
+  mismatch was sitting on every tablet width unnoticed. Change the
+  number in `:root` and in the two media queries; never at a call site.
+
+- **A poster band needs a 308px card, measured.** Below that the
+  halftone has already yielded all its width (that is what it is for)
+  and `.poster-type`, which is deliberately un-shrinkable, runs past
+  the card's `overflow: hidden` — so "GOING" gets sliced mid-word. Two
+  places were under it: a 320px phone (lost 21px) and the chat-open
+  middle column, which was 330px because it had been sized for the chat
+  LIST, not for a feed. The column is 360px now, and under 350px
+  viewport width the band drops its second stat. The second stat is the
+  one to drop because the body row below already names who is going;
+  the first stat — when it is — is said nowhere else on the card.
+
+- **Nothing on screen may be sliced or reach past its column.** The
+  smoke group "nothing is cut off" renders the app at 320, 390 and 1280
+  (that last one with a chat open beside the feed) and asks two
+  questions of every visible element: does anything reach past the box
+  that clips it, and does anything that clips hold content wider than
+  itself. Horizontal scrollers and one-line ellipsis are exempt, since
+  both are cut on purpose. It replaced four separate bugs that were all
+  invisible at laptop width, and all four were re-introduced one at a
+  time to prove it fires.
+
 - **Blocking is total.** Filter `isBlocked` everywhere — lists, counts,
   the feed, vouches. A count that disagrees with the list under it is a bug.
+
+## Search
+
+Two halves, two different constraints, one shared scorer in
+`matchRules.js` (pure — no DOM, no database, testable on its own).
+
+Events are free: the feed already holds every event of the last 24
+hours in `state.eventCache`, so matching a few dozen objects on every
+keystroke costs nothing and can match mid-word, which Firestore cannot
+do without a search service.
+
+People are the awkward half, because a prefix query is the only shape
+Firestore serves without scanning `usernames`, and a scan is exactly
+the thing that would make search expensive. Three moves, in order of
+cost:
+
+1. Everyone already in `state.userCache` is matched fuzzily, on their
+   display name as well as their handle. **No reads at all**, and it
+   covers most real searches — you are usually looking for someone you
+   have already seen in the feed, your orbit or a thread.
+2. The prefix query, as before. One read-batch.
+3. Only if that came back thin (< 4 hits), ONE retry with the last
+   character or two dropped. This is what makes "sanchitt" find
+   sanchit. Bounded to one extra query.
+
+The handle comes off the document ID — `usernames` is keyed by it — so
+the whole list is ranked *before* anything decides whose profile is
+worth a read. `primeUsers` runs on the final twelve only, which is why
+this costs the same as the strict version did.
+
+What it still cannot do: a typo in the FIRST letter of a handle will
+not reach the server ("ranchit" misses sanchit) unless he is already
+cached. Fixing that needs a scan or a search service; neither is worth
+it yet.
+
+Two things about the scorer that are load-bearing:
+
+- **A swap counts as one edit, not two.** Transposing two letters is
+  the most common typo there is, and plain Levenshtein calls "chia" two
+  edits from "chai" — far enough to miss at any sane threshold. The
+  distance function is Damerau (optimal string alignment).
+- **It gives up early.** It runs over every cached user on every
+  keystroke on cheap phones, so it abandons a row the moment the whole
+  row is past the budget, rather than filling the matrix.
+
+The tiers matter more than the numbers: exact > starts with > a word
+starts with > contains > all words present > a typo away > the letters
+in the right order. An exact hit must always outrank a corrected one,
+or searching a real handle starts putting strangers above the person
+you meant.
 
 ## Cost model
 

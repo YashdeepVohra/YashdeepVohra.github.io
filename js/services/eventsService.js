@@ -15,7 +15,7 @@
 import { auth, db, FieldValue } from '../config/firebase.js';
 import { state } from '../state/store.js';
 import { renderAvatar, escapeHtml, safeId } from '../utils/formatters.js';
-import { showTab, toast } from '../utils/ui.js';
+import { showTab, toast, isWideLayout, returnChip, switchScreen } from '../utils/ui.js';
 import { openOverlay, closeOverlay, replaceOverlay, isOverlayTop } from '../utils/overlays.js';
 import { primeUsers, displayNameFor, usernameFor, avatarFor } from './userService.js';
 import { isBlocked, withoutBlocked } from './blockService.js';
@@ -612,8 +612,9 @@ export function focusEvent(eventId) {
 }
 
 /**
- * A tap on an event card inside a chat. Closes the chat, goes to the
- * right tab, and lands on the card.
+ * A tap on an event card inside a chat. Goes to the right tab and
+ * lands on the card — the card in the feed IS the event, so there is
+ * nothing else to open.
  *
  * Returns false so the anchor's href never navigates: the href is
  * there so the link still means something when it is copied, pasted
@@ -626,17 +627,60 @@ export function openSharedEvent(eventId, ev) {
   return false;
 }
 
+/**
+ * Two layouts, two right answers.
+ *
+ * On a laptop the thread and the feed are different COLUMNS, so there
+ * is no reason to close one to see the other: the conversation stays
+ * open on the right and the card flashes in the middle. Closing it —
+ * which is what this used to do at every width — threw away the place
+ * you were reading for no gain at all.
+ *
+ * On a phone only one of them fits, so the chat does have to go. It
+ * leaves a way back instead of just vanishing.
+ */
 export function showSharedEvent(eventId) {
   const e = state.eventCache[eventId];
   const ended = e && e.expiresAt <= Date.now();
-
-  window.closeChat?.({ silent: true });
-  showTab(ended ? "recap" : "events");
-  // After the tab has actually swapped, or there is nothing to find.
-  setTimeout(() => {
+  const land = () => setTimeout(() => {
+    // After the tab has actually swapped, or there is nothing to find.
     if (!document.getElementById(`event-${eventId}`)) renderEvents();
     setTimeout(() => focusEvent(eventId), 60);
   }, 90);
+
+  if (isWideLayout()) {
+    // The two-pane state can be stale — a window dragged from phone
+    // width to laptop width while a chat was open never re-ran the
+    // screen swap, so the feed column is still marked hidden and
+    // switching its tab would show nothing at all.
+    const chatOpen = !document.getElementById("chatScreen")?.classList.contains("hidden");
+    if (chatOpen) {
+      document.querySelector(".app-frame")?.classList.add("chat-open");
+      document.getElementById("home")?.classList.remove("hidden");
+    }
+    showTab(ended ? "recap" : "events");
+    land();
+    return;
+  }
+
+  const backTo = state.currentOtherUid;
+  const name = backTo ? displayNameFor(backTo) : "";
+  // silent, so closing doesn't announce itself or fight the tab swap —
+  // but silent also means closeChat leaves the screen where it is, and
+  // the thread is a full-screen layer on a phone. Without the swap
+  // below, View looked like it did nothing at all: the feed changed
+  // tab underneath a conversation that was still covering it.
+  window.closeChat?.({ silent: true });
+  switchScreen("home");
+  showTab(ended ? "recap" : "events");
+  land();
+  if (backTo) {
+    // After the chip's own entrance, so it doesn't race the tab swap.
+    setTimeout(() => returnChip({
+      text: name ? `Back to ${name}` : "Back to the chat",
+      onTap: () => window.startChatWithUid?.(backTo)
+    }), 420);
+  }
 }
 
 /* ---------------------------------------------------------------------
