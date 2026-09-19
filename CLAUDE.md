@@ -173,6 +173,19 @@ test/               stub.js + smoke.mjs + contrast.mjs
   60% fixes it. In dark mode the page is near-black so 40% already
   separates at 2.5:1, and going further would eat the ink contrast.
   `--band-dot` runs opposite ways for the same reason.
+- **Taking the colour out takes the information out.** The recap stub
+  used to drain its band to flat `--bone`. Two complaints, one root:
+  every stub in the Recap was the same colour, so the category
+  vanished, and `--bone` sits 1.1:1 from the canvas, so they all sank
+  into the page. A stub keeps the vibe at the same mix as a live card
+  now; being OVER is carried by the notches, the dashed tear line, the
+  faded halftone and a stat that counts people instead of minutes. You
+  never see the two side by side — different tabs.
+- **A hidden tab has no geometry, and a test that measures one proves
+  nothing.** Every rect inside a `display: none` subtree is 0x0, so the
+  first version of the band's overlap check "passed" for recap stubs
+  while measuring literally nothing. It shows each tab before
+  measuring it now. Worth remembering for any future layout test.
 - **`test/contrast.mjs` checks the worst pixel, not the average.** It
   walks every vibe in both themes for three things that each broke
   once: text on the band, the band against the page, and text on a

@@ -163,5 +163,31 @@ for (const theme of ['light', 'dark']) {
   }
 }
 
+/* ---------------------------------------------------------------------
+   The recap stub has to keep the live band.
+
+   This is a structural check, not a colour one, and deliberately so:
+   the stub used to drain its band to flat --bone, which put every stub
+   in the Recap at the SAME colour (the category disappeared) and 1.1:1
+   against the page (they sank into it). Recomputing the contrast of a
+   band the stub shares would pass by construction and prove nothing —
+   the thing that can actually regress is somebody giving `.spent` its
+   own background again.
+   ------------------------------------------------------------------- */
+{
+  console.log('\nthe recap stub');
+  const rule = css.match(/\.stub \.poster\.spent\s*\{([^}]*)\}/);
+  if (!rule) {
+    failures++;
+    console.log('  ✗ no .stub .poster.spent rule found at all');
+  } else if (/(^|[;{\s])background(-color|-image)?\s*:/.test(rule[1])) {
+    failures++;
+    console.log('  ✗ .spent sets its own background — the stub has lost the vibe colour again:'
+      + rule[1].trim().replace(/\s+/g, ' '));
+  } else {
+    console.log('  ✓ keeps the live band, so every stub still carries its category');
+  }
+}
+
 console.log(failures ? '\n' + failures + ' failing' : '\nall good');
 process.exit(failures ? 1 : 0);

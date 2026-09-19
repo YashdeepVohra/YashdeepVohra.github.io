@@ -430,7 +430,7 @@ function timeStat(e, now) {
     // been running: you are deciding whether it is worth walking over.
     const leftMins = Math.max(0, Math.round((e.expiresAt - now) / 60000));
     const left = leftMins < 60 ? leftMins + "m" : Math.round(leftMins / 60) + "h";
-    return { label: "Happening", value: "Now", sub: left + " left" };
+    return { label: "Happening", value: "Now", sub: left + " left", live: true };
   }
   const mins = Math.round((e.startTime - now) / 60000);
   const value = mins < 1 ? "Now"
@@ -457,7 +457,7 @@ function statBlock(s) {
     <span class="poster-stat">
       <span class="poster-value">${escapeHtml(s.value)}</span>
       <span class="poster-side">
-        <span class="poster-label">${escapeHtml(s.label)}</span>
+        <span class="poster-label">${s.live ? `<span class="live-pip"></span>` : ""}${escapeHtml(s.label)}</span>
         ${s.sub ? `<span class="poster-sub">${escapeHtml(s.sub)}</span>` : ""}
       </span>
     </span>`;

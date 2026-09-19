@@ -781,12 +781,18 @@ group('the poster band');
     state.eventCache = {};
     state.eventOrder = [];
     events.forEach((e) => { state.eventCache[e.id] = e; state.eventOrder.push(e.id); });
-    state.recapOrder = []; state.recapDone = true; state.currentLiveFilter = 'All';
+    state.recapOrder = state.eventOrder.filter((id) => state.eventCache[id].expiresAt <= Date.now());
+    state.recapDone = true; state.currentLiveFilter = 'All'; state.currentRecapFilter = 'All';
     ev.renderEvents();
     await new Promise((r) => setTimeout(r, 200));
 
     const out = [];
-    document.querySelectorAll('#events .poster').forEach((poster) => {
+    // BOTH feeds, and each one has to be ON SCREEN while it is
+    // measured. A hidden tab is display:none, and every rect inside a
+    // display:none subtree is 0x0 — so measuring the recap tab from
+    // the live tab silently "passes" everything while checking
+    // nothing, which is exactly what it did the first time.
+    const measure = (sel) => document.querySelectorAll(sel + ' .poster').forEach((poster) => {
       // The halftone fills its own column, so that column's rect IS the
       // field — no reconstructing it from computed styles, and nothing
       // to get out of step when the layout changes.
@@ -807,15 +813,26 @@ group('the poster band');
       });
       out.push({ id: poster.closest('.event').id, hits, fieldWidth: Math.round(field.width) });
     });
+
+    window.showTab('events');
+    await new Promise((r) => setTimeout(r, 150));
+    measure('#events');
+    window.showTab('recap');
+    await new Promise((r) => setTimeout(r, 150));
+    measure('#recapEvents');
+    window.showTab('events');
     return out;
   }, { events: [
     mkEvent('p1', 'a', 'Short one', '☕ Chill'),
     Object.assign(mkEvent('p2', 'b', 'One with a great many people going to it indeed', '🏀 Sports'),
                   { participantUids: ['b','a','c','d','x','y','z'], maxCapacity: 12 }),
-    Object.assign(mkEvent('p3', 'c', 'Nobody yet', '📚 Study'), { participantUids: ['c'] })
+    Object.assign(mkEvent('p3', 'c', 'Nobody yet', '📚 Study'), { participantUids: ['c'] }),
+    // And a finished one, so the stub's band is measured too.
+    Object.assign(mkEvent('p4', 'a', 'Already over, plenty came', '🍕 Food'),
+                  { participantUids: ['a','b','c','d','x'], startTime: now - 9e6, expiresAt: now - 36e5 })
   ]});
 
-  ok('every card painted a band', band.length === 3, JSON.stringify(band.map((b) => b.id)));
+  ok('every card painted a band, live and stub', band.length === 4, JSON.stringify(band.map((b) => b.id)));
   ok('the halftone has a column of its own',
      band.every((b) => b.fieldWidth > 20), JSON.stringify(band.map((b) => b.fieldWidth)));
   const clashes = band.filter((b) => b.hits.length);

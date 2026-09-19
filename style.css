@@ -716,6 +716,9 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   min-width: 0;
   margin: -11px calc(var(--s-16) * -1) -12px 0;
 }
+/* The stub's band is taller than a live one, so its halftone gets more
+   room to be a halftone rather than a sliver in one corner. */
+.stub .poster-deco { flex-basis: 132px; }
 
 /* THE HALFTONE LIVES IN THE CORNER, NEVER UNDER A WORD.
    It used to be a background layer across the whole band, fading from
@@ -1007,6 +1010,18 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   border: 1.5px solid var(--forest);
 }
 .act.joined:hover { background: var(--wash); color: var(--forest); }
+/* The tick pops once when the button becomes Going. It only runs on
+   the element that just changed, so it is one animation on one card,
+   not sixty — and it is a transform, so it composites. This is the
+   moment the whole app exists for; it should feel like something
+   happened. */
+.act.joined i { animation: tickIn 0.34s var(--spring); }
+@keyframes tickIn {
+  0%   { transform: scale(0.2) rotate(-25deg); opacity: 0; }
+  60%  { transform: scale(1.18) rotate(4deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0); opacity: 1; }
+}
+
 .act.full { background: var(--bone); color: var(--fog); }
 
 /* ---- Filters ---- */
@@ -1708,9 +1723,25 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
    started making every second card look like a warning. */
 .event.is-live { isolation: isolate; }
 
-/* A live card earns one mark the others don't: the band's own top edge
-   burns. One property, no extra element. */
-.event.is-live .poster { box-shadow: inset 0 3px 0 var(--ember); }
+/* A live card used to get an ember bar along the band's top edge. It
+   read as a stray line sitting on the card rather than as a signal —
+   it spans the full width, so it has no relationship to anything it is
+   marking. The mark is a pip beside the word HAPPENING instead: next
+   to the thing it is actually about, and the same ember dot the rail
+   and the chip already use.
+
+   Static, deliberately. The pulsing version of this dot is fine once
+   in a rail header; sixty of them down a feed is sixty infinite
+   animations, which is the mistake the old live ring made and the
+   reason livePulse exists as a transform in the first place. */
+.live-pip {
+  display: inline-block;
+  width: 5px; height: 5px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: var(--ember);
+  vertical-align: middle;
+}
 
 /* Hype burst: little dots thrown outward on tap */
 .burst {
@@ -2768,24 +2799,45 @@ html:not(.kb-open) .chat-footer {
   mask-composite: intersect;
 }
 
-/* Fixed height, so the notches land on the seam. */
-.stub .poster { height: var(--tear); display: flex; flex-direction: column; justify-content: space-between; }
+/* Fixed height, so the notches land on the seam.
+
+   It must NOT set flex-direction: column. It did, which quietly turned
+   the two-column band back into a stack on every stub — the halftone
+   ended up under the type again rather than beside it. It looked fine
+   by luck, because the dots landed below the words instead of behind
+   them, but the guarantee was gone and the smoke test was only
+   watching the live feed. It watches both now.
+   The type column does the vertical distribution instead: tag at the
+   top of the band, stat at the bottom. */
+.stub .poster { height: var(--tear); }
+.stub .poster-type { display: flex; flex-direction: column; justify-content: space-between; }
 
 /* Drained. The dots stay — a stub is still printed on something — but
    the colour goes out of them, which is what says "this is over"
    without dimming the text you still want to read. */
+/* A SPENT BAND KEEPS ITS COLOUR.
+
+   It used to drain to flat --bone, which meant every stub in the Recap
+   looked identical to every other one — the category was gone — and
+   --bone sits 1.1:1 from the canvas, so they also sank into the page.
+   Two different complaints with the same root: taking the colour out
+   was taking the information out.
+
+   So the band keeps the vibe at the same mix as a live one, and being
+   OVER is carried by everything else the stub already does: the
+   notches, the dashed tear line, the faded glyph, and a stat that
+   counts people instead of minutes. You never see the two side by side
+   anyway — they live on different tabs. */
 .stub .poster.spent {
-  background: var(--bone);
-  border-bottom: 1.5px dashed var(--ash);
-  color: var(--fog);
+  border-bottom: 1.5px dashed color-mix(in srgb, var(--vibe, var(--sage)) 50%, var(--ash));
 }
-/* Still printed on something, just with the colour gone out of it. */
-.stub .poster.spent::after { --band-dot: color-mix(in srgb, var(--ash) 80%, transparent); }
-.stub .poster.spent .poster-glyph { opacity: 0.1; }
-.stub .poster.spent .poster-value { color: var(--ink); }
-.stub .poster.spent .poster-label { color: var(--fog); }
-.stub .poster.spent .poster-tag { background: var(--paper); border-color: var(--ash); color: var(--fog); }
-.stub .poster.spent .poster-place { color: var(--fog); }
+/* The one thing that does fade: the printing goes lighter, the way an
+   old ticket does. */
+.stub .poster.spent .poster-deco { opacity: 0.55; }
+/* The type on a spent band inherits the live band's colours. It used
+   to be forced to --fog, which was fine on flat bone and is 3.0:1 on a
+   coloured one — the labels were the reason the band could not keep
+   its colour in the first place. */
 
 .status-chip.ended { background: var(--bone); color: var(--fog); font-weight: 600; }
 
