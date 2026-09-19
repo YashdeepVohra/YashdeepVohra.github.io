@@ -450,15 +450,28 @@ function timeStat(e, now) {
  * sixty of them down a feed cost one paint each. `--vibe` is already
  * on the card, so the colour comes along for free.
  */
-/** One stat: a big value, with its label and footnote stacked beside. */
-function statBlock(s) {
+/**
+ * One stat: a big value, with its label and footnote stacked beside.
+ *
+ * A TIME stat leaves its value and footnote EMPTY, marked `data-vt`,
+ * and paintVolatile fills them in after the card is in the document.
+ * That is not a flourish — it is what stops the minute tick rebuilding
+ * the feed. See the note on paintVolatile.
+ */
+function statBlock(s, { volatileTime = false } = {}) {
   if (!s) return "";
+  const value = volatileTime
+    ? `<span class="poster-value" data-vt="value"></span>`
+    : `<span class="poster-value">${escapeHtml(s.value)}</span>`;
+  const sub = volatileTime
+    ? `<span class="poster-sub" data-vt="sub"></span>`
+    : (s.sub ? `<span class="poster-sub">${escapeHtml(s.sub)}</span>` : "");
   return `
     <span class="poster-stat">
-      <span class="poster-value">${escapeHtml(s.value)}</span>
+      ${value}
       <span class="poster-side">
         <span class="poster-label">${s.live ? `<span class="live-pip"></span>` : ""}${escapeHtml(s.label)}</span>
-        ${s.sub ? `<span class="poster-sub">${escapeHtml(s.sub)}</span>` : ""}
+        ${sub}
       </span>
     </span>`;
 }
@@ -486,7 +499,7 @@ function posterBand(e, now, { stats, spent = false } = {}) {
         <div class="poster-head">
           ${e.tag ? `<span class="poster-tag">${escapeHtml(glyph)} ${escapeHtml(word)}</span>` : ""}
         </div>
-        <div class="poster-stats">${list.map(statBlock).join("")}</div>
+        <div class="poster-stats">${list.map((st, i) => statBlock(st, { volatileTime: i === 0 && !spent })).join("")}</div>
       </div>
       <div class="poster-deco" aria-hidden="true">
         ${glyph ? `<span class="poster-glyph">${escapeHtml(glyph)}</span>` : ""}
@@ -695,6 +708,52 @@ function syncList(listEl, cards, tailHTML, emptyHTML) {
   });
 
   if (tailHTML) listEl.insertAdjacentHTML("beforeend", tailHTML);
+}
+
+/**
+ * FILL IN EVERYTHING THAT DEPENDS ON THE CLOCK.
+ *
+ * This is the other half of the diff, and the reason the feed stopped
+ * flashing once a minute.
+ *
+ * syncList replaces a card whenever its markup differs from what is on
+ * screen. A card carries the time in it — "45M", "2H LEFT", "4h ago" —
+ * so on every minute tick EVERY card's markup differed, every card was
+ * swapped for a new node, and the whole feed visibly blinked. Nothing
+ * was animating; it was sixty nodes being thrown away and rebuilt.
+ *
+ * So the markup no longer contains the time at all. Those spots are
+ * empty `data-vt` slots, which makes a card's html independent of when
+ * it was built — the diff then finds nothing to do on a quiet minute —
+ * and this fills them from the cache straight afterwards, in the same
+ * frame, as text writes. A tick that changes nothing else now touches
+ * no nodes and creates none.
+ *
+ * It reads `state.eventCache` rather than taking data as an argument
+ * so it can also be called on its own, without a render.
+ */
+export function paintVolatile(listEl, now = Date.now()) {
+  if (!listEl) return;
+  listEl.querySelectorAll(".event").forEach((card) => {
+    const id = card.id.indexOf("event-") === 0 ? card.id.slice(6) : "";
+    const e = id && state.eventCache[id];
+    if (!e) return;
+
+    const slots = card.querySelectorAll("[data-vt]");
+    if (!slots.length) return;
+
+    const stat = timeStat(e, now);
+    slots.forEach((slot) => {
+      const kind = slot.getAttribute("data-vt");
+      let text = "";
+      if (kind === "value") text = stat.value;
+      else if (kind === "sub") text = stat.sub || "";
+      else if (kind === "ago") text = relTime(e.expiresAt, now);
+      else if (kind === "leaves") text = relTime(now + (recapUntil(e, state.uid) - now), now);
+      // Only touch the DOM when it would actually change.
+      if (slot.textContent !== text) slot.textContent = text;
+    });
+  });
 }
 
 /**
@@ -944,8 +1003,10 @@ export function renderEvents() {
       // Only warn once it is close; a countdown on every card is noise.
       const left = recapUntil(e, state.uid) - now;
       const fading = left < 2 * 60 * 60 * 1000;
+      // `fading` itself is a state change worth replacing the card for;
+      // the countdown inside it is not.
       const leaves = fading
-        ? `<div class="recap-leaves"><i class='bx bx-time-five'></i> Leaves recap ${escapeHtml(relTime(now + left, now))}</div>`
+        ? `<div class="recap-leaves"><i class='bx bx-time-five'></i> Leaves recap <span data-vt="leaves"></span></div>`
         : "";
 
       // A RECAP CARD IS A TICKET STUB. The band is the same one, drained
@@ -972,7 +1033,7 @@ export function renderEvents() {
                 <div class="av-inner">${renderAvatar(avatarFor(e.hostUid))}</div>
               </div>
               <span class="byline-name tappable" ${openHost}>${escapeHtml(displayNameFor(e.hostUid))}</span>
-              <span class="byline-meta">${escapeHtml(relTime(e.expiresAt, now))}</span>
+              <span class="byline-meta" data-vt="ago"></span>
             </div>
             ${shownGuests.length ? `<div class="going-row">${avatarStack(shownGuests)}<span class="going-text">${escapeHtml(wentText)}</span></div>` : ""}
             ${leaves}
@@ -1037,6 +1098,11 @@ export function renderEvents() {
       ? skeletonFeed(2)
       : `<div class="empty-state">${EMPTY_ART}<h4>Nothing here yet</h4><p>Nothing has wrapped up recently. Busy events stay here for up to two days, quiet ones for a few hours.</p></div>`
   );
+
+  // Straight after the diff and before the browser paints, so a card
+  // is never on screen with an empty time slot.
+  paintVolatile(liveList, now);
+  paintVolatile(recapList, now);
 
   applyFilter(liveList, state.currentLiveFilter);
   applyFilter(recapList, state.currentRecapFilter);

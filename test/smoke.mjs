@@ -1067,6 +1067,76 @@ group('reactions, pins and the receipt');
 }
 
 /* ------------------------------------------------------------------ */
+group('the minute tick');
+{
+  // A tick once a minute is what moves an event out of Live Now when
+  // it ends and keeps "in 20m" honest. It is supposed to be free.
+  //
+  // It was not. A card carries the time in its markup, so on every
+  // tick every card's html differed from what was on screen, syncList
+  // swapped all sixty for new nodes, and the feed visibly blinked —
+  // no animation involved, just the whole list being rebuilt. The time
+  // lives in empty `data-vt` slots now, filled after insertion, so a
+  // card's html no longer depends on when it was built.
+  const tick = await page.evaluate(async ({ events }) => {
+    const { state, ev } = window.__m;
+    state.eventCache = {}; state.eventOrder = [];
+    events.forEach((e) => { state.eventCache[e.id] = e; state.eventOrder.push(e.id); });
+    state.recapOrder = []; state.recapDone = true; state.currentLiveFilter = 'All';
+    ev.renderEvents();
+    await new Promise((r) => setTimeout(r, 250));
+
+    const before = [...document.querySelectorAll('#events .event')];
+    before.forEach((el, i) => { el.dataset.probe = 'p' + i; });
+    const stat = (el) => el.querySelector('.poster-value') && el.querySelector('.poster-value').innerText;
+    const statsBefore = before.map(stat);
+
+    const anims = [];
+    const onAnim = (e) => anims.push(e.animationName);
+    document.addEventListener('animationstart', onAnim, true);
+
+    // The stub counts every get() and every document a listener
+    // delivers, so this is the real answer to "does a tick cost reads".
+    const readsBefore = window.__reads;
+    const writesBefore = window.__writes;
+
+    // Exactly what the interval does, a minute later.
+    const realNow = Date.now;
+    Date.now = () => realNow() + 61000;
+    ev.renderEvents();
+    await new Promise((r) => setTimeout(r, 300));
+    Date.now = realNow;
+    document.removeEventListener('animationstart', onAnim, true);
+
+    const after = [...document.querySelectorAll('#events .event')];
+    return {
+      cards: before.length,
+      kept: after.filter((el) => el.dataset.probe).length,
+      statsBefore, statsAfter: after.map(stat),
+      anims,
+      reads: window.__reads - readsBefore,
+      writes: window.__writes - writesBefore
+    };
+  }, { events: [
+    Object.assign(mkEvent('t1', 'a', 'On now', '☕ Chill'), { startTime: now - 6e4 }),
+    Object.assign(mkEvent('t2', 'b', 'Soon', '🍕 Food'), { startTime: now + 20 * 6e4, expiresAt: now + 72e5 }),
+    Object.assign(mkEvent('t3', 'c', 'Later', '📚 Study'), { startTime: now + 25 * 6e4, expiresAt: now + 72e5 })
+  ]});
+
+  ok('a quiet minute replaces no cards at all', tick.cards === 3 && tick.kept === 3,
+     JSON.stringify({ cards: tick.cards, kept: tick.kept }));
+  ok('and starts no animations', tick.anims.length === 0, tick.anims.join(','));
+  // The whole point of the tick: the clock must still move.
+  ok('but the countdowns still tick down',
+     tick.statsBefore.join() !== tick.statsAfter.join()
+     && /^\d+M$/.test(tick.statsAfter[1] || ''),
+     JSON.stringify({ before: tick.statsBefore, after: tick.statsAfter }));
+  ok('and it costs no reads and no writes',
+     tick.reads === 0 && tick.writes === 0,
+     JSON.stringify({ reads: tick.reads, writes: tick.writes }));
+}
+
+/* ------------------------------------------------------------------ */
 group('desktop columns');
 {
   // The sidebar and the rail are position:sticky at >=1100px. They

@@ -207,7 +207,32 @@ html, body {
    slid away with the feed instead of staying put.
    On html it is safe, because the root element's overflow propagates
    to the viewport and html itself is then treated as visible. */
-html { overflow-x: hidden; }
+html {
+  overflow-x: hidden;
+
+  /* The jolt when you hit the top or the bottom is the browser's
+     overscroll — the rubber-band on iOS, the glow and pull-to-refresh
+     on Android. It is a default, not a bug, but it belongs to a web
+     page and this is meant to read as an app: the whole canvas
+     lurching at the end of a feed makes the app look like it moved
+     when it did not.
+
+     `none` also turns off pull-to-refresh, which is the point. A
+     reload here throws away the live listeners, the message window and
+     anything half-typed, and the feed is already live — there is
+     nothing to pull for. */
+  overscroll-behavior-y: none;
+}
+
+/* Every inner scroller keeps its overscroll to itself, so reaching the
+   end of a chat or the profile does not start scrolling the page
+   behind it. `contain` rather than `none`: inside a panel the bounce
+   is a useful "that's the end", it is only the chaining that is
+   confusing. */
+#messages, .rail, .sidebar, .profile-scroll-body, .screen-body,
+.feed-filters, .tag-selector, .live-rail {
+  overscroll-behavior: contain;
+}
 
 h1, h2, h3, h4 {
   margin: 0 0 var(--s-12);

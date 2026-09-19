@@ -353,6 +353,31 @@ something breaks.
 - **The feed is diffed, not rebuilt.** `syncList` replaces only cards whose
   markup changed. Rebuilding replayed the entry animation on every card,
   which read as the card vanishing. Don't reintroduce `innerHTML =` there.
+- **Nothing time-dependent may go in a card's markup.** The corollary
+  of the line above, and it bit hard. A card showed the clock — "45M",
+  "2H LEFT", "4h ago" — so on every minute tick every card's html
+  differed from what was on screen, `syncList` swapped all sixty for
+  fresh nodes, and the whole feed visibly blinked once a minute. No
+  animation was involved; it was sixty nodes being thrown away and
+  rebuilt, which is exactly why it looked like the page had refreshed.
+
+  Those spots are empty `data-vt` slots now, and `paintVolatile()`
+  fills them from `state.eventCache` straight after the diff, in the
+  same frame. A card's html is therefore independent of WHEN it was
+  built, so a quiet minute finds nothing to replace and writes a few
+  text nodes instead. Anything else you derive from `now` belongs in a
+  slot, not in the string.
+
+  The tick costs nothing on the network either, and the smoke test
+  asserts it: a snapshot listener bills per CHANGED document, so a
+  minute in which nothing happened is 0 reads and 0 writes.
+- **The browser's overscroll is off at the root** (`overscroll-behavior-y:
+  none` on `html`). The lurch at the top and bottom of a feed is a page
+  behaviour and this reads as an app; it also disables pull-to-refresh,
+  deliberately, because a reload throws away the live listeners and
+  anything half-typed, and the feed is already live. Inner scrollers use
+  `contain`, so reaching the end of a chat doesn't start scrolling the
+  page behind it.
 - **Filters hide, they don't re-render.** Every card is in the DOM with a
   `data-tag`; a filter toggles a class.
 - **Social state is on screen in four places** — feed chips, search rows,
