@@ -195,8 +195,19 @@ html, body {
   line-height: 1.45;
   letter-spacing: var(--track);
   -webkit-font-smoothing: antialiased;
-  overflow-x: hidden;
 }
+
+/* ONLY ON html, NEVER ALSO ON body.
+   This one line cost the desktop layout its sticky sidebar and rail.
+   When one axis of overflow is `hidden` and the other is `visible`,
+   the visible one computes to `auto` — so `overflow-x: hidden` on body
+   quietly turned body into a scroll container. The page still scrolls
+   on html, so body never scrolls, and every position:sticky inside it
+   was sticking to a box that never moves: the sidebar and the rail
+   slid away with the feed instead of staying put.
+   On html it is safe, because the root element's overflow propagates
+   to the viewport and html itself is then treated as visible. */
+html { overflow-x: hidden; }
 
 h1, h2, h3, h4 {
   margin: 0 0 var(--s-12);
@@ -1693,8 +1704,19 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
    z-index — overriding them to relative/1. That knocked the nav out of
    fixed positioning and flattened the whole stacking order.
    These four are already fixed and above the ambient layer, so they
-   need nothing here. */
-.topbar, .sidebar, .rail, #home, .container { position: relative; z-index: 1; }
+   need nothing here.
+
+   AND THE SIDEBAR AND RAIL GET THE Z-INDEX WITHOUT THE POSITION. They
+   are `position: sticky` at desktop widths, set in a media query
+   FURTHER UP this file — so naming them here, at equal specificity and
+   later in the sheet, quietly flattened them back to relative. The
+   symptom was the desktop nav columns scrolling away with the feed
+   instead of staying put, and nothing about the media query looked
+   wrong when you read it. z-index applies to a sticky box perfectly
+   well; it was only ever the `position` in this shorthand list that
+   was doing damage. */
+.topbar, #home, .container { position: relative; z-index: 1; }
+.sidebar, .rail { z-index: 1; }
 
 /* =====================================================================
    EVENT CARDS — the good stuff

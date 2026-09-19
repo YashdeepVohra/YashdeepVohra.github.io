@@ -1067,6 +1067,80 @@ group('reactions, pins and the receipt');
 }
 
 /* ------------------------------------------------------------------ */
+group('desktop columns');
+{
+  // The sidebar and the rail are position:sticky at >=1100px. They
+  // stopped being sticky for two entirely separate reasons at once,
+  // neither of which is visible in the media query that declares it:
+  //
+  //   1. `body { overflow-x: hidden }`. When one axis is hidden and the
+  //      other is visible, the visible one computes to auto — so body
+  //      became a scroll container. The page scrolls on html, so body
+  //      never scrolls, and sticky inside it had nothing to stick to.
+  //   2. A later rule listed .sidebar and .rail alongside things that
+  //      need `position: relative` for z-index, at equal specificity,
+  //      which flattened sticky back to relative.
+  //
+  // Either one alone breaks it, which is why this measures the
+  // behaviour rather than the CSS: it cannot be fooled by fixing one
+  // and leaving the other.
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 860 } });
+  const wide = await ctx.newPage();
+  const wideErrs = [];
+  wide.on('pageerror', (e) => wideErrs.push(e.message));
+  await wide.addInitScript({ path: fileURLToPath(new URL('./stub.js', import.meta.url)) });
+  await wide.goto(APP_URL, { waitUntil: 'domcontentloaded' });
+  await wide.waitForTimeout(1600);
+
+  const desk = await wide.evaluate(async () => {
+    const { state } = await import('/js/state/store.js');
+    const ev = await import('/js/services/eventsService.js');
+    window.__authSingleton.currentUser = { uid: 'me' };
+    state.uid = 'me'; state.blockedUids = []; state.privacyChosen = true;
+    const mk = (u) => ({ uid: u, username: u, displayName: u, avatar: 'x', followers: [], following: [], vouchedBy: [] });
+    state.userCache = Object.fromEntries(['me', 'a', 'b'].map((u) => [u, mk(u)]));
+    state.following = []; state.orbitUids = [];
+    const t = Date.now();
+    state.eventCache = {}; state.eventOrder = [];
+    // Enough cards that the page is definitely taller than the viewport.
+    for (let i = 0; i < 14; i++) {
+      const id = 'd' + i;
+      state.eventCache[id] = { id, title: 'Event ' + i, place: 'Lawn', tag: '\u2615 Chill', hostUid: 'a',
+        participantUids: ['a', 'b'], hypedUids: [], startTime: t - 6e4, expiresAt: t + 36e5,
+        description: '', pendingUids: [], unconfirmedUids: [] };
+      state.eventOrder.push(id);
+    }
+    state.recapOrder = []; state.recapDone = true; state.currentLiveFilter = 'All';
+    document.getElementById('loading-screen').classList.add('hidden');
+    document.querySelector('.app-frame').classList.remove('hidden');
+    window.switchScreen('home'); ev.renderEvents();
+    await new Promise((r) => setTimeout(r, 400));
+
+    const top = (sel) => Math.round(document.querySelector(sel).getBoundingClientRect().top);
+    const before = { sidebar: top('.sidebar'), rail: top('.rail') };
+    const pageIsTall = document.documentElement.scrollHeight > window.innerHeight + 600;
+    window.scrollTo(0, 800);
+    await new Promise((r) => setTimeout(r, 250));
+    const after = { sidebar: top('.sidebar'), rail: top('.rail'), scrolled: Math.round(window.scrollY) };
+    return { before, after, pageIsTall,
+             sidebarPosition: getComputedStyle(document.querySelector('.sidebar')).position,
+             bodyOverflowY: getComputedStyle(document.body).overflowY };
+  });
+
+  ok('the desktop feed is long enough to scroll', desk.pageIsTall && desk.after.scrolled > 700,
+     JSON.stringify(desk.after));
+  ok('the sidebar and rail are actually sticky, not relative',
+     desk.sidebarPosition === 'sticky', desk.sidebarPosition);
+  ok('body is not a scroll container (it breaks sticky inside it)',
+     desk.bodyOverflowY === 'visible', desk.bodyOverflowY);
+  ok('the nav columns stay put while the feed scrolls',
+     desk.after.sidebar === 0 && desk.after.rail === 0,
+     JSON.stringify({ before: desk.before, after: desk.after }));
+  ok('no errors on the desktop layout', wideErrs.length === 0, wideErrs.join(' | '));
+  await ctx.close();
+}
+
+/* ------------------------------------------------------------------ */
 group('mobile keyboard and zoom');
 {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });

@@ -304,6 +304,31 @@ something breaks.
   move a pixel. Run the snapshot twice against unchanged code first, to
   show the harness itself is deterministic; otherwise the comparison
   means nothing. That is how the 134-replacement rename was signed off.
+- **Two different things silently break `position: sticky`, and the
+  desktop sidebar and rail hit BOTH at once.** They are sticky at
+  >=1100px and they were scrolling away with the feed anyway.
+
+  First: `overflow-x: hidden` was on `html, body`. When one axis is
+  `hidden` and the other is `visible`, the visible one computes to
+  `auto` — so body became a scroll container. The page actually
+  scrolls on html, so body never scrolls, and everything sticky inside
+  it was sticking to a box that never moves. It belongs on `html`
+  alone, where the root element's overflow propagates to the viewport
+  and html itself is then treated as visible. (`test/` has a
+  horizontal-overflow sweep behind that change: it was there for a
+  reason once — date inputs sliding the create screen sideways — and
+  nothing scrolls sideways at any width without it now.)
+
+  Second: a much later rule, `.topbar, .sidebar, .rail, #home,
+  .container { position: relative; z-index: 1 }`, put them above the
+  ambient layer — and at equal specificity and later in the sheet,
+  that `position: relative` flattened the sticky. The z-index is all
+  they needed; a sticky box takes one perfectly well.
+
+  Either one alone is enough to break it, so the smoke test under
+  "desktop columns" measures the BEHAVIOUR — scroll the page, assert
+  the columns stayed at top 0 — rather than either cause. Fixing one
+  and leaving the other cannot fool it.
 - **Specificity beats source order.** `.empty-state p { margin: 0 }` quietly
   outranked a later `.starter-foot` rule. It bites from the other side
   too: `.modal-content { text-align: center }` and
