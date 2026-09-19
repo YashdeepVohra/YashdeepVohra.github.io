@@ -142,23 +142,48 @@ test/               stub.js + smoke.mjs + contrast.mjs
   briefly kept as aliases during the redesign and are gone. If you find
   one in a branch, it is stale.
 - **An event card is a poster, and a recap card is the stub you tore
-  off it.** Both are built around one band across the top.
+  off it.** Both are built around one band across the top, and the band
+  is TWO COLUMNS: all the type on the left, the halftone and the
+  category glyph on the right.
 
-  The band is a halftone in the event's own `--vibe`: two background
-  layers, a dot grid with a linear gradient painted OVER it that goes
-  opaque within half the width. That decay is the whole trick — a dot
-  grid left visible edge to edge reads as fabric, not as printing. No
-  image, no mask, no extra element, so sixty cards cost one paint each.
-  The band replaced the leading colour edge, the top wash AND the
-  corner watermark, which is three fewer paints per card than before.
+  That two-column layout is not a style choice, it is the fix for a bug
+  that came back three times. The halftone kept ending up under the
+  band's own words — first as a background layer across the whole band,
+  then as an absolutely positioned corner that a taller card simply
+  grew into, then because the place sat top-right where the dots were.
+  Averaged over the band the contrast looked fine every time; on the
+  pixel where a dot met a letter it was 2.4:1. Coordinates can always
+  be out-grown. Siblings cannot overlap.
 
-  Inside it, one number at poster scale: on a live card the time
-  (`timeStat()`), on a stub the turnout. Everything else in the band
-  shrinks to mono around it. The band colour is
-  `color-mix(vibe 40%, paper)` — 40% is as much vibe as it can take and
-  still clear 4.5:1 for the ink on the worst of the five categories,
-  which `test/contrast.mjs` checks for every vibe in both themes. Add a
-  sixth category and that check is what tells you if it works.
+  One catch that is easy to reintroduce: being siblings is not enough
+  on its own. `.poster-type` needs `min-width: max-content`, or
+  flexbox shrinks BOTH columns when they don't fit, the type column
+  goes under its content, and the stats spill straight back over the
+  halftone. The deco column yields all its width first; a very busy
+  card simply loses its halftone, which is the right thing to lose.
+
+  Inside the type column, up to two numbers at poster scale, because a
+  card answers two questions and it used to answer one: WHEN
+  (`timeStat()`) and how many are GOING — or, on a stub, the turnout.
+
+  `--band-mix` differs by theme and that is also not a fudge. The band
+  has to carry dark ink AND separate from the page behind it. In light
+  mode the page is already pale, so 40% left every band at 1.25:1
+  against the canvas and the cards looked glued to the background;
+  60% fixes it. In dark mode the page is near-black so 40% already
+  separates at 2.5:1, and going further would eat the ink contrast.
+  `--band-dot` runs opposite ways for the same reason.
+- **`test/contrast.mjs` checks the worst pixel, not the average.** It
+  walks every vibe in both themes for three things that each broke
+  once: text on the band, the band against the page, and text on a
+  DOT. The third is the one that kept getting missed, because a
+  halftone's average colour is not the colour under a letter. It caught
+  a light-mode case I had not even noticed while fixing the dark one.
+  The geometry half of that guarantee lives in `smoke.mjs` under "the
+  poster band": it measures real rectangle overlap between the band's
+  text and the halftone column, on both axes. A colour test cannot see
+  a layout bug and a layout test cannot see a colour one; the halftone
+  needed both.
 
   The stub's notches are a mask: two radial gradients, each opaque
   except for a circle at one edge, intersected. Where either circle
@@ -191,6 +216,7 @@ Decisions already made, with the reason, so they don't get undone:
 | Recap query spans 48h, filtered client-side, max 3 pages per load | retention is computed from three fields; no server to store it |
 | Profile Hosted/Joined: two `get()`s, counts from the same docs | was a listener + two duplicate count queries |
 | Pinned message in a subcollection, holding a copy of the text | a field on the event bills the whole campus a read; an id alone costs a read to display |
+| Poster cards cost ~29% more DOM than the rows they replaced, and that was accepted | measured, not assumed: at 60 cards, style recalculation went 4.3ms -> 0.2ms because the old hover transitions on `.event::before` and the watermark are gone, while layout (1.8ms) and forced-reflow wall time (2.1ms) are unchanged. The nodes cost nothing that shows up in a frame; the transitions did |
 | The receipt folds events already in the cache, debounced | a history collection would be a write per event and a query per open |
 
 The remaining lever, if reads ever bite: drop `LIVE_LIMIT` to ~30. It cuts

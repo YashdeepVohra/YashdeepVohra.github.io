@@ -31,6 +31,9 @@ function tokens(startMarker) {
   const block = css.slice(from, css.indexOf('\n}', from));
   const out = {};
   for (const m of block.matchAll(/--([a-z0-9-]+):\s*(#[0-9a-fA-F]{3,8})\s*;/g)) out[m[1]] = m[2];
+  // The band mix is a percentage and the dot is an rgba, neither of
+  // which is a hex — but both decide whether text is readable.
+  for (const m of block.matchAll(/--(band-mix|band-dot):\s*([^;]+);/g)) out[m[1]] = m[2].trim();
   return out;
 }
 
@@ -82,16 +85,18 @@ const CHECKS = [
  * that no static token list would cover, and the exact ones that break
  * if somebody adds a sixth category or dials the mix up.
  */
-const BAND_MIX = (() => {
-  // Not [^)]* — `var(--vibe, var(--sage))` nests a paren and that
-  // stops at the wrong one. Take the first percentage after --band:.
-  const m = css.match(/--band:[^;]*?(\d+)%/);
-  return m ? Number(m[1]) / 100 : null;
-})();
-
 function mix(a, b, p) {
   const A = hex(a), B = hex(b);
   return '#' + [0, 1, 2].map((i) => Math.round(A[i] * p + B[i] * (1 - p)).toString(16).padStart(2, '0')).join('');
+}
+
+/** rgba(r,g,b,a) composited over an opaque hex. */
+function over(rgba, base) {
+  const m = rgba.match(/rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s/]+([\d.]+))?/);
+  if (!m) return null;
+  const a = m[4] === undefined ? 1 : Number(m[4]);
+  const B = hex(base);
+  return '#' + [1, 2, 3].map((i) => Math.round(Number(m[i]) * a + B[i - 1] * (1 - a)).toString(16).padStart(2, '0')).join('');
 }
 
 let failures = 0;
@@ -105,21 +110,55 @@ for (const theme of ['light', 'dark']) {
     else { failures++; console.log('  ✗ ' + r.toFixed(2).padStart(5) + '  ' + name + ' — needs ' + min + ' (' + t[fg] + ' on ' + t[bg] + ')'); }
   }
 }
-// ---- the poster band, per vibe ----
-if (BAND_MIX === null) {
-  failures++;
-  console.log('\n✗ could not find the --band mix in style.css');
-} else {
-  for (const theme of ['light', 'dark']) {
-    console.log('\n' + theme + ' — poster band at ' + Math.round(BAND_MIX * 100) + '% vibe');
-    const t = THEMES[theme];
-    for (const name of ['chill', 'food', 'party', 'study', 'sports']) {
-      const vibe = t['vibe-' + name];
-      if (!vibe) { failures++; console.log('  ✗ missing --vibe-' + name); continue; }
-      const band = mix(vibe, t.paper, BAND_MIX);
-      const r = ratio(t['chip-ink'], band);
-      if (r >= 4.5) console.log('  ✓ ' + r.toFixed(2).padStart(5) + '  the band\'s text on ' + name);
-      else { failures++; console.log('  ✗ ' + r.toFixed(2).padStart(5) + '  the band\'s text on ' + name + ' — needs 4.5 (' + t['chip-ink'] + ' on ' + band + ')'); }
+/* ---------------------------------------------------------------------
+   The poster band, per vibe.
+
+   Three separate things have to hold and each one has broken once:
+
+   1. The band's text has to read ON the band. Obvious, and it passed
+      all along.
+   2. The band has to SEPARATE from the page behind it. This is the one
+      that got missed: at 40% vibe every light band was 1.25:1 against
+      the canvas, so the cards looked glued to the background even
+      though the text on them was fine. Hence --band-mix differing by
+      theme.
+   3. The text has to read on a DOT, not just on the band's average
+      colour. This is the one that got missed twice: averaged, a
+      halftone band looks fine; on the pixel where a dot meets a letter
+      it was 2.4:1 in dark mode. The dots were moved out from under the
+      type for that reason, and this check is the belt to that braces —
+      if a future layout change slides them back under a word, the
+      colours still have to survive it.
+   ------------------------------------------------------------------- */
+const VIBES = ['chill', 'food', 'party', 'study', 'sports'];
+
+for (const theme of ['light', 'dark']) {
+  const t = THEMES[theme];
+  const mixPct = t['band-mix'];
+  const dot = t['band-dot'];
+  console.log('\n' + theme + ' — poster bands at ' + (mixPct || '?') + ' vibe');
+  if (!mixPct || !dot) {
+    failures++;
+    console.log('  ✗ missing --band-mix or --band-dot for ' + theme);
+    continue;
+  }
+  const p = parseFloat(mixPct) / 100;
+  for (const name of VIBES) {
+    const vibe = t['vibe-' + name];
+    if (!vibe) { failures++; console.log('  ✗ missing --vibe-' + name); continue; }
+    const band = mix(vibe, t.paper, p);
+    const onDot = over(dot, band);
+    const checks = [
+      ['text on the band', ratio(t['chip-ink'], band), 4.5],
+      ['band against the page', ratio(band, t.canvas), 1.45],
+      ['text on a dot', onDot ? ratio(t['chip-ink'], onDot) : 0, 4.5]
+    ];
+    const bad = checks.filter(([, r, min]) => r < min);
+    if (!bad.length) {
+      console.log('  ✓ ' + name.padEnd(7) + checks.map(([n, r]) => r.toFixed(2)).join('  '));
+    } else {
+      failures += bad.length;
+      for (const [n, r, min] of bad) console.log('  ✗ ' + name.padEnd(7) + n + ' — ' + r.toFixed(2) + ', needs ' + min);
     }
   }
 }

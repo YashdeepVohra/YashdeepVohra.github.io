@@ -44,6 +44,25 @@
   --ember-soft: #f7e3d9;
   --ember-line: #e8b79f;
 
+  /* How much vibe goes into a poster band. It CANNOT be one number
+     for both themes, and that is not a fudge — it falls out of the
+     maths. The band has two jobs at once: carry dark ink (so it wants
+     to be light) and separate from the page behind it (so it wants to
+     be far from --canvas). In light mode the page is already pale, so
+     the band has to go deep to separate — 40% left it at 1.25:1
+     against the canvas, which is what made the cards look glued to the
+     background. In dark mode the page is near-black and the vibes are
+     pale, so 40% already separates at 2.5:1 and going further would
+     start eating the ink contrast. test/contrast.mjs checks both ends
+     for every vibe. */
+  --band-mix: 60%;
+  /* Darker than the band it sits on, which is what a halftone is —
+     but only just. At 0.34 a dot under a letter dropped the ink to
+     3.6:1; 0.20 is the most it can take and still leave 4.66:1 in the
+     worst case, while staying visible against the band at 1.40:1.
+     test/contrast.mjs holds both ends of that. */
+  --band-dot: rgba(30, 44, 40, 0.20);
+
   /* ---- Vibe accents: muted sticky-note tones that sit on green ---- */
   --vibe-chill:  #6fa8b8;
   --vibe-food:   #d1904f;
@@ -672,29 +691,75 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 
 .poster {
   position: relative;
+  display: flex; align-items: stretch; gap: var(--s-8);
   padding: 11px var(--s-16) 12px;
+  overflow: hidden;
   color: var(--chip-ink);
-  /* The band's own colour. 40% is as much vibe as it can take and
-     still clear 4.5:1 for the ink on the worst of the five — checked
-     in test/contrast.mjs, which walks every vibe in both themes. */
-  --band: color-mix(in srgb, var(--vibe, var(--sage)) 40%, var(--paper));
-  background-color: var(--band);
-  /* Order matters: the wash is FIRST so it paints ON TOP of the dots.
-     It starts opaque almost immediately, which is what turns a uniform
-     dot grid into a halftone that decays out of one corner — a grid
-     left visible edge to edge reads as fabric, not as printing. */
-  background-image:
-    linear-gradient(118deg, transparent 2%, var(--band) 48%),
-    radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--vibe, var(--sage)) 72%, transparent) 1.4px, transparent 0);
-  background-size: cover, 7px 7px;
+  --band: color-mix(in srgb, var(--vibe, var(--sage)) var(--band-mix), var(--paper));
+  background: var(--band);
   border-bottom: 1.5px solid color-mix(in srgb, var(--vibe, var(--sage)) 40%, var(--ash));
 }
-
-.poster-head {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: var(--s-12);
-  margin-bottom: 6px;
+/* All the type on the left, pinned to its own content width.
+   min-width: max-content is the load-bearing bit: without it flexbox
+   shrinks BOTH columns proportionally when they don't fit, the type
+   column goes under its content, and the stats spill out of it and
+   over the halftone — which is exactly the bug this two-column layout
+   was meant to make impossible. Being siblings is not enough on its
+   own; the type column also has to be un-shrinkable. */
+.poster-type { flex: 1 1 auto; min-width: max-content; }
+/* And the halftone on the right, as a SIBLING that yields all of its
+   width before the type gives up any. A very busy card simply loses
+   its halftone, which is the right thing to lose. */
+.poster-deco {
+  position: relative;
+  flex: 0 1 108px;
+  min-width: 0;
+  margin: -11px calc(var(--s-16) * -1) -12px 0;
 }
+
+/* THE HALFTONE LIVES IN THE CORNER, NEVER UNDER A WORD.
+   It used to be a background layer across the whole band, fading from
+   the left — which is exactly where the tag and the stat sit. Averaged
+   over the band the contrast looked fine; on the actual pixel where a
+   dot met a letter it was 2.4:1 in dark mode, and no dot colour can
+   fix that, because light text on a light dot cannot win. So the dots
+   moved out of the text's way instead. A smoke test now measures that
+   they stay there.
+   The dot colour also has to run the opposite way per theme: on pale
+   paper a halftone is DARKER than the sheet, and on a dark band it has
+   to be darker still, not lighter — otherwise it stops reading as
+   printing and starts reading as glare. */
+.poster-deco::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(circle at 1px 1px, var(--band-dot) 1.4px, transparent 0);
+  background-size: 7px 7px;
+  /* Dense at the outer edge, decaying inwards. A uniform grid reads as
+     fabric; it is the decay that makes it read as printing. */
+  -webkit-mask-image: linear-gradient(250deg, #000 6%, transparent 86%);
+  mask-image: linear-gradient(250deg, #000 6%, transparent 86%);
+}
+/* The category glyph, oversized and faint, sitting inside the halftone
+   where the old corner watermark used to be — but inside the band, so
+   it can never reach the body text. */
+.poster-glyph {
+  position: absolute;
+  right: 6px; top: 50%;
+  font-size: 48px; line-height: 1;
+  opacity: 0.22;
+  transform: translateY(-50%) rotate(-8deg);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Everything typographic in the band is LEFT aligned, so the whole
+   right side belongs to the halftone and nothing ever has to be read
+   off a field of dots. The place used to live up here on the right,
+   which is the same mistake in a different spot — it is in the body
+   now, where it also stops being truncated. */
+.poster-head { display: flex; align-items: center; gap: var(--s-8); margin-bottom: 7px; }
 /* The category, as a sticky note pinned to the poster. */
 .poster-tag {
   flex-shrink: 0;
@@ -708,30 +773,41 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   color: var(--chip-ink);
   white-space: nowrap;
 }
-.poster-place {
-  display: flex; align-items: center; justify-content: flex-end; gap: 3px;
-  flex: 1 1 0;
-  min-width: 0;
+/* Where it is, directly under what it is. */
+.event-place {
+  display: flex; align-items: center; gap: 4px;
+  margin-top: 5px;
   font-family: var(--font-mono);
-  font-size: 11px; letter-spacing: 0.03em;
-  color: color-mix(in srgb, var(--chip-ink) 78%, transparent);
+  font-size: 11.5px; letter-spacing: 0.04em;
+  color: var(--fog);
 }
-.poster-place i { font-size: 13px; flex-shrink: 0; }
-/* The ellipsis has to live on the TEXT, not on the flex row. On the
-   row, a right-aligned overflow gets clipped at the start — you lose
-   the beginning of the place name and get no "…" either, which is the
-   worst of both. On the span it truncates at its own right edge. */
-.poster-place > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.event-place i { font-size: 14px; flex-shrink: 0; }
+/* The ellipsis has to live on the TEXT, not on the flex row: on the
+   row a right-aligned overflow gets clipped at the START, so you lose
+   the beginning of the name and get no "…" either. */
+.event-place > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* TWO STATS, because a card answers two questions and it used to
+   answer only one at a glance: when is it, and is anybody going. They
+   sit side by side at poster scale with Caldera's dotted rule between
+   them — the same 1.5px dotted detail as the one above the actions. */
+.poster-stats { display: flex; align-items: stretch; gap: var(--s-12); }
 .poster-stat { display: flex; align-items: flex-end; gap: 9px; }
+.poster-stat + .poster-stat {
+  padding-left: var(--s-12);
+  border-left: 1.5px dotted color-mix(in srgb, var(--chip-ink) 34%, transparent);
+}
 .poster-value {
   font-family: var(--font-display);
   font-weight: var(--display-weight);
-  font-size: 40px; line-height: 0.82;
+  font-size: 38px; line-height: 0.82;
   letter-spacing: -0.045em;
   text-transform: uppercase;
   color: var(--chip-ink);
 }
+/* The second stat is the supporting fact, so it steps down a size —
+   two numbers at the same scale is two headlines and no hierarchy. */
+.poster-stat + .poster-stat .poster-value { font-size: 27px; }
 .poster-side { display: flex; flex-direction: column; gap: 1px; min-width: 0; padding-bottom: 3px; }
 .poster-label, .poster-sub {
   font-family: var(--font-mono);
@@ -1614,8 +1690,17 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 /* The colour wash, the corner watermark and the leading accent bar all
    used to live here, layered under the content to make a scrolling
    feed read as varied rather than striped. The poster band does that
-   job outright, so all three are gone: three fewer paints on every one
-   of up to sixty cards, and no z-index stack to reason about.
+   job outright, so all three are gone.
+
+   What that actually bought, measured on a 60-card feed rather than
+   assumed: style recalculation went from ~4.3ms to ~0.2ms, because
+   what was expensive was never the paint — it was the hover
+   transitions these carried (`.event:hover::before { width }` and the
+   watermark's transform/opacity), which have to be re-evaluated across
+   every card whenever anything upstream changes. Layout and forced
+   reflow are unchanged. The poster band itself costs ~29% MORE DOM
+   nodes than the rows it replaced, and that is a fair trade: the nodes
+   do not show up in a frame, the transitions did.
 
    The live perimeter went earlier and for a different reason — between
    the ember stat, the ember avatar ring and the ember dot in the rail,
@@ -2690,13 +2775,13 @@ html:not(.kb-open) .chat-footer {
    the colour goes out of them, which is what says "this is over"
    without dimming the text you still want to read. */
 .stub .poster.spent {
-  background-color: var(--bone);
-  background-image:
-    linear-gradient(112deg, transparent 18%, var(--bone) 86%),
-    radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--vibe, var(--sage)) 30%, var(--ash)) 1.5px, transparent 0);
+  background: var(--bone);
   border-bottom: 1.5px dashed var(--ash);
   color: var(--fog);
 }
+/* Still printed on something, just with the colour gone out of it. */
+.stub .poster.spent::after { --band-dot: color-mix(in srgb, var(--ash) 80%, transparent); }
+.stub .poster.spent .poster-glyph { opacity: 0.1; }
 .stub .poster.spent .poster-value { color: var(--ink); }
 .stub .poster.spent .poster-label { color: var(--fog); }
 .stub .poster.spent .poster-tag { background: var(--paper); border-color: var(--ash); color: var(--fog); }
@@ -3184,6 +3269,9 @@ html {
   --ember-ink:  #f0a17c;
   --ember-soft: #3a2822;
   --ember-line: #6d4433;
+
+  --band-mix: 40%;
+  --band-dot: rgba(9, 15, 16, 0.42);
 
   --vibe-chill:  #87bccb;
   --vibe-food:   #e0a86c;

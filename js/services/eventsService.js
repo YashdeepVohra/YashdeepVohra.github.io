@@ -450,22 +450,46 @@ function timeStat(e, now) {
  * sixty of them down a feed cost one paint each. `--vibe` is already
  * on the card, so the colour comes along for free.
  */
-function posterBand(e, now, { stat, spent = false } = {}) {
-  const s = stat || timeStat(e, now);
+/** One stat: a big value, with its label and footnote stacked beside. */
+function statBlock(s) {
+  if (!s) return "";
+  return `
+    <span class="poster-stat">
+      <span class="poster-value">${escapeHtml(s.value)}</span>
+      <span class="poster-side">
+        <span class="poster-label">${escapeHtml(s.label)}</span>
+        ${s.sub ? `<span class="poster-sub">${escapeHtml(s.sub)}</span>` : ""}
+      </span>
+    </span>`;
+}
+
+/**
+ * The band takes up to two stats, because a card is answering two
+ * questions and until now it only answered one at a glance: when is
+ * this, and is anybody actually going. Those are the two things you
+ * decide on, so they are the two things set at poster scale.
+ */
+function posterBand(e, now, { stats, spent = false } = {}) {
+  const list = (stats || [timeStat(e, now)]).filter(Boolean);
   const glyph = (e.tag || "").trim().split(" ")[0];
   const word = (e.tag || "").trim().split(" ").slice(1).join(" ");
+  // TWO COLUMNS, not one box with things positioned inside it. The
+  // halftone kept ending up under the type — first as a background
+  // layer, then as an absolutely positioned corner that a taller card
+  // grew into. Coordinates can always be out-grown; siblings cannot
+  // overlap. The deco column gives up its width to the type column
+  // when the stats need it, so the type is never the thing that
+  // shrinks.
   return `
     <div class="poster${spent ? " spent" : ""}">
-      <div class="poster-head">
-        ${e.tag ? `<span class="poster-tag">${escapeHtml(glyph)} ${escapeHtml(word)}</span>` : ""}
-        <span class="poster-place"><i class='bx bx-map-pin'></i><span>${escapeHtml(e.place)}</span></span>
+      <div class="poster-type">
+        <div class="poster-head">
+          ${e.tag ? `<span class="poster-tag">${escapeHtml(glyph)} ${escapeHtml(word)}</span>` : ""}
+        </div>
+        <div class="poster-stats">${list.map(statBlock).join("")}</div>
       </div>
-      <div class="poster-stat">
-        <span class="poster-value">${escapeHtml(s.value)}</span>
-        <span class="poster-side">
-          <span class="poster-label">${escapeHtml(s.label)}</span>
-          ${s.sub ? `<span class="poster-sub">${escapeHtml(s.sub)}</span>` : ""}
-        </span>
+      <div class="poster-deco" aria-hidden="true">
+        ${glyph ? `<span class="poster-glyph">${escapeHtml(glyph)}</span>` : ""}
       </div>
     </div>`;
 }
@@ -862,6 +886,7 @@ export function renderEvents() {
     const body = `
       <div class="card-body">
       <div class="event-title">${escapeHtml(e.title)}</div>
+      <div class="event-place"><i class='bx bx-map-pin'></i><span>${escapeHtml(e.place)}</span></div>
       ${desc}
       ${byline}
       ${needsApproval && !isHost && !hasJoined ? `<div class="approval-note"><i class='bx bx-lock-alt'></i> The host approves who joins</div>` : ""}
@@ -892,9 +917,19 @@ export function renderEvents() {
       // the old leading edge, corner watermark and top wash have all
       // gone with it — three paints per card saved, and a composition
       // instead of a stack of rows.
+      // Second stat: is anybody going. "Be first" rather than a bare 0,
+      // because 0 reads as a dead event and the whole point of the app
+      // is that somebody has to start.
+      const goingCount = withoutBlocked(confirmedGoing).length;
+      const goingStat = goingCount
+        ? { label: goingCount === 1 ? "going" : "going",
+            value: String(goingCount),
+            sub: isFull ? "full" : e.maxCapacity ? (e.maxCapacity - attendees) + " left" : "" }
+        : { label: "going", value: "\u2014", sub: "be first" };
+
       liveCards.push({ id, html: `
         <article class="event card poster-card ${isLive ? "is-live" : ""}" id="event-${id}"${tagAttr} style="--vibe:${vibe}">
-          ${posterBand(e, now)}
+          ${posterBand(e, now, { stats: [timeStat(e, now), goingStat] })}
           ${body}${actions}
         </article>` });
     } else if (inRecap(e, now, state.uid)) {
@@ -928,9 +963,10 @@ export function renderEvents() {
 
       recapCards.push({ id, html: `
         <article class="event card poster-card stub${fading ? " fading" : ""}" id="event-${id}"${tagAttr} style="--vibe:${vibe}">
-          ${posterBand(e, now, { stat: turnout, spent: true })}
+          ${posterBand(e, now, { stats: [turnout], spent: true })}
           <div class="card-body">
             <div class="event-title">${escapeHtml(e.title)}</div>
+            <div class="event-place"><i class='bx bx-map-pin'></i><span>${escapeHtml(e.place)}</span></div>
             <div class="byline">
               <div class="av-ring tappable" ${openHost}>
                 <div class="av-inner">${renderAvatar(avatarFor(e.hostUid))}</div>

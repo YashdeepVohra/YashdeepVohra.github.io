@@ -767,6 +767,64 @@ group('editing and taking back a message');
 }
 
 /* ------------------------------------------------------------------ */
+group('the poster band');
+{
+  // The halftone has slid under the band's type twice now — first
+  // because it was a background layer across the whole band, then
+  // because the place sat on the right where the dots are. Averaged
+  // over the band the contrast looked fine both times; on the pixel
+  // where a dot met a letter it was 2.4:1. Colour checks cannot see
+  // that, so this one measures geometry: every word in the band has to
+  // finish before the dot field starts.
+  const band = await page.evaluate(async ({ events }) => {
+    const { state, ev } = window.__m;
+    state.eventCache = {};
+    state.eventOrder = [];
+    events.forEach((e) => { state.eventCache[e.id] = e; state.eventOrder.push(e.id); });
+    state.recapOrder = []; state.recapDone = true; state.currentLiveFilter = 'All';
+    ev.renderEvents();
+    await new Promise((r) => setTimeout(r, 200));
+
+    const out = [];
+    document.querySelectorAll('#events .poster').forEach((poster) => {
+      // The halftone fills its own column, so that column's rect IS the
+      // field — no reconstructing it from computed styles, and nothing
+      // to get out of step when the layout changes.
+      const deco = poster.querySelector('.poster-deco');
+      if (!deco) { out.push({ id: poster.closest('.event').id, hits: ['no deco column'] }); return; }
+      const field = deco.getBoundingClientRect();
+      // Real rectangle overlap, both axes. Checking x alone passes a
+      // layout where the text is simply lower than the dots, which is
+      // fine — and fails one where it is merely further right, which
+      // is also fine. Only an actual intersection is a bug.
+      const hits = [];
+      poster.querySelectorAll('.poster-tag, .poster-value, .poster-label, .poster-sub').forEach((el) => {
+        const r = el.getBoundingClientRect();
+        if (!r.width || !r.height) return;
+        if (r.right > field.left && r.left < field.right && r.bottom > field.top && r.top < field.bottom) {
+          hits.push(el.className + ' "' + el.innerText.trim().slice(0, 14) + '"');
+        }
+      });
+      out.push({ id: poster.closest('.event').id, hits, fieldWidth: Math.round(field.width) });
+    });
+    return out;
+  }, { events: [
+    mkEvent('p1', 'a', 'Short one', '☕ Chill'),
+    Object.assign(mkEvent('p2', 'b', 'One with a great many people going to it indeed', '🏀 Sports'),
+                  { participantUids: ['b','a','c','d','x','y','z'], maxCapacity: 12 }),
+    Object.assign(mkEvent('p3', 'c', 'Nobody yet', '📚 Study'), { participantUids: ['c'] })
+  ]});
+
+  ok('every card painted a band', band.length === 3, JSON.stringify(band.map((b) => b.id)));
+  ok('the halftone has a column of its own',
+     band.every((b) => b.fieldWidth > 20), JSON.stringify(band.map((b) => b.fieldWidth)));
+  const clashes = band.filter((b) => b.hits.length);
+  ok('no word in the band sits on the halftone',
+     clashes.length === 0,
+     JSON.stringify(clashes));
+}
+
+/* ------------------------------------------------------------------ */
 group('reactions, pins and the receipt');
 {
   const pure = await page.evaluate(async () => {
