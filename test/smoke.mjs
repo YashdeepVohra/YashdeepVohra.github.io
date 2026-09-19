@@ -1816,6 +1816,139 @@ group('nothing is cut off');
 }
 
 /* ------------------------------------------------------------------ */
+group('everything scrolls to its bottom');
+{
+  // The profile's inner box is the scroller on a phone, where the
+  // profile is a fixed full-screen layer. On a laptop the wrapper
+  // joins the grid with `min-height: 100dvh` instead, so that box grew
+  // to its own content: scrollHeight === clientHeight, 1086px tall in
+  // an 860px window, and still a scroll container carrying
+  // `overscroll-behavior: contain`. It could never scroll a pixel, and
+  // it sat over the whole column telling the browser not to pass the
+  // wheel on.
+  //
+  // Chromium happens to pass it through anyway, which is why this
+  // tests the STRUCTURE rather than the gesture: a browser that takes
+  // `contain` at its word strands the bottom of the page, and a test
+  // that only drives a wheel in Chromium would never see it. The rule
+  // is simple enough to hold everywhere — a box that can never scroll
+  // has no business being a scroll container.
+  const sweep = async (width, height) => {
+    const ctx = await browser.newContext({ viewport: { width, height } });
+    const p = await ctx.newPage();
+    const errs = [];
+    p.on('pageerror', (e) => errs.push(e.message.slice(0, 100)));
+    await p.addInitScript({ path: fileURLToPath(new URL('./stub.js', import.meta.url)) });
+    await p.goto(APP_URL, { waitUntil: 'domcontentloaded' });
+    await p.waitForTimeout(1500);
+
+    await p.evaluate(async () => {
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+      const { state } = await import('/js/state/store.js');
+      const ev = await import('/js/services/eventsService.js');
+      const now = Date.now();
+      window.__authSingleton.currentUser = { uid: 'me' };
+      state.uid = 'me'; state.blockedUids = []; state.privacyChosen = true;
+      state.userAvatar = 'x'; state.username = 'you';
+      const many = Array.from({ length: 20 }, (_, i) => 'u' + i);
+      const mk = (u) => ({ uid: u, username: u, displayName: 'Person ' + u, avatar: 'x',
+        followers: many, following: many, vouchedBy: [],
+        bio: 'A long enough bio that the profile has something to scroll past. '.repeat(3),
+        interests: ['music', 'football', 'chai', 'film', 'code'] });
+      state.userCache = Object.fromEntries(['me', ...many].map((u) => [u, mk(u)]));
+      state.following = many; state.orbitUids = many.slice(0, 8);
+      state.eventCache = {}; state.eventOrder = []; state.recapOrder = [];
+      for (let i = 0; i < 14; i++) {
+        const id = 's' + i;
+        state.eventCache[id] = { id, title: 'Event ' + i, place: 'Lawn', tag: '☕ Chill',
+          hostUid: 'u1', participantUids: ['u1'], hypedUids: [], startTime: now - 6e4,
+          expiresAt: now + 36e5, description: '', pendingUids: [], unconfirmedUids: [] };
+        state.eventOrder.push(id);
+      }
+      state.recapDone = true; state.currentLiveFilter = 'All';
+      document.getElementById('loading-screen').classList.add('hidden');
+      document.querySelector('.app-frame').classList.remove('hidden');
+      window.switchScreen('home'); ev.renderEvents();
+      await wait(350);
+    });
+
+    // Every scroll container that can never scroll while being taller
+    // than the window. Each one is a place a wheel can land and go
+    // nowhere.
+    const dead = async () => p.evaluate(() => {
+      const out = [];
+      const vh = document.documentElement.clientHeight;
+      document.querySelectorAll('*').forEach((e) => {
+        const s = getComputedStyle(e);
+        if (!['auto', 'scroll'].includes(s.overflowY)) return;
+        const r = e.getBoundingClientRect();
+        if (!r.width || !r.height) return;
+        if (e.scrollHeight <= e.clientHeight + 2 && r.height > vh + 2) {
+          out.push(e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') +
+            (typeof e.className === 'string' && e.className ? '.' + e.className.trim().split(/\s+/)[0] : '') +
+            ' ' + Math.round(r.height) + 'px in ' + vh);
+        }
+      });
+      return out;
+    });
+
+    const go = async (how) => {
+      await p.evaluate(async (how) => {
+        document.querySelectorAll('.full-screen-view:not(.hidden)').forEach((e) => e.classList.add('hidden'));
+        window.scrollTo(0, 0);
+        if (how === 'profile') window.openProfileScreen('me');
+        else if (how === 'claim') window.switchScreen('usernameScreen');
+        else if (how) window[how]?.();
+        await new Promise((r) => setTimeout(r, 450));
+      }, how);
+      const found = await dead();
+      // Then scroll everything there is to scroll and see whether the
+      // last thing on the screen can be got to.
+      for (let i = 0; i < 8; i++) {
+        await p.mouse.move(width / 2, height * 0.6);
+        await p.mouse.wheel(0, 600);
+        await p.waitForTimeout(90);
+      }
+      const reached = await p.evaluate((how) => {
+        const sel = how === 'profile' ? '.profile-scroll-body'
+          : how === 'claim' ? '#usernameScreen'
+            : how ? '.full-screen-view:not(.hidden) .screen-body' : '#eventsTab';
+        const box = document.querySelector(sel);
+        const last = box && box.lastElementChild;
+        if (!last) return true;
+        return last.getBoundingClientRect().bottom <= document.documentElement.clientHeight + 6;
+      }, how);
+      return { found, reached };
+    };
+
+    const results = {};
+    for (const how of [null, 'profile', 'openSettingsScreen', 'openCreateScreen', 'claim']) {
+      results[how || 'feed'] = await go(how);
+    }
+    await ctx.close();
+    return { results, errs };
+  };
+
+  // The third one is the point: a landscape phone, or a laptop window
+  // dragged to half height. Claiming a handle has no inner scroller —
+  // the layer itself is it — and `.full-screen-view` sets
+  // `overflow: hidden`, so the account-type cards and the Join button
+  // went off the bottom with nothing to scroll. Nothing is short
+  // enough to show that at the other two sizes.
+  for (const [w, h, label] of [[1280, 860, 'a laptop'], [390, 700, 'a phone'], [820, 460, 'a short window']]) {
+    const { results, errs } = await sweep(w, h);
+    const stuck = Object.entries(results).filter(([, r]) => r.found.length);
+    const unreachable = Object.entries(results).filter(([, r]) => !r.reached).map(([k]) => k);
+
+    ok(`no dead scroll containers on ${label}`, stuck.length === 0,
+       JSON.stringify(stuck.map(([k, r]) => k + ': ' + r.found.join(', '))));
+    ok(`and the bottom of every screen can be reached on ${label}`,
+       unreachable.length === 0, unreachable.join(', '));
+    ok(`no errors getting there on ${label}`, errs.length === 0, errs.join(' | '));
+  }
+}
+
+/* ------------------------------------------------------------------ */
 group('overall');
 ok('no errors, no native dialogs, all the way through', errors.length === 0, errors.join(' | '));
 

@@ -268,6 +268,43 @@ test/               stub.js + smoke.mjs + contrast.mjs
   one to drop because the body row below already names who is going;
   the first stat — when it is — is said nowhere else on the card.
 
+- **A dead scroll container is worse than no scroller at all.** The
+  profile's inner box is the scroller on a phone, where the profile is
+  a fixed full-screen layer. On a laptop the wrapper joins the grid
+  with `min-height: 100dvh` instead, so that box grows to its own
+  content: `scrollHeight === clientHeight`, 1086px tall inside an 860px
+  window, still a scroll container, still carrying
+  `overscroll-behavior: contain`. It could never move a pixel while
+  telling the browser not to pass the wheel on. Chromium hands the
+  gesture to the page anyway; a browser that takes `contain` at its
+  word strands the bottom of the profile. So at >=1100px that box is
+  `overflow: visible` and the page scrolls the column, exactly as it
+  does the feed.
+
+  The smoke group "everything scrolls to its bottom" holds the rule in
+  general: no `overflow: auto` box may be taller than the window while
+  having nothing to scroll. It tests the STRUCTURE, not the gesture, on
+  purpose — the symptom is browser-dependent and a wheel driven in
+  Chromium would never see it.
+
+- **Claiming a handle has no inner scroller, so the layer is one.**
+  `.onboarding-screen` is `.full-screen-view`, which sets
+  `overflow: hidden`; on a short window (landscape phone, half-height
+  laptop) the account-type cards and the Join button went off the
+  bottom with nothing to scroll. It is `overflow-y: auto` now with
+  `justify-content: safe center` — plain `center` on a flex column that
+  overflows pushes content off BOTH ends and the top one cannot be
+  scrolled back to. The smoke sweep includes an 820x460 window because
+  nothing shorter than that shows it.
+
+- **Scroll chaining behind an open layer cannot be fixed with
+  `overscroll-behavior`, so don't try.** Chaining begins at the nearest
+  container that can ACTUALLY scroll, so a panel whose content happens
+  to fit is skipped entirely and its `overscroll-behavior` is never
+  consulted — the wheel goes to the page behind it. Stopping that needs
+  the page itself to stop scrolling, and `overflow: hidden` on html is
+  exactly what broke sticky the last time. Left alone on purpose.
+
 - **Nothing on screen may be sliced or reach past its column.** The
   smoke group "nothing is cut off" renders the app at 320, 390 and 1280
   (that last one with a chat open beside the feed) and asks two
