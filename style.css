@@ -528,6 +528,18 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   background: var(--glass-canvas);
   border-bottom: 1.5px solid var(--ash);
 }
+/* The wordmark is a button now — tapping it goes to Live Now, which
+   is what every user already expects a logo to do, and it was a dead
+   spot before. It has to shed the base button styling, which is a
+   full-width violet pill. */
+.brand-home {
+  width: auto; padding: 0;
+  background: none; border: none; box-shadow: none;
+  color: inherit;
+  cursor: pointer;
+}
+.brand-home:hover { background: none; filter: none; }
+.brand-home:active { transform: scale(0.96); }
 .brand-lockup { display: flex; align-items: center; gap: 9px; }
 /* A solid mark, not a gradient: one colour, one paint, and it survives
    being printed, screenshotted or rendered on a cheap panel. */
@@ -700,6 +712,103 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   text-align: center;
 }
+
+/* =====================================================================
+   SHARING
+   ===================================================================== */
+
+/* ---- An event posted into a chat ---- */
+.event-embed {
+  display: flex; align-items: center; gap: var(--s-12);
+  min-width: 232px; max-width: 296px;
+  padding: 11px 13px;
+  background: var(--paper);
+  border: 1.5px solid var(--ash);
+  border-left: 4px solid var(--vibe, var(--sage));
+  border-radius: var(--r-sm);
+  text-decoration: none;
+  color: var(--ink);
+  transition: border-color var(--fast) var(--ease), transform var(--fast) var(--ease);
+}
+.event-embed:active { transform: scale(0.98); }
+.event-embed:hover { border-color: var(--sage); }
+.event-embed-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.event-embed-tag {
+  font-family: var(--font-mono);
+  font-size: 9.5px; letter-spacing: var(--track-mono); text-transform: uppercase;
+  color: var(--fog);
+}
+.event-embed-tag:empty { display: none; }
+.event-embed-title {
+  font-family: var(--font-display); font-weight: var(--display-weight);
+  font-size: 15px; line-height: 1.2; letter-spacing: -0.02em;
+  color: var(--ink);
+  /* Two lines, not one with an ellipsis after four words: the title is
+     the whole reason somebody shared it. */
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.event-embed-meta {
+  font-family: var(--font-mono);
+  font-size: 10.5px; letter-spacing: 0.03em; color: var(--fog);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.event-embed-go {
+  flex: none;
+  padding: 5px 12px;
+  border-radius: var(--r-pill);
+  background: var(--forest); color: var(--on-accent);
+  font-size: 12px; font-weight: 600;
+}
+.event-embed-go:empty { display: none; }
+.event-embed.gone { border-left-color: var(--ash); opacity: 0.7; }
+.event-embed.gone .event-embed-title { color: var(--fog); }
+/* Inside a sent bubble the card keeps the app's own colours rather
+   than inheriting the bubble's, or it becomes unreadable. */
+.msg-sent .event-embed, .msg-received .event-embed { color: var(--ink); }
+
+/* ---- The share sheet ---- */
+.modal-content.share-sheet { max-width: 360px; padding: var(--s-20); text-align: left; }
+.share-head { padding: 0 4px var(--s-12); border-bottom: 1px solid var(--border); margin-bottom: var(--s-12); }
+.share-head b {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 11px; letter-spacing: var(--track-mono); text-transform: uppercase;
+  color: var(--fog); font-weight: 500;
+}
+.share-head span {
+  display: block; margin-top: 3px;
+  font-family: var(--font-display); font-weight: var(--display-weight);
+  font-size: 17px; letter-spacing: -0.02em; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.share-people {
+  display: flex; align-items: flex-start; gap: var(--s-8);
+  overflow-x: auto; overscroll-behavior: contain;
+  padding-bottom: var(--s-12); margin-bottom: 4px;
+  scrollbar-width: none;
+}
+.share-people::-webkit-scrollbar { display: none; }
+.share-person {
+  flex: 0 0 auto; width: 68px;
+  flex-direction: column; justify-content: flex-start; gap: 6px;
+  padding: 6px 2px;
+  background: transparent; box-shadow: none; border: none;
+  color: var(--ink); font-size: 11.5px; font-weight: 600;
+}
+.share-person:hover { background: var(--bone); filter: none; }
+.share-person:active { transform: scale(0.93); }
+.share-person span:last-child {
+  width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center;
+}
+.share-face {
+  width: 44px; height: 44px; flex: none;
+  display: grid; place-items: center;
+  border-radius: 50%; overflow: hidden;
+  background: var(--wash); font-size: 20px;
+  position: relative;
+}
+.share-empty { margin: 0 0 var(--s-12); padding: 0 4px; font-size: 13.5px; color: var(--fog); }
 
 /* =====================================================================
    THE POSTER BAND
@@ -1372,7 +1481,7 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 /* Note the base sheet already makes every button flex, full width and
    generously padded — see the note in CLAUDE.md. These only override
    what that gives them. */
-.action-sheet .action-row {
+.action-sheet .action-row, .share-sheet .action-row {
   justify-content: flex-start;
   box-shadow: none;
   gap: 12px;
@@ -1383,7 +1492,11 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   border-radius: var(--r-sm);
   margin-bottom: 0;
 }
+/* The share sheet has exactly one of these and nothing above it to group
+   with, so on its own it reads as a heading. A hairline says "tappable". */
+.share-sheet .action-row { border: 1px solid var(--border); width: 100%; }
 .action-row:hover { background: var(--bone); filter: none; box-shadow: none; transform: none; }
+.action-row:active { transform: scale(0.97); }
 .action-row i { font-size: 20px; color: var(--fog); }
 .action-row em { margin-left: auto; font-size: 11.5px; font-style: normal; font-weight: 500; color: var(--fog); }
 .action-row.danger, .action-row.danger i { color: var(--danger); }

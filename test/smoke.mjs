@@ -1067,6 +1067,109 @@ group('reactions, pins and the receipt');
 }
 
 /* ------------------------------------------------------------------ */
+group('sharing an event');
+{
+  // The link is the one thing here that outlives the app — somebody
+  // pastes it into WhatsApp today and taps it next week — so the
+  // parsing is pure and gets tested on its own.
+  const links = await page.evaluate(async () => {
+    const sr = await import('/js/services/shareRules.js');
+    const id = 'AbC123_-x';
+    return {
+      made: sr.eventLink(id),
+      roundTrip: sr.eventIdFromUrl(sr.eventLink(id)),
+      // The path form has no hosting rewrite yet, but links in the
+      // wild must keep working the day one is added.
+      pathForm: sr.eventIdFromUrl('https://livesociya.com/e/' + id),
+      subdomain: sr.eventIdFromUrl('https://www.livesociya.com/?e=' + id),
+      dev: sr.eventIdFromUrl('http://localhost:8111/?e=' + id),
+      // A lookalike must NOT be able to dress itself up as one of our
+      // event cards in somebody's chat.
+      lookalike: sr.eventIdFromUrl('https://livesociya.com.evil.tld/?e=' + id),
+      notUs: sr.eventIdFromUrl('https://example.com/?e=' + id),
+      suffix: sr.eventIdFromUrl('https://notlivesociya.com/?e=' + id),
+      javascript: sr.eventIdFromUrl('javascript:alert(1)//livesociya.com/?e=' + id),
+      junkId: sr.eventIdFromUrl('https://livesociya.com/?e=' + encodeURIComponent('../../etc')),
+      noParam: sr.eventIdFromUrl('https://livesociya.com/'),
+      // And picking the event link out of a sentence.
+      inSentence: sr.firstEventLink('come to this https://livesociya.com/?e=' + id + ' tonight'),
+      noneInSentence: sr.firstEventLink('just a https://example.com/thing here')
+    };
+  });
+
+  ok('a link round-trips back to its event', links.roundTrip === 'AbC123_-x', links.made);
+  ok('the pretty path form is understood too', links.pathForm === 'AbC123_-x', links.pathForm);
+  ok('subdomains and localhost count as us',
+     links.subdomain === 'AbC123_-x' && links.dev === 'AbC123_-x',
+     JSON.stringify([links.subdomain, links.dev]));
+  ok('a lookalike domain is not us',
+     links.lookalike === '' && links.notUs === '' && links.suffix === '',
+     JSON.stringify([links.lookalike, links.notUs, links.suffix]));
+  ok('a javascript: url is refused', links.javascript === '', links.javascript);
+  ok('an id that is not an id is refused', links.junkId === '', links.junkId);
+  ok('a plain homepage link is not an event', links.noParam === '', links.noParam);
+  ok('an event link is found inside a sentence',
+     links.inSentence && links.inSentence.id === 'AbC123_-x', JSON.stringify(links.inSentence));
+  ok('and a non-event link is not mistaken for one', links.noneInSentence === null);
+
+  // And the card it becomes in a thread.
+  const embed = await page.evaluate(async ({ id }) => {
+    const { state } = await import('/js/state/store.js');
+    const chat = await import('/js/services/chatService.js');
+    const sr = await import('/js/services/shareRules.js');
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const now = Date.now();
+
+    state.eventCache[id] = { id, title: 'Chai + assignment panic', place: 'Back lawn',
+      tag: '\u2615 Chill', hostUid: 'a', participantUids: ['a'], hypedUids: [],
+      startTime: now - 6e4, expiresAt: now + 36e5, description: '',
+      pendingUids: [], unconfirmedUids: [] };
+
+    state.currentChat = 'a_me'; state.currentChatType = 'direct';
+    state.currentChatStatus = 'unlocked'; state.currentChatData = { unreadByUid: '' };
+    state.currentOtherUid = 'a'; state.currentEventData = null;
+    window.switchScreen('chatScreen');
+    window.__docs = [
+      { id: 's1', data: () => ({ senderUid: 'a', text: sr.eventLink(id), time: now - 6e4 }) },
+      { id: 's2', data: () => ({ senderUid: 'a', text: 'https://example.com/not-ours', time: now - 5e4 }) }
+    ];
+    chat.loadMessages();
+    await wait(400);
+
+    const box = document.getElementById('messages');
+    const card = box.querySelector('.event-embed');
+    return {
+      cards: box.querySelectorAll('.event-embed').length,
+      title: card && card.querySelector('.event-embed-title').innerText,
+      meta: card && card.querySelector('.event-embed-meta').innerText,
+      // The href has to stay a real link, so the message still means
+      // something pasted anywhere else.
+      href: card && card.getAttribute('href'),
+      otherLinkStillALink: !!box.querySelector('a[href="https://example.com/not-ours"]')
+    };
+  }, { id: 'AbC123_-x' });
+
+  // Put the app back on the feed. A group that leaves another screen
+  // open is not just untidy: innerText stops applying text-transform
+  // once an element is not being rendered, which quietly broke the
+  // next group's assertion about "20M" vs "20m".
+  await page.evaluate(async () => {
+    const chat = await import('/js/services/chatService.js');
+    chat.closeChat({ silent: true });
+    window.showTab('events');
+    await new Promise((r) => setTimeout(r, 200));
+  });
+
+  ok('an event link in a thread becomes one card', embed.cards === 1, String(embed.cards));
+  ok('the card fills in from the cache with no read',
+     embed.title === 'Chai + assignment panic' && /Happening now/.test(embed.meta || ''),
+     JSON.stringify({ t: embed.title, m: embed.meta }));
+  ok('the card is still a real link underneath',
+     /livesociya\.com\/\?e=AbC123_-x$/.test(embed.href || ''), embed.href);
+  ok('someone else\u2019s link is left alone', embed.otherLinkStillALink);
+}
+
+/* ------------------------------------------------------------------ */
 group('the minute tick');
 {
   // A tick once a minute is what moves an event out of Live Now when
@@ -1129,7 +1232,7 @@ group('the minute tick');
   // The whole point of the tick: the clock must still move.
   ok('but the countdowns still tick down',
      tick.statsBefore.join() !== tick.statsAfter.join()
-     && /^\d+M$/.test(tick.statsAfter[1] || ''),
+     && /^\d+m$/i.test(tick.statsAfter[1] || ''),
      JSON.stringify({ before: tick.statsBefore, after: tick.statsAfter }));
   ok('and it costs no reads and no writes',
      tick.reads === 0 && tick.writes === 0,

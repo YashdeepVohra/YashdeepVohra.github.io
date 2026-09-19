@@ -19,7 +19,8 @@ import { switchScreen, setLoading, toast } from '../utils/ui.js';
 import { clearOverlays, openOverlay } from '../utils/overlays.js';
 import { renderAvatar } from '../utils/formatters.js';
 import { normalizeUsername, hydrateProfileCache, rememberUser, clearProfileCache } from './userService.js';
-import { loadEvents, renderEvents } from './eventsService.js';
+import { loadEvents, renderEvents, showSharedEvent } from './eventsService.js';
+import { consumePendingEvent } from './shareService.js';
 import { loadBlocks } from './blockService.js';
 import { loadOrbit } from './orbitService.js';
 import { loadMyProfile } from './followService.js';
@@ -300,6 +301,13 @@ export function initializeUserApp(userData) {
   loadChatList();
   loadEvents();
   setLoading(false);
+
+  // If they arrived on a shared link, this is the first moment there
+  // is anything to show them. The feed listener has only just been
+  // attached, so give it a beat to deliver before deciding the event
+  // is not in it — otherwise every shared link to a LIVE event would
+  // pay for a read it did not need.
+  setTimeout(() => { consumePendingEvent(showSharedEvent); }, 700);
 }
 
 // ==========================================

@@ -26,8 +26,11 @@ import {
   REACTIONS, reactionOf, canReact, nextReaction, reactionSummary,
   hostActions, pinPayload
 } from './messageRules.js';
+import { eventIdFromUrl } from './shareRules.js';
+import { primeEvent } from './shareService.js';
 import { openProfileScreen } from './profileService.js';
 import { isBlocked } from './blockService.js';
+import { vibeColor } from './eventsService.js';
 import { searchPeople } from './searchService.js';
 import {
   primeUsers, fetchUser, displayNameFor, usernameFor, avatarFor,
@@ -1210,9 +1213,12 @@ function renderMessages(msgs, { keepScroll = null } = {}) {
     const gone = isDeleted(m);
     const rawText = gone ? "" : String(m.text || "").trim();
     const encodedText = encodeURIComponent(rawText);
+    // A message that is ONLY a link gets a bare bubble around the
+    // embed instead of a chat bubble with a URL in it. An event link
+    // counts: sharing an event is the message.
     const isMediaOnly = !gone &&
       /^https?:\/\/[^\s]+$/.test(rawText) &&
-      /(youtube\.com|youtu\.be|open\.spotify\.com)/.test(rawText);
+      (/(youtube\.com|youtu\.be|open\.spotify\.com)/.test(rawText) || !!eventIdFromUrl(rawText));
 
     // ---- Quoted reply ----
     let replyBlock = "";
@@ -1305,6 +1311,7 @@ function renderMessages(msgs, { keepScroll = null } = {}) {
     </div>`;
 
   box.innerHTML = html;
+  fillEventEmbeds(box);
 
   if (keepScroll) {
     // Stay anchored to the message you were looking at.
@@ -1328,6 +1335,47 @@ function renderMessages(msgs, { keepScroll = null } = {}) {
   updateChatFooterUI();
   updateReadReceipts();
   updateTypingIndicator();
+}
+
+/**
+ * Turn the empty event placeholders into real cards.
+ *
+ * The markup for a shared event is deliberately identical for everyone
+ * — just the id — because the message diffing compares markup, and a
+ * card that rendered differently depending on what the viewer happened
+ * to have cached would churn. So the filling happens here, after the
+ * thread is painted, from the cache when it is there and from one read
+ * when it is not. primeEvent de-duplicates, so ten messages about the
+ * same event cost one read between them.
+ */
+function fillEventEmbeds(box) {
+  const nodes = box.querySelectorAll("[data-event-embed]");
+  if (!nodes.length) return;
+
+  const paint = (el, e) => {
+    if (!e) {
+      el.classList.add("gone");
+      el.querySelector(".event-embed-title").innerText = "This event has ended";
+      el.querySelector(".event-embed-go").innerText = "";
+      return;
+    }
+    const live = Date.now() >= e.startTime && e.expiresAt > Date.now();
+    const ended = e.expiresAt <= Date.now();
+    el.classList.toggle("gone", ended);
+    el.style.setProperty("--vibe", vibeColor(e.tag));
+    el.querySelector(".event-embed-tag").innerText = e.tag || "";
+    el.querySelector(".event-embed-title").innerText = e.title || "";
+    el.querySelector(".event-embed-meta").innerText =
+      [ended ? "Ended" : live ? "Happening now" : "Starting soon", e.place].filter(Boolean).join(" \u00b7 ");
+    el.querySelector(".event-embed-go").innerText = ended ? "" : "View";
+  };
+
+  nodes.forEach((el) => {
+    const id = el.getAttribute("data-event-embed");
+    const cached = state.eventCache[id];
+    if (cached) return paint(el, cached);
+    primeEvent(id).then((e) => { if (el.isConnected) paint(el, e); });
+  });
 }
 
 /** The unread dot appears in the mobile bottom nav and the desktop sidebar. */
@@ -1378,6 +1426,13 @@ export function loadChatList() {
           chats.push({ id: doc.id, ...data });
         });
         chats.sort((a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0));
+
+        // The share sheet offers these. Recording them here means it
+        // costs nothing: this listener is already open and already has
+        // the answer, in the right order.
+        state.recentChatUids = chats
+          .map((c) => (c.userUids || []).find((u) => u !== state.uid))
+          .filter(Boolean);
 
         // Never let a profile lookup failure stop the inbox rendering.
         try {

@@ -89,6 +89,10 @@ export const state = {
   chatDocUnsubscribe: null,
   typingUnsubscribe: null,
   pinnedUnsubscribe: null,
+  // Who you talk to, newest conversation first. Kept by the inbox
+ // listener so the share sheet can offer them without a second query.
+  recentChatUids: [],
+
   chatListUnsubscribe: null,
   blocksUnsubscribe: null,
   orbitUnsubscribe: null,
@@ -147,6 +151,7 @@ export function resetState() {
   state.editingMessage = null;
   state.suppressNextTap = false;
   state.pinnedMessage = null;
+  state.recentChatUids = [];
   state.messagesUnsubscribe = null;
   state.chatDocUnsubscribe = null;
   state.typingUnsubscribe = null;

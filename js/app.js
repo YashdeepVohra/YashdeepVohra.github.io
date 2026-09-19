@@ -51,7 +51,9 @@ import {
   openDeleteModal,
   closeDeleteModal,
   confirmMoveToRecap,
-  confirmDeletePermanently
+  confirmDeletePermanently,
+  openSharedEvent,
+  showSharedEvent
 } from './services/eventsService.js';
 
 import {
@@ -126,6 +128,7 @@ import { initTheme, setThemeChoice, syncThemeUI } from './utils/theme.js';
 import { confirmYes, confirmNo } from './utils/confirm.js';
 
 import { flushReceipt } from './services/receiptService.js';
+import { openShare, closeShare, capturePendingEvent, consumePendingEvent } from './services/shareService.js';
 import { initSwipeListeners } from './interactions/swipeReply.js';
 import { initViewportFit, lockZoom } from './utils/viewport.js';
 import { popOverlay, anyOverlayOpen, clearOverlays } from './utils/overlays.js';
@@ -207,6 +210,9 @@ Object.assign(window, {
   ensureRecapLoaded,
   onRecapScroll,
   toggleEventDesc,
+  openSharedEvent,
+  openShare,
+  closeShare,
   openCreateScreen,
   closeCreateScreen,
   startSomething,
@@ -310,6 +316,12 @@ Object.assign(window, {
 // ==========================================
 function boot() {
   window.__livesociyaBooted = true;
+
+  // Take the event id off the URL BEFORE anything else can rewrite
+  // history — the sign-in redirect and initializeUserApp both do — and
+  // hold it until there is a feed to show it in. A link that arrives
+  // while signed out survives the whole sign-in round trip this way.
+  capturePendingEvent();
 
   // Everything that shows who you follow or who is in your orbit
   // repaints together. Registered here because this is the only module

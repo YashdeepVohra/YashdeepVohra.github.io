@@ -2,6 +2,8 @@
 // ESCAPING, FORMATTERS & RICH MEDIA EMBEDS
 // ==========================================
 
+import { eventIdFromUrl } from '../services/shareRules.js';
+
 // ---------- XSS DEFENCE ----------
 // Everything a student can type — display names, usernames, event
 // titles, places, descriptions, messages — must pass through one of
@@ -108,6 +110,35 @@ function spotifyEmbed(rawUrl) {
   }
 }
 
+/**
+ * A link to one of our own events becomes a CARD in the thread, not a
+ * blue URL — the same idea as the YouTube and Spotify embeds below,
+ * pointed at ourselves.
+ *
+ * It renders EMPTY and is filled in afterwards by chatService, because
+ * this function is synchronous and the viewer may never have seen the
+ * event: filling it needs a read. The placeholder carries the id and
+ * nothing else, so the markup is identical whoever is looking, which
+ * keeps the message diffing honest.
+ *
+ * Only our own host, checked in shareRules.isOurHost — a lookalike
+ * domain must not be able to dress itself up as an event card in
+ * somebody's chat.
+ */
+function eventEmbed(eventId, rawUrl) {
+  return `
+    <a class="event-embed" href="${escapeHtml(rawUrl)}"
+       data-event-embed="${escapeHtml(eventId)}"
+       onclick="return window.openSharedEvent('${escapeHtml(eventId)}', event)">
+      <span class="event-embed-body">
+        <span class="event-embed-tag"></span>
+        <span class="event-embed-title">Opening\u2026</span>
+        <span class="event-embed-meta"></span>
+      </span>
+      <span class="event-embed-go">View</span>
+    </a>`;
+}
+
 export function formatMessage(text, isMediaOnly = false) {
   // Escape FIRST. Everything after this point works on safe text.
   const safeText = escapeHtml(text);
@@ -117,6 +148,10 @@ export function formatMessage(text, isMediaOnly = false) {
     const rawUrl = decodeEntities(escapedUrl);
     const margin = isMediaOnly ? "0" : "8px";
     const lead = isMediaOnly ? "" : "<br>";
+
+    // ---- One of ours ----
+    const eventId = eventIdFromUrl(rawUrl);
+    if (eventId) return `${lead}${eventEmbed(eventId, rawUrl)}`;
 
     // ---- YouTube ----
     const videoId = youTubeId(rawUrl);

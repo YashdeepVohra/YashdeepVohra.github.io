@@ -205,6 +205,31 @@ test/               stub.js + smoke.mjs + contrast.mjs
   the band's height exactly, which is why `.stub .poster` is a fixed
   height; a notch a few pixels off the seam looks like a bug. A browser
   without mask support just gets straight sides.
+- **A shared link is `?e=<id>`, and that is not cosmetic.** `firebase.json`
+  has no `hosting` block, so there is no rewrite: a pretty `/e/<id>` would
+  404 on the static host before any JavaScript ran. `shareRules.js` still
+  *parses* the path form, so links keep working the day a rewrite is added,
+  but `eventLink()` only ever emits the query form. Don't "tidy" it.
+
+  A link only counts as ours if its host is `livesociya.com`, a subdomain
+  of it, `localhost` or `127.0.0.1`, and its protocol is http(s). That
+  guard is what stops `livesociya.com.evil.tld/?e=x` from rendering as a
+  trusted in-app card, and `javascript:?e=x` from rendering at all. The
+  smoke group "sharing an event" has a case for each; both fire if the
+  check is loosened to `includes("livesociya.com")`.
+
+  In chat, an event link becomes a card but stays a real `<a href>`
+  underneath, so it still works for anyone whose JavaScript failed, and
+  still copies as a link. The card paints from `state.eventCache` when the
+  event is already known — **no read** — and otherwise costs exactly one
+  read per unseen event, de-duplicated through `pendingFetches` so ten
+  copies of the same link in a thread are one read, not ten.
+
+- **The wordmark is a button now, so it must shed the button styling.**
+  `.brand-home` sits inside the topbar; the base `button` rule would give
+  it a moss fill, padding and a shadow. It resets all three. Same trap as
+  `.action-row` and `.card.poster-card` - see the specificity note below.
+
 - **Blocking is total.** Filter `isBlocked` everywhere — lists, counts,
   the feed, vouches. A count that disagrees with the list under it is a bug.
 
@@ -230,6 +255,7 @@ Decisions already made, with the reason, so they don't get undone:
 | Profile Hosted/Joined: two `get()`s, counts from the same docs | was a listener + two duplicate count queries |
 | Pinned message in a subcollection, holding a copy of the text | a field on the event bills the whole campus a read; an id alone costs a read to display |
 | Poster cards cost ~29% more DOM than the rows they replaced, and that was accepted | measured, not assumed: at 60 cards, style recalculation went 4.3ms -> 0.2ms because the old hover transitions on `.event::before` and the watermark are gone, while layout (1.8ms) and forced-reflow wall time (2.1ms) are unchanged. The nodes cost nothing that shows up in a frame; the transitions did |
+| A shared event card reads the event once, cached and de-duplicated | the cache usually already has it; ten copies of one link in a thread are one read |
 | The receipt folds events already in the cache, debounced | a history collection would be a write per event and a query per open |
 
 The remaining lever, if reads ever bite: drop `LIVE_LIMIT` to ~30. It cuts

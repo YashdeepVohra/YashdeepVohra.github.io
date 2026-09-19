@@ -105,10 +105,10 @@
 
   <!-- Desktop sidebar -->
   <aside class="sidebar">
-    <div class="sidebar-brand">
+    <button class="sidebar-brand brand-home" onclick="showTab('events')" aria-label="Go to Live Now">
       <div class="brand-dot"><i class='bx bxs-bolt'></i></div>
       <div class="title">livesociya</div>
-    </div>
+    </button>
     <button class="side-item side-search" onclick="openSearch()"><i class='bx bx-search'></i> Search</button>
     <button class="side-item active" data-tab="events" onclick="showTab('events')"><i class='bx bx-bolt-circle'></i> Live Now</button>
     <button class="side-item" data-tab="recap" onclick="showTab('recap')"><i class='bx bx-history'></i> Recap</button>
@@ -131,10 +131,10 @@
 
   <!-- Mobile top bar -->
   <header class="topbar">
-    <div class="brand-lockup">
+    <button class="brand-lockup brand-home" onclick="showTab('events')" aria-label="Go to Live Now">
       <div class="brand-dot"><i class='bx bxs-bolt'></i></div>
       <div class="title">livesociya</div>
-    </div>
+    </button>
     <div class="topbar-actions">
       <button class="icon-btn" onclick="openSearch()" aria-label="Search"><i class='bx bx-search'></i></button>
       <button class="icon-btn has-badge" onclick="openOrbitScreen()" aria-label="Orbit">

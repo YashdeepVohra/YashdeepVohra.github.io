@@ -611,6 +611,34 @@ export function focusEvent(eventId) {
   setTimeout(() => card.classList.remove("flash"), 1400);
 }
 
+/**
+ * A tap on an event card inside a chat. Closes the chat, goes to the
+ * right tab, and lands on the card.
+ *
+ * Returns false so the anchor's href never navigates: the href is
+ * there so the link still means something when it is copied, pasted
+ * elsewhere, or opened by a client that has never heard of us.
+ */
+export function openSharedEvent(eventId, ev) {
+  if (ev && ev.preventDefault) ev.preventDefault();
+  if (!safeId(eventId)) return false;
+  showSharedEvent(eventId);
+  return false;
+}
+
+export function showSharedEvent(eventId) {
+  const e = state.eventCache[eventId];
+  const ended = e && e.expiresAt <= Date.now();
+
+  window.closeChat?.({ silent: true });
+  showTab(ended ? "recap" : "events");
+  // After the tab has actually swapped, or there is nothing to find.
+  setTimeout(() => {
+    if (!document.getElementById(`event-${eventId}`)) renderEvents();
+    setTimeout(() => focusEvent(eventId), 60);
+  }, 90);
+}
+
 /* ---------------------------------------------------------------------
    Painting the feed without the blink
    ---------------------------------------------------------------------
@@ -904,6 +932,7 @@ export function renderEvents() {
     </svg>`;
     const hypeBtn = `<button class="act ${hasHyped ? "hyped" : ""}" aria-label="Hype" onclick="window.toggleHype('${id}')">${flame} ${hypeCount || "Hype"}</button>`;
     const chatBtn = `<button class="act" onclick="window.openEventChat('${id}')"><i class='bx bx-message-rounded-dots'></i> Chat</button>`;
+    const shareBtn = `<button class="act" aria-label="Share" onclick="window.openShare('${id}')"><i class='bx bx-share-alt'></i></button>`;
 
     const pending = e.pendingUids || [];
     const hasRequested = pending.includes(state.uid);
@@ -938,6 +967,7 @@ export function renderEvents() {
       <div class="card-actions">
         ${hypeBtn}
         ${(isHost || hasJoined) ? chatBtn : ""}
+        ${shareBtn}
         <div style="flex:1"></div>
         ${primary}
       </div>`;
