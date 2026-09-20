@@ -1964,20 +1964,32 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
     padding: var(--s-24) var(--s-16);
     border-left: 1px solid var(--ash);
   }
-  .rail-card { padding: var(--s-20); background: var(--paper); border-radius: var(--r-card); box-shadow: var(--lift-1); animation: rise 0.4s var(--ease) backwards; }
+  /* A HAIRLINE, NOT A SHADOW. `--lift-1` is nearly nothing on purpose,
+     and paper sits 1.13:1 from the canvas — so a rail card was held
+     against the page by almost literally nothing. Dark mode already
+     had an inset hairline bolted on for exactly this reason; light
+     mode had none, which is why it only ever looked wrong there. The
+     same 1.5px --ash edge every .card carries, in both themes, is the
+     rule this system already states: if a surface needs separating,
+     give it a border. */
+  .rail-card { padding: var(--s-20); background: var(--paper); border: 1.5px solid var(--ash); border-radius: var(--r-card); box-shadow: var(--lift-1); animation: rise 0.4s var(--ease) backwards; }
   .rail-card:nth-child(2) { animation-delay: 0.06s; }
   .rail-card:nth-child(3) { animation-delay: 0.12s; }
   .rail-card:nth-child(4) { animation-delay: 0.18s; }
   .rail-card.accent-dark { background: var(--deep-a); color: #eef6e8; box-shadow: none; border-color: var(--deep-b); }
   .rail-card.accent-dark .rail-title, .rail-card.accent-dark .rail-note { color: rgba(255, 255, 255, 0.68); }
   .rail-card.accent-dark .rail-stat { color: var(--on-accent); }
-  .rail-card.accent-lavender { background: var(--wash); }
   .rail-title { display: flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fog); margin-bottom: var(--s-8); }
   .rail-stat { font-size: 40px; font-weight: 700; letter-spacing: -0.04em; line-height: 1; color: var(--ink); font-variant-numeric: tabular-nums; }
   .rail-note { font-size: 13.5px; color: var(--fog); margin: 6px 0 0; }
   .rail-tags { display: flex; flex-wrap: wrap; gap: 6px; }
-  .rail-tags .filter-pill { font-size: 13px; padding: 7px 13px; background: var(--glass-soft); border-color: transparent; color: var(--ink); }
-  .rail-tags .filter-pill:hover { background: var(--paper); }
+  /* Ordinary outline pills, like the filter row in the feed. They used
+     to be a near-white fill with no border, which only read because
+     the card behind them was tinted DARKER than the page — the same
+     tint that made the card itself disappear. On paper that fill is
+     invisible, so the pills go back to the form the rest of the app
+     uses and the only thing left here is the size. */
+  .rail-tags .filter-pill { font-size: 13px; padding: 7px 13px; }
 
   .profile-screen-wrapper { position: relative; inset: auto; z-index: 1; min-height: 100dvh; border-right: 1px solid var(--ash); }
   .profile-scroll-body { padding: var(--s-32) var(--s-24); max-width: var(--feed-max); }
@@ -3789,7 +3801,6 @@ html {
 :root[data-theme="dark"] .card,
 :root[data-theme="dark"] .profile-clean-card,
 :root[data-theme="dark"] .modal-content,
-:root[data-theme="dark"] .rail-card:not(.accent-dark),
 :root[data-theme="dark"] .empty-state,
 :root[data-theme="dark"] .starter:not(.starter-blank),
 :root[data-theme="dark"] .orbit-cta {

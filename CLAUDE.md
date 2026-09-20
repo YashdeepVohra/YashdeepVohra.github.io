@@ -99,7 +99,12 @@ Each line is the whole rule. The file after it is the argument for it.
 - Dark mode is tokens, not overrides. Never write a literal colour; add a
   role token with a value in both blocks, then run `test/contrast.mjs`.
 - There is no `--violet`, `--aubergine`, `--periwinkle`, `--lavender` or
-  `--plum`. If you find one in a branch, it is stale.
+  `--plum`. If you find one in a branch, it is stale — including in a
+  class name. `.accent-lavender` outlived the palette by a whole
+  redesign.
+- A surface is held by its BORDER, not by its shadow. `--lift-1` is
+  nearly nothing and `--paper` is only 1.13:1 from the canvas, so a
+  card without a hairline is barely on the page at all.
 
 **Layout, widths and scrolling** → `docs/layout.md`
 

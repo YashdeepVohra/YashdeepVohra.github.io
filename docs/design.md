@@ -71,6 +71,38 @@ against the canvas and the cards looked glued to the background;
 separates at 2.5:1, and going further would eat the ink contrast.
 `--band-dot` runs opposite ways for the same reason.
 
+### A surface is held by its border, not by its shadow
+
+The rail's "Jump to a vibe" card was filled with `--wash`, which sits
+**1.096:1** from the canvas in light mode — below even the `--bone`
+case recorded below as a bug, and darker than the page, which inverts
+this system's own first rule that cards sit LIGHTER than what they are
+on. `.rail-card` carried no border at all, only `--lift-1`, which these
+notes describe as nearly nothing on purpose. So in light mode the card
+was not subtly wrong, it was not there.
+
+Two things hid it. Dark mode had an inset hairline bolted onto
+`.rail-card` specifically, so it only ever looked wrong in light mode.
+And the class was called `accent-lavender` — a name from the retired
+violet palette, which these notes already say is stale wherever it
+turns up.
+
+Every rail card now carries the same 1.5px `--ash` edge that `.card`
+does, in both themes, and the tint is gone. Worth noting the plain
+cards were barely better off: `--paper` is only 1.132:1 from the
+canvas, so they were held against the page by that same almost-nothing
+shadow. The border is what holds them now.
+
+The vibe pills went with it. They were a near-white fill with no
+border, which only read because the card behind them was darker than
+the page — the very tint that made the card vanish. They are ordinary
+outline pills now, the same form the feed's filter row uses.
+
+`test/contrast.mjs` gained "a card surface against the page", and the
+smoke group "desktop columns" asserts every rail card has a real edge.
+A colour test cannot see a missing border and a layout test cannot see
+a colour that is too close; this needed both, same as the halftone did.
+
 ### Taking the colour out takes the information out
 
 The recap stub

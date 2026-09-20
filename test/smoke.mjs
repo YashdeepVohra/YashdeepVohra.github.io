@@ -1638,6 +1638,33 @@ group('desktop columns');
   ok('the nav columns stay put while the feed scrolls',
      desk.after.sidebar === 0 && desk.after.rail === 0,
      JSON.stringify({ before: desk.before, after: desk.after }));
+  // A SURFACE IS HELD BY ITS BORDER, NOT BY ITS SHADOW. `--lift-1` is
+  // nearly nothing on purpose and paper sits 1.13:1 from the canvas,
+  // so a rail card with no border is held against the page by almost
+  // nothing — and one filled with --wash, at 1.096:1, by less than
+  // nothing. Dark mode had an inset hairline bolted on for exactly
+  // this reason and light mode had none, which is why it only ever
+  // looked wrong in light mode. This asserts the edge exists.
+  // `wide`, not `page`: the rail only exists at >=1100px, and on the
+  // 430px main page these elements are in the DOM with none of their
+  // desktop styling at all — which would have made this pass or fail
+  // for reasons that have nothing to do with the rail.
+  const rail = await wide.evaluate(() => {
+    const page_ = getComputedStyle(document.body).backgroundColor;
+    return [...document.querySelectorAll('.rail-card')].map((el) => {
+      const cs = getComputedStyle(el);
+      return {
+        cls: el.className.replace('rail-card', '').trim() || 'plain',
+        border: parseFloat(cs.borderTopWidth) || 0,
+        sameAsPage: cs.backgroundColor === page_
+      };
+    });
+  });
+  ok('every rail card has an edge, not just a shadow',
+     rail.length > 0 && rail.every((c) => c.border >= 1), JSON.stringify(rail));
+  ok('and none of them is the colour of the page',
+     rail.every((c) => !c.sameAsPage), JSON.stringify(rail));
+
   ok('no errors on the desktop layout', wideErrs.length === 0, wideErrs.join(' | '));
   await ctx.close();
 }

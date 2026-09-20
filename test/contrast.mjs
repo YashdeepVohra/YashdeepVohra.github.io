@@ -75,7 +75,14 @@ const CHECKS = [
   ['a sage mark on a card',      'sage',       'paper',      3],
   ['the ember dot on the page',  'ember',      'canvas',     3],
   ['a hairline against the page','ash',        'canvas',     1.1],
-  ['a hairline against a card',  'ash',        'paper',      1.15]
+  ['a hairline against a card',  'ash',        'paper',      1.15],
+  // A card surface has to be TELLABLE from the page even before its
+  // border is drawn. The rail's "Jump to a vibe" card was filled with
+  // --wash, which is DARKER than the canvas (the system says cards sit
+  // lighter) and sits 1.096:1 from it — below even the --bone case
+  // these notes already record as a bug. With no border on .rail-card
+  // at the time, the card was simply not there in light mode.
+  ['a card surface against the page', 'paper', 'canvas',     1.1]
 ];
 
 /**
