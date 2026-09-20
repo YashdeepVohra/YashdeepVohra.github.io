@@ -1,13 +1,16 @@
 # livesociya — working notes
 
-Read this first. It is here so a new session starts knowing what took the
-last ones a while to work out.
-
 **What it is.** A campus app for things happening *right now*: somebody
 starts an event, everyone nearby sees it instantly, it vanishes when it
 ends. Plus direct messages, and a social graph. Live at livesociya.com,
 Firebase Hosting + Firestore, vanilla ES modules — no framework, no build
 step. Open `index.html` over http (not `file://`, modules won't load).
+
+This file is loaded into every session before anything is typed, so it is
+kept short on purpose. It holds the RULES. The reason behind each one —
+the bug it came from, the three things that were tried first — lives in
+`docs/`, and each rule below names the file that explains it. Read the
+matching file before changing that area; don't read them all.
 
 ---
 
@@ -20,11 +23,12 @@ step. Open `index.html` over http (not `file://`, modules won't load).
 - **Run `test/smoke.mjs`** before saying something works (see Testing).
 - **Commit when a change is done and tested** (`git add -A`, so new files
   come along). The user only runs `git push` — don't leave work unstaged.
-- The user pushes and deploys themselves. After changing `firestore.rules`,
-  say so — the rules only do anything once redeployed, and until then
-  every limit in them is decoration.
+- After changing `firestore.rules`, say so — they do nothing until the
+  user redeploys, and until then every limit in them is decoration.
 - Commits: end with the Co-Authored-By / Claude-Session lines the session
   reminder gives.
+- **Adding to these notes costs the user on every future session.** A new
+  rule goes here as one line; its story goes in the `docs/` file.
 
 ## The shape of it
 
@@ -37,407 +41,128 @@ js/state/store.js   one mutable object, plus resetState() on logout
 js/services/        auth, events, chat, profile, follow, orbit, block,
                     search, user, limits, receipt — plus the pure rule
                     files recapRules, aboutRules, messageRules,
-                    receiptRules
+                    receiptRules, shareRules, matchRules
 js/utils/           ui (screens/toasts/repaint registry), confirm, overlays,
-                    formatters, viewport
+                    formatters, theme, viewport
 js/interactions/    search screen, message gestures (swipe, hold)
 firestore.rules     ~700 lines, the real access control
 test/               stub.js + smoke.mjs + contrast.mjs
+docs/               why each rule below exists — read the one you need
+_backup_pre_uid/    a pre-UID copy of the whole app. STALE. Never read it.
 ```
 
-## Things that must stay true
+## The rules
 
-- **uid is the only identity the database trusts.** `username` is a display
-  handle: never a key, never an ownership field. Rules check
-  `request.auth.uid`, which is free; verifying a username would cost a read
-  on every write.
-- **Everything user-typed goes through `escapeHtml`**, and inline `onclick`
+Each line is the whole rule. The file after it is the argument for it.
+
+**Identity and the database** → `docs/data.md`
+
+- uid is the only identity the database trusts; `username` is a display
+  handle, never a key and never an ownership field.
+- Everything user-typed goes through `escapeHtml`, and inline `onclick`
   handlers take ids only (`safeId`), never text.
-- **Pair documents are one doc with a sorted composite id** — `blocks`,
-  `chats`, `orbit` all use `a_b`. Symmetrical by construction, and the id
-  itself proves membership, so rules need no lookup.
-- **`allow get` and `allow list` are different.** A list rule is checked
-  against the *query*, before documents are read, so it must mirror the
-  query's own constraint. Splitting these is what fixed chats not appearing.
-- **What you may still do to a message you sent is
-  `js/services/messageRules.js`.** Two shapes, and only two: an EDIT,
-  which has 15 minutes on it and always leaves "edited" on the bubble,
-  and a RETRACTION, which has no clock but leaves the bubble in place
-  reading "This message was deleted". The 15 minutes is mirrored in
-  `firestore.rules` (`messageEditWindow`) — change it in both or the
-  app will offer an edit the server then refuses. The rules enforce
-  both shapes with `hasOnly()`, so `senderUid`, `time` and the quoted
-  reply still cannot move, and `deleted` is one-way.
+- Pair documents are one doc with a sorted composite id (`a_b`) — blocks,
+  chats, orbit.
+- `allow get` and `allow list` are different; a list rule must mirror the
+  query's own constraint.
+- What you may still do to a message you sent is `messageRules.js`: an
+  EDIT (15 minutes, always leaves "edited") or a RETRACTION (a tombstone,
+  never a real delete). The 15 minutes is mirrored in `firestore.rules`.
+- Reactions are a map keyed by uid, from a fixed list, written one dotted
+  path at a time.
+- The pinned message lives in `events/{id}/pinned/current` and holds a
+  COPY of the text, not an id.
+- The receipt folds events already in the cache and queries nothing.
+- How long Recap keeps an event is `recapRules.js`. Change the numbers
+  there and in the smoke cases, nowhere else.
+- Blocking is total: filter `isBlocked` everywhere, lists and counts alike.
+- An ended event is not live — check `expiresAt`, not `startTime`.
+- Follow first, orbit later; a private profile you don't follow shows
+  counts and a way in, nothing else.
 
-  A tombstone, not a real delete, because a message that can vanish is
-  a way out of the icebreaker: send your one opening message, delete
-  it, send another. `icebreakerUsed` is one-way so the rules refuse the
-  second message anyway — but the client decides whether to lock the
-  box by counting messages on screen, and a row that disappears makes
-  that count lie. The host's delete on an event message is still a real
-  delete: moderation is not the same act as taking back your own words,
-  and a tombstone over a slur is a worse outcome than a gap.
-- **Reactions are a map keyed by uid**, `{ uid: emoji }`, on the
-  message. Keyed that way on purpose: "you may change your own key and
-  nobody else's" is one `diff().affectedKeys()` check in the rules, the
-  same idea as `selfToggleOnly()` for the arrays. One reaction per
-  person, from a fixed list in `messageRules.js` that is mirrored in
-  the rules — an open string field would be a second way to put
-  arbitrary text in somebody's thread, one that skips every length and
-  escaping rule the message body has. The client writes the dotted path
-  `reactions.<uid>`, never the whole map, so two people reacting at the
-  same moment don't overwrite each other.
-- **The pinned message lives in `events/{id}/pinned/current`, not on
-  the event.** Same reason typing moved off the event document: every
-  user with the app open is listening to the feed, so a field there
-  bills a read to the whole campus each time a host pins something.
-  It stores a COPY of the text, not just the message id, because the
-  pinned message is usually the first one ("meet by the north gate")
-  and by then it has scrolled out of the 25-message live window — an id
-  alone would cost a second read to display, on every open, forever.
-- **The receipt is folded out of events already on screen.**
-  `js/services/receiptRules.js` is the arithmetic, `receiptService.js`
-  is when it loads, saves and paints. It never queries anything: every
-  event it counts was already paid for by the feed or the recap, the
-  fold is idempotent per event id, and saves are debounced so a recap
-  page of twenty finished events is one write. It therefore cannot see
-  an event that expired while the app was closed — the honest trade for
-  a feature with no server, and why the card says "since you started
-  using this" rather than claiming to be complete. It lives under
-  `users/{uid}/private/`, which is already owner-only: how often
-  somebody goes out is nobody else's business.
-- **How long Recap keeps an event is `js/services/recapRules.js`.** Pure
-  functions, no imports: 6h + 8h x log2(1 + guests + hype/2), capped at
-  48h; your own events stay 24h for you. Change the numbers there and in
-  the smoke cases, nowhere else.
-- **The look is one system, and it has three rules.** `style.css`
-  opens with them; this is the short version.
+**The look** → `docs/design.md`
 
-  1. *The canvas is never white.* The page is pale green paper
-     (`--canvas`) and cards sit LIGHTER on it (`--paper`), held by a
-     1.5px `--ash` hairline. Nothing casts a shadow except the things
-     that genuinely float: modals, sheets, the toast, the bottom nav,
-     the FAB. `--lift-1` and `--lift-2` are nearly nothing on purpose —
-     if a new surface needs separating, give it a border, not a shadow.
-  2. *Three voices, and nothing is set in the wrong one.*
-     `--font-display` (Archivo 800) for screen titles, event titles and
-     names; `--font` (Inter) for everything functional; `--font-mono`
-     (the system mono, no download) for metadata — times, counts,
-     states, form labels. A screen title is never Inter and a
-     timestamp is never anything but mono. Screen titles are uppercase
-     because they are OUR words; anything a student typed keeps the
-     case they typed it in.
-  3. *Ember means now, and nothing else may use it.* The greens are
-     the whole interface, so a green "live" badge would say nothing.
-     `--ember` is reserved for right-now: the live dot, the live ring,
-     the LIVE chip, hype, the unread mark. Two embers exist because one
-     colour cannot do both jobs — `--ember` is the FILL, `--ember-ink`
-     is what you READ (the fill is only 3.3:1 on the chip's
-     background). If you are about to use ember for anything that
-     isn't happening this minute, use `--sage` or `--forest` instead.
+- The canvas is never white, cards sit LIGHTER on it, and nothing casts a
+  shadow except what genuinely floats.
+- Three voices: `--font-display` for titles and names, `--font` for
+  everything functional, `--font-mono` for metadata. Nothing in the wrong one.
+- Ember means right-now and nothing else may use it. `--ember` is the
+  fill, `--ember-ink` is what you read.
+- A card is a poster and a recap card is its torn-off stub. The band is
+  TWO COLUMNS — type left, halftone right — because siblings cannot
+  overlap and coordinates can always be out-grown. `.poster-type` keeps
+  `min-width: max-content`.
+- A stub keeps its vibe colour. Taking the colour out takes the
+  information out.
+- Dark mode is tokens, not overrides. Never write a literal colour; add a
+  role token with a value in both blocks, then run `test/contrast.mjs`.
+- There is no `--violet`, `--aubergine`, `--periwinkle`, `--lavender` or
+  `--plum`. If you find one in a branch, it is stale.
 
-  The spine is `--ink`, `--ink-deep`, `--forest`, `--sage`, `--moss`,
-  `--fern`, `--wash` and `--ember`. There is no `--violet`,
-  `--aubergine`, `--periwinkle`, `--lavender` or `--plum` — they were
-  briefly kept as aliases during the redesign and are gone. If you find
-  one in a branch, it is stale.
-- **An event card is a poster, and a recap card is the stub you tore
-  off it.** Both are built around one band across the top, and the band
-  is TWO COLUMNS: all the type on the left, the halftone and the
-  category glyph on the right.
+**Layout, widths and scrolling** → `docs/layout.md`
 
-  That two-column layout is not a style choice, it is the fix for a bug
-  that came back three times. The halftone kept ending up under the
-  band's own words — first as a background layer across the whole band,
-  then as an absolutely positioned corner that a taller card simply
-  grew into, then because the place sat top-right where the dots were.
-  Averaged over the band the contrast looked fine every time; on the
-  pixel where a dot met a letter it was 2.4:1. Coordinates can always
-  be out-grown. Siblings cannot overlap.
+- One gutter, `--gut`, and three things must agree on it: the container's
+  padding, the rail's negative margin, the rail's inner padding.
+- A poster band needs a 308px card, measured. Under 350px the band drops
+  its second stat.
+- The card's action row WRAPS, and must keep wrapping; the primary is
+  held right by `margin-left: auto`, never a `flex:1` spacer.
+- Nothing on screen may be sliced or reach past its column. The smoke
+  group "nothing is cut off" holds this at 320, 390 and 1280.
+- No `overflow: auto` box may be taller than the window with nothing to
+  scroll. A dead scroll container is worse than no scroller at all.
+- Scroll chaining behind an open layer cannot be fixed with
+  `overscroll-behavior`. Left alone on purpose — don't try.
+- The narrow case is often not a narrow VIEWPORT: the feed column beside
+  an open chat is 360px on a 1280px laptop. Prefer a rule that holds at
+  any container width over a media query.
+- `button { display: flex; padding: 13px 24px; width: 100% }` is in the
+  base sheet, and specificity beats source order. Anything you turn into
+  a button must shed all three.
+- Boxicons has no `bx-hot`. Check a class exists; anything load-bearing
+  is inline SVG.
+- Zoom is off everywhere, on purpose. The keyboard is handled by the
+  visual viewport, not `innerHeight`.
 
-  One catch that is easy to reintroduce: being siblings is not enough
-  on its own. `.poster-type` needs `min-width: max-content`, or
-  flexbox shrinks BOTH columns when they don't fit, the type column
-  goes under its content, and the stats spill straight back over the
-  halftone. The deco column yields all its width first; a very busy
-  card simply loses its halftone, which is the right thing to lose.
+**Painting the feed** → `docs/feed.md`
 
-  Inside the type column, up to two numbers at poster scale, because a
-  card answers two questions and it used to answer one: WHEN
-  (`timeStat()`) and how many are GOING — or, on a stub, the turnout.
+- The feed is diffed, not rebuilt. Never reintroduce `innerHTML =` in
+  `syncList`.
+- Nothing time-dependent may go in a card's markup — it goes in a
+  `data-vt` slot that `paintVolatile()` fills after the diff.
+- Filters hide, they don't re-render.
+- Social state is on screen in four places; everything that changes the
+  graph goes through `refreshSocialUI()`.
+- Optimistic first, then the network, then roll back on failure.
+- No `window.confirm` or `alert` anywhere: `askConfirm()` and `toast()`.
+- Overlays go through `js/utils/overlays.js`, so Android back works.
 
-  `--band-mix` differs by theme and that is also not a fudge. The band
-  has to carry dark ink AND separate from the page behind it. In light
-  mode the page is already pale, so 40% left every band at 1.25:1
-  against the canvas and the cards looked glued to the background;
-  60% fixes it. In dark mode the page is near-black so 40% already
-  separates at 2.5:1, and going further would eat the ink contrast.
-  `--band-dot` runs opposite ways for the same reason.
-- **Taking the colour out takes the information out.** The recap stub
-  used to drain its band to flat `--bone`. Two complaints, one root:
-  every stub in the Recap was the same colour, so the category
-  vanished, and `--bone` sits 1.1:1 from the canvas, so they all sank
-  into the page. A stub keeps the vibe at the same mix as a live card
-  now; being OVER is carried by the notches, the dashed tear line, the
-  faded halftone and a stat that counts people instead of minutes. You
-  never see the two side by side — different tabs.
-- **A hidden tab has no geometry, and a test that measures one proves
-  nothing.** Every rect inside a `display: none` subtree is 0x0, so the
-  first version of the band's overlap check "passed" for recap stubs
-  while measuring literally nothing. It shows each tab before
-  measuring it now. Worth remembering for any future layout test.
-- **`test/contrast.mjs` checks the worst pixel, not the average.** It
-  walks every vibe in both themes for three things that each broke
-  once: text on the band, the band against the page, and text on a
-  DOT. The third is the one that kept getting missed, because a
-  halftone's average colour is not the colour under a letter. It caught
-  a light-mode case I had not even noticed while fixing the dark one.
-  The geometry half of that guarantee lives in `smoke.mjs` under "the
-  poster band": it measures real rectangle overlap between the band's
-  text and the halftone column, on both axes. A colour test cannot see
-  a layout bug and a layout test cannot see a colour one; the halftone
-  needed both.
+**Links, embeds and shared events** → `docs/sharing.md`
 
-  The stub's notches are a mask: two radial gradients, each opaque
-  except for a circle at one edge, intersected. Where either circle
-  falls nothing paints — including the border, which is what makes it
-  read as punched through rather than drawn on. `--tear` has to match
-  the band's height exactly, which is why `.stub .poster` is a fixed
-  height; a notch a few pixels off the seam looks like a bug. A browser
-  without mask support just gets straight sides.
-- **The card's action row WRAPS, and it must keep wrapping.** Five
-  things live there - hype, chat, share, the primary action - and
-  `.act` is deliberately un-shrinkable, so a host looking at their own
-  card asks for about 346px of row. A 320px phone gives the card 256px
-  and the chat-open middle column gives it 296px, and the card clips,
-  so Manage was sliced clean off its right edge; Going and "2 requests"
-  went the same way. It shipped the day Share joined the row.
+- A shared link is `?e=<id>`. There is no hosting rewrite, so a pretty
+  path would 404. Don't "tidy" it.
+- A link is ours only if the host is livesociya.com, a subdomain of it,
+  localhost or 127.0.0.1, over http(s). Never `includes()`.
+- In chat an event link becomes a card but stays a real `<a href>`.
+- A finished event has THREE states: on, over but still in Recap, and
+  gone. Ask `inRecap()` before swapping a tab; say so instead of
+  travelling to an empty one.
+- A cross-origin iframe's scrollbars are reachable only through
+  `scrolling="no"`.
 
-  Width media queries cannot fix this, and that is the part worth
-  remembering: the narrow case is not a narrow VIEWPORT. The feed
-  column beside an open chat is 360px on a 1280px laptop, where no
-  `max-width` query would ever fire. `flex-wrap: wrap` is the only
-  answer that holds at every container width.
+**Search** → `docs/search.md`
 
-  The primary is held at the far end by `margin-left: auto` on the last
-  child, not by a `flex:1` spacer. A spacer is a flex ITEM: the moment
-  the row wraps it claims a whole line to itself. An auto margin just
-  stops mattering.
-
-  The smoke group "nothing is cut off" now seeds all six primaries -
-  Join, Manage, Going, requests, Request, Full - because it used to
-  seed six events hosted by somebody else and joined by nobody, which
-  is the NARROWEST row the app can draw. The bug lived in the three
-  rows the test never rendered.
-
-- **A cross-origin iframe's scrollbars are reachable only through
-  `scrolling="no"`.** The YouTube and Spotify embeds sit in a wrapper
-  with `overflow: hidden`, which clips the FRAME'S box and does nothing
-  at all to the bars drawn inside it - no stylesheet of ours crosses
-  that boundary. A chat bubble is 76% of the thread, so Spotify's
-  player gets roughly 260px and lays itself out wider, and on Windows a
-  scrollbar takes real space: the horizontal bar ate into the 152px,
-  which brought a vertical bar, which narrowed the content again. Two
-  scrollbars around one song, invisible on a Mac because overlay
-  scrollbars float over the artwork. The attribute is deprecated in the
-  HTML spec and implemented by every engine; there is no replacement.
-  Their sizing lives in `.media-embed` in the stylesheet now rather
-  than in a `style` attribute, so there is one place to change it.
-
-- **A finished event has THREE states in a chat, not two.** It is still
-  on; it is over but still has a stub in Recap; or it is over and aged
-  out, and there is no card for it anywhere in the app. Tapping the
-  card used to swap the tab whatever it had become - and on a phone
-  that closed the conversation on the way - so the reward for a dead
-  event was an empty tab. An event missing from the cache entirely read
-  as `ended === false` and went to LIVE NOW, which is what it looked
-  like from the outside. `showSharedEvent` asks `inRecap()` first now
-  and toasts instead of travelling; the embed says View, Recap or
-  nothing to match, and a dead one carries `.dead` so it stops looking
-  tappable. It stays an `<a>` either way - the link still means
-  something pasted somewhere else.
-
-  One trap on the way: Recap is PAGED. `recapOrder` holds only what
-  `loadRecap` has walked back to, and `renderEvents` builds stubs from
-  that list, so an event well inside its window can still have no card.
-  The id is pushed into `recapOrder` before the tab swaps. It is
-  already in the cache and `inRecap` has just vouched for it, so this
-  costs no read.
-
-  And in a test, `window.showTab` is app.js's `goToTab`, which closes
-  any open chat on its way. Use `ui.showTab` when the point of the test
-  is that the chat stays open.
-
-- **A shared link is `?e=<id>`, and that is not cosmetic.** `firebase.json`
-  has no `hosting` block, so there is no rewrite: a pretty `/e/<id>` would
-  404 on the static host before any JavaScript ran. `shareRules.js` still
-  *parses* the path form, so links keep working the day a rewrite is added,
-  but `eventLink()` only ever emits the query form. Don't "tidy" it.
-
-  A link only counts as ours if its host is `livesociya.com`, a subdomain
-  of it, `localhost` or `127.0.0.1`, and its protocol is http(s). That
-  guard is what stops `livesociya.com.evil.tld/?e=x` from rendering as a
-  trusted in-app card, and `javascript:?e=x` from rendering at all. The
-  smoke group "sharing an event" has a case for each; both fire if the
-  check is loosened to `includes("livesociya.com")`.
-
-  In chat, an event link becomes a card but stays a real `<a href>`
-  underneath, so it still works for anyone whose JavaScript failed, and
-  still copies as a link. The card paints from `state.eventCache` when the
-  event is already known — **no read** — and otherwise costs exactly one
-  read per unseen event, de-duplicated through `pendingFetches` so ten
-  copies of the same link in a thread are one read, not ten.
-
-- **Opening a shared event: two layouts, two right answers.** There is
-  no detail view for an event — the card in the feed IS the event — so
-  View has always gone to the feed. What it also did, at every width,
-  was close the conversation. On a laptop the thread and the feed are
-  different COLUMNS, so that threw away the place you were reading for
-  nothing: the wide branch now leaves the chat open and flashes the
-  card beside it. On a phone the chat does have to go, and it leaves a
-  `returnChip` behind — one tap back to the person, gone after nine
-  seconds, and cleared by `switchScreen` so it can never point at a
-  conversation you are no longer coming from.
-
-  The phone branch also has to call `switchScreen("home")` itself.
-  `closeChat({ silent: true })` deliberately does NOT swap screens, and
-  the thread is a full-screen layer on a phone — so before this, View
-  changed the tab underneath a conversation that was still covering it,
-  and looked like it did nothing at all.
-
-- **The wordmark is a button now, so it must shed the button styling.**
-  `.brand-home` sits inside the topbar; the base `button` rule would give
-  it a moss fill, padding and a shadow. It resets all three. Same trap as
-  `.action-row` and `.card.poster-card` - see the specificity note below.
-
-- **One gutter, `--gut`, and three things that must agree on it.** The
-  container's side padding, the live rail's negative margin (it runs
-  edge to edge, so it bleeds back out by exactly one gutter) and the
-  rail's own inner padding (so the first avatar lines up with the first
-  card). Those used to be three hard-coded 16s and 24s. The chat-open
-  layout changed one of them and left the rail hanging 7px past the
-  column, over the divider and into the conversation — and the same
-  mismatch was sitting on every tablet width unnoticed. Change the
-  number in `:root` and in the two media queries; never at a call site.
-
-- **A poster band needs a 308px card, measured.** Below that the
-  halftone has already yielded all its width (that is what it is for)
-  and `.poster-type`, which is deliberately un-shrinkable, runs past
-  the card's `overflow: hidden` — so "GOING" gets sliced mid-word. Two
-  places were under it: a 320px phone (lost 21px) and the chat-open
-  middle column, which was 330px because it had been sized for the chat
-  LIST, not for a feed. The column is 360px now, and under 350px
-  viewport width the band drops its second stat. The second stat is the
-  one to drop because the body row below already names who is going;
-  the first stat — when it is — is said nowhere else on the card.
-
-- **A dead scroll container is worse than no scroller at all.** The
-  profile's inner box is the scroller on a phone, where the profile is
-  a fixed full-screen layer. On a laptop the wrapper joins the grid
-  with `min-height: 100dvh` instead, so that box grows to its own
-  content: `scrollHeight === clientHeight`, 1086px tall inside an 860px
-  window, still a scroll container, still carrying
-  `overscroll-behavior: contain`. It could never move a pixel while
-  telling the browser not to pass the wheel on. Chromium hands the
-  gesture to the page anyway; a browser that takes `contain` at its
-  word strands the bottom of the profile. So at >=1100px that box is
-  `overflow: visible` and the page scrolls the column, exactly as it
-  does the feed.
-
-  The smoke group "everything scrolls to its bottom" holds the rule in
-  general: no `overflow: auto` box may be taller than the window while
-  having nothing to scroll. It tests the STRUCTURE, not the gesture, on
-  purpose — the symptom is browser-dependent and a wheel driven in
-  Chromium would never see it.
-
-- **Claiming a handle has no inner scroller, so the layer is one.**
-  `.onboarding-screen` is `.full-screen-view`, which sets
-  `overflow: hidden`; on a short window (landscape phone, half-height
-  laptop) the account-type cards and the Join button went off the
-  bottom with nothing to scroll. It is `overflow-y: auto` now with
-  `justify-content: safe center` — plain `center` on a flex column that
-  overflows pushes content off BOTH ends and the top one cannot be
-  scrolled back to. The smoke sweep includes an 820x460 window because
-  nothing shorter than that shows it.
-
-- **Scroll chaining behind an open layer cannot be fixed with
-  `overscroll-behavior`, so don't try.** Chaining begins at the nearest
-  container that can ACTUALLY scroll, so a panel whose content happens
-  to fit is skipped entirely and its `overscroll-behavior` is never
-  consulted — the wheel goes to the page behind it. Stopping that needs
-  the page itself to stop scrolling, and `overflow: hidden` on html is
-  exactly what broke sticky the last time. Left alone on purpose.
-
-- **Nothing on screen may be sliced or reach past its column.** The
-  smoke group "nothing is cut off" renders the app at 320, 390 and 1280
-  (that last one with a chat open beside the feed) and asks two
-  questions of every visible element: does anything reach past the box
-  that clips it, and does anything that clips hold content wider than
-  itself. Horizontal scrollers and one-line ellipsis are exempt, since
-  both are cut on purpose. It replaced four separate bugs that were all
-  invisible at laptop width, and all four were re-introduced one at a
-  time to prove it fires.
-
-- **Blocking is total.** Filter `isBlocked` everywhere — lists, counts,
-  the feed, vouches. A count that disagrees with the list under it is a bug.
-
-## Search
-
-Two halves, two different constraints, one shared scorer in
-`matchRules.js` (pure — no DOM, no database, testable on its own).
-
-Events are free: the feed already holds every event of the last 24
-hours in `state.eventCache`, so matching a few dozen objects on every
-keystroke costs nothing and can match mid-word, which Firestore cannot
-do without a search service.
-
-People are the awkward half, because a prefix query is the only shape
-Firestore serves without scanning `usernames`, and a scan is exactly
-the thing that would make search expensive. Three moves, in order of
-cost:
-
-1. Everyone already in `state.userCache` is matched fuzzily, on their
-   display name as well as their handle. **No reads at all**, and it
-   covers most real searches — you are usually looking for someone you
-   have already seen in the feed, your orbit or a thread.
-2. The prefix query, as before. One read-batch.
-3. Only if that came back thin (< 4 hits), ONE retry with the last
-   character or two dropped. This is what makes "sanchitt" find
-   sanchit. Bounded to one extra query.
-
-The handle comes off the document ID — `usernames` is keyed by it — so
-the whole list is ranked *before* anything decides whose profile is
-worth a read. `primeUsers` runs on the final twelve only, which is why
-this costs the same as the strict version did.
-
-What it still cannot do: a typo in the FIRST letter of a handle will
-not reach the server ("ranchit" misses sanchit) unless he is already
-cached. Fixing that needs a scan or a search service; neither is worth
-it yet.
-
-Two things about the scorer that are load-bearing:
-
-- **A swap counts as one edit, not two.** Transposing two letters is
-  the most common typo there is, and plain Levenshtein calls "chia" two
-  edits from "chai" — far enough to miss at any sane threshold. The
-  distance function is Damerau (optimal string alignment).
-- **It gives up early.** It runs over every cached user on every
-  keystroke on cheap phones, so it abandons a row the moment the whole
-  row is past the budget, rather than filling the matrix.
-
-The tiers matter more than the numbers: exact > starts with > a word
-starts with > contains > all words present > a typo away > the letters
-in the right order. An exact hit must always outrank a corrected one,
-or searching a real handle starts putting strangers above the person
-you meant.
+- One scorer, `matchRules.js`, pure and testable. Events match from the
+  cache for free; people cost at most two query batches.
+- A swap counts as one edit, not two (Damerau), and an exact hit must
+  always outrank a corrected one.
 
 ## Cost model
 
 Firestore charges per document read. A snapshot listener bills **one read
 per changed document per connected client**, so the shape is
 `changes x people watching`. Roughly 31.5k reads/day at 300 daily actives,
-inside the 50k free tier; ~₹170/month at launch-night intensity with 300
-people watching at once.
+inside the 50k free tier; ~₹170/month at launch-night intensity.
 
 Decisions already made, with the reason, so they don't get undone:
 
@@ -451,13 +176,12 @@ Decisions already made, with the reason, so they don't get undone:
 | Counts live as arrays on the profile | `followers.length` is free; a subcollection is a read per follower |
 | Recap query spans 48h, filtered client-side, max 3 pages per load | retention is computed from three fields; no server to store it |
 | Profile Hosted/Joined: two `get()`s, counts from the same docs | was a listener + two duplicate count queries |
-| Pinned message in a subcollection, holding a copy of the text | a field on the event bills the whole campus a read; an id alone costs a read to display |
-| Poster cards cost ~29% more DOM than the rows they replaced, and that was accepted | measured, not assumed: at 60 cards, style recalculation went 4.3ms -> 0.2ms because the old hover transitions on `.event::before` and the watermark are gone, while layout (1.8ms) and forced-reflow wall time (2.1ms) are unchanged. The nodes cost nothing that shows up in a frame; the transitions did |
-| A shared event card reads the event once, cached and de-duplicated | the cache usually already has it; ten copies of one link in a thread are one read |
-| The receipt folds events already in the cache, debounced | a history collection would be a write per event and a query per open |
+| Pinned message in a subcollection, holding a copy of the text | a field on the event bills the whole campus a read |
+| Poster cards cost ~29% more DOM than the rows they replaced | measured: style recalc went 4.3ms -> 0.2ms, layout unchanged. The nodes cost nothing in a frame; the old transitions did |
+| A shared event card reads the event once, cached and de-duplicated | ten copies of one link in a thread are one read |
+| The receipt folds events already in the cache, debounced | a history collection would be a write per event |
 
-The remaining lever, if reads ever bite: drop `LIVE_LIMIT` to ~30. It cuts
-fan-out on everything at once.
+The remaining lever, if reads ever bite: drop `LIVE_LIMIT` to ~30.
 
 ## Security model in one paragraph
 
@@ -488,190 +212,37 @@ node test/smoke.mjs                # CHROME_PATH=... if playwright has no browse
 node test/contrast.mjs             # no browser, no network — just the palette
 ```
 
-`contrast.mjs` reads the colour tokens straight out of `style.css` and
-checks every text-on-surface pair in both themes against WCAG. The
-palette is a family of greens, so every pair is close together and it
-is easy to pick two that look fine on a laptop and vanish on a cheap
-phone in daylight. It has already caught two.
-
-Useful handles inside a page: `window.__m` (the modules), `window.__events`
-+ `window.__fireEvents()`, `window.__orbit` + `window.__fireOrbit()`,
+Handles inside a page: `window.__m` (the modules), `window.__events` +
+`window.__fireEvents()`, `window.__orbit` + `window.__fireOrbit()`,
 `window.__stubDocs['users/uid']`, `window.__authSingleton.currentUser`.
+Note `window.showTab` is app.js's `goToTab`, which closes an open chat on
+its way; use `ui.showTab` when a test needs the chat to stay open.
 
-Every bug in the list below was found this way, so add a case when
-something breaks.
+Two tests are currently RED and were red before the share work: the dead
+scroll container on the laptop profile, and the claim screen on a short
+window. `docs/layout.md` describes the fix for both; the CSS for neither
+is in the sheet.
 
-## Gotchas found the hard way
-
-- **`button { display: flex }` is in the base sheet.** Any element you turn
-  into a button inherits it, plus `padding: 13px 24px` and `width: 100%`.
-  This silently laid the profile stat boxes out sideways and squashed the
-  avatar in the middle of the orbit.
-- **`place-items: center` shrink-wraps the grid column**, so a child at
-  `width: 100%` has nothing to resolve against and collapses to its
-  intrinsic size. Emoji avatars hide it; a Google profile photo does not.
-  Photo avatars are pinned with `position: absolute; inset: 0`.
-- **Boxicons has no `bx-hot`** — only the solid `bxs-hot`. Check a class
-  exists before using it. Anything load-bearing (the brand mark, the hype
-  flame, arrows) is inline SVG now, because an icon font that fails to
-  load leaves an invisible control.
-- **Renaming a token renames its own definition too.** The sweep that
-  retired the violet-era names turned `--aubergine: var(--ink)` into
-  `--ink: var(--ink)` — a self-reference, which makes the token
-  invalid and would have taken the text colour out of the entire app.
-  It was caught because the alias block was deleted in the same pass
-  and checked; if you ever do this again, grep for
-  `^\s*--([a-z0-9-]+):\s*var\(--\1\)` afterwards.
-- **A rename is provable, so prove it.** `node snap.mjs` style
-  screenshots (fixed clock, animations off, both themes, every screen)
-  taken before and after must be BYTE-identical — a pure rename cannot
-  move a pixel. Run the snapshot twice against unchanged code first, to
-  show the harness itself is deterministic; otherwise the comparison
-  means nothing. That is how the 134-replacement rename was signed off.
-- **Two different things silently break `position: sticky`, and the
-  desktop sidebar and rail hit BOTH at once.** They are sticky at
-  >=1100px and they were scrolling away with the feed anyway.
-
-  First: `overflow-x: hidden` was on `html, body`. When one axis is
-  `hidden` and the other is `visible`, the visible one computes to
-  `auto` — so body became a scroll container. The page actually
-  scrolls on html, so body never scrolls, and everything sticky inside
-  it was sticking to a box that never moves. It belongs on `html`
-  alone, where the root element's overflow propagates to the viewport
-  and html itself is then treated as visible. (`test/` has a
-  horizontal-overflow sweep behind that change: it was there for a
-  reason once — date inputs sliding the create screen sideways — and
-  nothing scrolls sideways at any width without it now.)
-
-  Second: a much later rule, `.topbar, .sidebar, .rail, #home,
-  .container { position: relative; z-index: 1 }`, put them above the
-  ambient layer — and at equal specificity and later in the sheet,
-  that `position: relative` flattened the sticky. The z-index is all
-  they needed; a sticky box takes one perfectly well.
-
-  Either one alone is enough to break it, so the smoke test under
-  "desktop columns" measures the BEHAVIOUR — scroll the page, assert
-  the columns stayed at top 0 — rather than either cause. Fixing one
-  and leaving the other cannot fool it.
-- **Specificity beats source order.** `.empty-state p { margin: 0 }` quietly
-  outranked a later `.starter-foot` rule. It bites from the other side
-  too: `.modal-content { text-align: center }` and
-  `.modal-content button { margin-bottom: 8px }` outrank a plain
-  `.action-row` wherever you put it, which is why the message sheet is
-  written as `.modal-content.action-sheet` and `.action-sheet
-  .action-row`.
-- **Zoom is switched off on purpose** (the user's call): viewport meta
-  `maximum-scale=1, user-scalable=no`, `touch-action: pan-x pan-y` on
-  `html`, and `lockZoom()` in `utils/viewport.js` for iOS, which ignores
-  both. Inputs stay 16px on `(pointer: coarse)` anyway — belt and braces
-  against iOS focus-zoom.
-- **Messages are not quite immutable any more, and the live window is
-  why that matters.** Only the newest 25 have a listener; older pages
-  are fetched once with `get()` and never watched. So when you edit or
-  retract a message that has scrolled out of that window,
-  `patchLocalMessage` updates the copy on screen itself — there is no
-  listener to do it. The other person sees the change the next time
-  they open the chat. Widening the listener to fix that would re-read
-  the whole thread on every change, which is the cost the window
-  exists to avoid.
-- **The feed is diffed, not rebuilt.** `syncList` replaces only cards whose
-  markup changed. Rebuilding replayed the entry animation on every card,
-  which read as the card vanishing. Don't reintroduce `innerHTML =` there.
-- **Nothing time-dependent may go in a card's markup.** The corollary
-  of the line above, and it bit hard. A card showed the clock — "45M",
-  "2H LEFT", "4h ago" — so on every minute tick every card's html
-  differed from what was on screen, `syncList` swapped all sixty for
-  fresh nodes, and the whole feed visibly blinked once a minute. No
-  animation was involved; it was sixty nodes being thrown away and
-  rebuilt, which is exactly why it looked like the page had refreshed.
-
-  Those spots are empty `data-vt` slots now, and `paintVolatile()`
-  fills them from `state.eventCache` straight after the diff, in the
-  same frame. A card's html is therefore independent of WHEN it was
-  built, so a quiet minute finds nothing to replace and writes a few
-  text nodes instead. Anything else you derive from `now` belongs in a
-  slot, not in the string.
-
-  The tick costs nothing on the network either, and the smoke test
-  asserts it: a snapshot listener bills per CHANGED document, so a
-  minute in which nothing happened is 0 reads and 0 writes.
-- **The browser's overscroll is off at the root** (`overscroll-behavior-y:
-  none` on `html`). The lurch at the top and bottom of a feed is a page
-  behaviour and this reads as an app; it also disables pull-to-refresh,
-  deliberately, because a reload throws away the live listeners and
-  anything half-typed, and the feed is already live. Inner scrollers use
-  `contain`, so reaching the end of a chat doesn't start scrolling the
-  page behind it.
-- **Filters hide, they don't re-render.** Every card is in the DOM with a
-  `data-tag`; a filter toggles a class.
-- **Social state is on screen in four places** — feed chips, search rows,
-  the open profile, the Orbit screen. `refreshSocialUI()` repaints all of
-  them; painters are registered in `app.js`. Anything that changes the
-  graph must go through it or the screens disagree.
-- **Optimistic first, then the network, then roll back on failure.** Follow,
-  hype, and every orbit action work this way. A button that waits for a
-  round trip reads as broken.
-- **No `window.confirm` or `alert` anywhere.** Use `askConfirm()` from
-  `js/utils/confirm.js` and `toast()` from `js/utils/ui.js`.
-- **An ended event is not live.** `now >= startTime` is also true after
-  it ends; that put a Live chip on every Recap card. Check `expiresAt`.
-- **The localStorage profile cache is partial.** It keeps names, counts,
-  `private`, and whether YOU are in their request queue — nothing else.
-  Leaving `private` and `followRequests` out made every private account
-  look open after a reload and every sent request look cancelled.
-- **A new follow decides from a fresh read, never the cache**
-  (`refreshUser`), and every fresh read runs `onUserFetched` hooks —
-  that's how an approved request becomes `following` on the asker's
-  side, since only the asker can write their own list.
-- **Follow first, orbit later.** `pullIn` needs you to be in their
-  `followers` (client and rules). A private profile you don't follow is
-  "locked" (`isProfileLocked`): counts, Follow, Message/Report/Block, and
-  nothing else — no lists, vouches, events, or orbit. Public profiles
-  show everything except the orbit button until you follow.
-- **The keyboard is handled by the visual viewport, not `innerHeight`.**
-  `utils/viewport.js` publishes `--vvt` / `--vvh`; full-screen layers sit
-  at exactly that box while `html.kb-open`. A keyboard only counts with a
-  text field focused. The smoke suite fakes a
-  visual viewport to test this; a real phone is still the final word.
-- **Bio and interests** are `bio` (160) and `interests` (≤5, fixed list
-  in `js/services/aboutRules.js`, mirrored in the rules). They ride on
-  the profile document, so they cost no extra reads.
-- **Dark mode is tokens, not overrides.** Colours come from `:root` in
-  `style.css`; `:root[data-theme="dark"]` swaps them. Never write a
-  literal colour in CSS or a JS template — add a role token
-  (`--on-accent` for text on the forest fill, `--on-danger` for a label
-  on a delete button, `--ink-fill` for a strong neutral fill,
-  `--glass`, `--ember-ink`...) with a value in both blocks. `--paper`
-  is a surface, never a text colour. A role token whose value has to
-  flip meaning between themes needs its OWN token: `--on-accent` is
-  light in light mode and DARK in dark mode, because it sits on deep
-  forest and then on pale moss — which is exactly why a delete button
-  cannot borrow it. Run `node test/contrast.mjs` after touching any
-  colour. The choice is per device
-  (`livesociya.theme`: system/light/dark, `js/utils/theme.js`), painted
-  before CSS by an inline script in `<head>`, and kept across logout.
-- **Overlays go through `js/utils/overlays.js`**, which backs them with
-  history so Android back works. Closing is async — `pendingPops` exists
-  because close-then-open in one tick used to tear down the new layer.
+Every rule above came from something that broke. Add a case when
+something breaks again.
 
 ## Where it is
 
 Built and working: UID migration, full rules, responsive layout, blocking
-and reporting, request-to-join, host moderation, search, Orbit (mutual
-connections + vouches), follow/followers with private accounts and
-approval, rate limits, the icebreaker, the day-one empty state, public /
-private chosen at sign-up (and asked once of older accounts), remove a
-follower, going public lets waiting requests in, dark mode, editing and
-taking back a message (hold a bubble, or right-click on a desktop),
-reactions, a host's pinned message in an event chat, the Recap
-receipt, the sage-on-paper redesign, and the poster/stub cards.
+and reporting, request-to-join, host moderation, search, Orbit (mutual connections
++ vouches), follow and followers with private accounts and approval
+(going public lets waiting requests in), rate limits, the icebreaker,
+the day-one empty state, public/private at sign-up, dark mode, editing and
+retracting a message (hold a bubble, or right-click on a desktop),
+reactions, a host's pinned message, the Recap
+receipt, the sage-on-paper redesign, the poster/stub cards, and share
+links for an event.
 
 Not built, roughly in the order I'd do them: push notifications (needs
 Blaze — and it is the ceiling on everything else, since a live event
-nobody is told about is a feed nobody opens), share links for an event,
-report triage for the admin.
+nobody is told about is a feed nobody opens), report triage for the admin.
 
-Considered and parked: voice notes. Everything above costs *reads*,
-which have a 50k/day free tier. Voice notes cost storage and egress,
-which is a different meter, needs Blaze, and grows on its own — the
-first feature here whose bill goes up while nobody is using it.
+Considered and parked: voice notes. Everything above costs *reads*, which
+have a 50k/day free tier. Voice notes cost storage and egress — a
+different meter, needs Blaze, and the first feature whose bill goes up
+while nobody is using it.

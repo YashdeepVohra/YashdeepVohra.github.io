@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./_backup_pre_uid/**)",
+      "Read(./Claude outputs/**)",
+      "Read(./.git/**)",
+      "Read(./**/.DS_Store)"
+    ]
+  }
+}
