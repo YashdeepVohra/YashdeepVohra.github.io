@@ -634,50 +634,38 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   box-shadow: var(--lift-3);
   animation: popIn 0.4s var(--spring) 0.2s backwards;
 }
-/* The way back to a conversation you left to look at an event. Sits
-   above the nav, left of the compose button so the two never collide,
-   and carries its own entrance rather than borrowing a card's. */
+/* The way back to a conversation you left to look at an event. It is a
+   row at the top of the feed column, not a chip floating over it.
+   Floating went wrong twice, and both ways were reported: it covered
+   whatever was beneath it, which was reliably a card's action row,
+   and the desktop offset was arithmetic — sidebar width plus a gutter
+   — that only held while the app frame started at x=0. Past about
+   1400px the frame is centred, the sidebar begins at 40px, and the
+   chip sat inside it.
+   In the flow there is nothing to collide with and nothing to compute:
+   the column's own gutter places it, at every width, on every device.
+   It fades in at its final size, so appearing costs no layout shift. */
 .return-chip {
-  position: fixed;
-  /* Left-aligned, not centred: the compose button owns the right of
-     this row, and a centred chip long enough to hold a name lands
-     underneath it. 90px clears the button and its inset. */
-  left: var(--s-16);
-  bottom: calc(88px + env(safe-area-inset-bottom, 0px));
+  display: inline-flex; align-items: center; gap: 7px;
   /* The base button rule makes every button full width — the same trap
      as .action-row and the wordmark. A chip is as wide as its words. */
   width: auto;
-  max-width: calc(100% - 90px);
-  z-index: 46;
-  display: flex; align-items: center; gap: 7px;
+  max-width: 100%;
+  margin: 0 0 var(--s-16);
   padding: 10px 16px;
   background: var(--toast-bg); color: var(--toast-ink);
   border: none; border-radius: var(--r-pill);
   font-size: 14px; font-weight: 600; letter-spacing: -0.01em;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  box-shadow: var(--lift-3);
+  box-shadow: var(--lift-2);
   opacity: 0;
-  transform: translateY(14px);
+  transform: translateY(-6px);
   transition: opacity 0.26s var(--ease), transform 0.26s var(--spring);
 }
 .return-chip.in { opacity: 1; transform: translateY(0); }
-.return-chip:hover { filter: brightness(1.06); transform: translateY(-1px); box-shadow: var(--lift-3); }
+.return-chip:hover { filter: brightness(1.06); box-shadow: var(--lift-2); }
 .return-chip:active { transform: scale(0.95); }
 .return-chip i { font-size: 18px; }
-/* It used to be display:none here, because a laptop kept the
-   conversation open beside the feed and there was nothing to go back
-   to. The split is gone, so the chip is the ONLY way back at this
-   width and has to be on screen. It moves out of the sidebar and sits
-   at the foot of the feed column, where it reads as a floating action
-   on the content rather than a stray nav item; there is no bottom nav
-   up here, so it does not need to clear one. */
-@media (min-width: 1100px) {
-  .return-chip {
-    left: calc(var(--sidebar-w) + var(--s-24));
-    bottom: var(--s-24);
-    max-width: calc(100% - var(--sidebar-w) - var(--s-48));
-  }
-}
 
 .fab:hover { filter: brightness(1.08); }
 .fab:active { transform: scale(0.92); }

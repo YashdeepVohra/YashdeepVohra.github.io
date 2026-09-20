@@ -1674,7 +1674,10 @@ group('opening an event somebody shared');
   // so the poster was cramped and the action row wrapped inside a
   // 1280px window. One path now, and the assertions below are
   // deliberately the SAME at both widths.
-  const wideCtx = await browser.newContext({ viewport: { width: 1280, height: 860 } });
+  // 1440, not 1280: past about 1400px the app frame is centred, so the
+  // sidebar no longer starts at x=0. That is the width the old chip
+  // offset broke at, and 1280 could not see it.
+  const wideCtx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const wide = await wideCtx.newPage();
   await wide.addInitScript({ path: fileURLToPath(new URL('./stub.js', import.meta.url)) });
   await wide.goto(APP_URL, { waitUntil: 'domcontentloaded' });
@@ -1717,6 +1720,34 @@ group('opening an event somebody shared');
       // conversation open, which would have stranded you here.
       chipShown: !!chip && getComputedStyle(chip).display !== 'none',
       chipText: chip ? chip.innerText.trim() : '',
+      // THE CHIP MUST NOT FLOAT OVER ANYTHING. It used to be fixed at
+      // the bottom left, where it covered whatever was under it —
+      // reliably a card's action row, since that is what sits at the
+      // bottom of a card. It is in the column's flow now, so this can
+      // only pass by it genuinely not overlapping.
+      chipCovers: (() => {
+        if (!chip) return ['no chip'];
+        const c = chip.getBoundingClientRect();
+        return [...document.querySelectorAll('.event, .card-actions, .sidebar, .rail, .fab')]
+          .filter((el) => {
+            const st = getComputedStyle(el);
+            if (st.display === 'none' || st.visibility === 'hidden') return false;
+            const b = el.getBoundingClientRect();
+            return b.width && b.height &&
+                   c.right > b.left && c.left < b.right && c.bottom > b.top && c.top < b.bottom;
+          })
+          .map((el) => el.id ? '#' + el.id : '.' + String(el.className).trim().split(/\s+/)[0]);
+      })(),
+      // And it must sit inside the feed column. The old desktop offset
+      // was sidebar-width + a gutter, which only held while the app
+      // frame started at x=0; past ~1400px the frame is centred, the
+      // sidebar starts at 40px, and the chip landed inside it.
+      chipInColumn: (() => {
+        if (!chip) return false;
+        const c = chip.getBoundingClientRect();
+        const col = document.getElementById('home').getBoundingClientRect();
+        return c.left >= col.left - 1 && c.right <= col.right + 1;
+      })(),
       // Nothing may still be marked as the old two-pane layout.
       noSplit: !document.querySelector('.app-frame').classList.contains('chat-open'),
       // And the feed must have the whole column, not 360px of it.
@@ -1731,6 +1762,9 @@ group('opening an event somebody shared');
   ok('the way back is a chip, and it is actually visible at this width',
      desk.chipShown && /Back to Riya/.test(desk.chipText), JSON.stringify(desk));
   ok('the two-pane split is gone', desk.noSplit);
+  ok('the chip covers nothing \u2014 not a card, not an action row',
+     desk.chipCovers.length === 0, JSON.stringify(desk.chipCovers));
+  ok('and it sits inside the feed column, not in the sidebar', desk.chipInColumn);
   ok('so the feed gets a real column, not 360px', desk.feedWidth > 500, String(desk.feedWidth));
 
   // On a phone only one of them fits, so the chat does go — but it

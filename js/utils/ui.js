@@ -128,13 +128,26 @@ export function returnChip({ text, icon = "bx-left-arrow-alt", onTap }) {
   // Text, never markup: the name in here belongs to another student.
   el.appendChild(document.createTextNode(String(text || "")));
   el.onclick = () => { clearReturnChip(); onTap?.(); };
-  document.body.appendChild(el);
+
+  // IN THE COLUMN, NOT OVER IT. This used to be appended to <body> and
+  // positioned fixed at the bottom left, which went wrong twice. It
+  // covered whatever sat under it — reliably a card's action row, since
+  // that is what lives at the bottom of a card — and its desktop offset
+  // was arithmetic (sidebar width plus a gutter) that only held while
+  // the app frame started at x=0. Past about 1400px the frame is
+  // centred, the sidebar starts at 40px, and the chip landed inside it.
+  //
+  // As the first child of the feed column it covers nothing at any
+  // width and needs no coordinates at all: the column already has them.
+  // It sits outside #eventsTab and #recapTab on purpose, so switching
+  // between Live Now and Recap doesn't strand it in the hidden one.
+  (document.getElementById("home") || document.body).prepend(el);
   void el.offsetWidth;
   el.classList.add("in");
-  chipTimer = setTimeout(() => {
-    el.classList.remove("in");
-    setTimeout(() => el.remove(), 300);
-  }, 9000);
+  // No timer. Nine seconds was right for something floating over the
+  // feed; an element in the flow that removes itself on a clock yanks
+  // the cards up under a thumb that is already moving. switchScreen
+  // clears it, so it still cannot outlive the trip it belongs to.
 }
 
 /** The one place toasts are mounted, shared by every kind of toast. */

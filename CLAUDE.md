@@ -150,8 +150,9 @@ Each line is the whole rule. The file after it is the argument for it.
   gone. Ask `inRecap()` before swapping a tab; say so instead of
   travelling to an empty one.
 - View closes the chat, opens the event's tab and leaves a `returnChip`
-  — the same at every width. The chip must stay visible on desktop; it
-  is the only way back.
+  — the same at every width. The chip is a row at the TOP of the feed
+  column, never a floating overlay: floating covered the card action
+  row, and its desktop offset broke as soon as the frame centred.
 - A cross-origin iframe's scrollbars are reachable only through
   `scrolling="no"`.
 

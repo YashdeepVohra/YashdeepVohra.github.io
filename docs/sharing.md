@@ -30,9 +30,34 @@ copies of the same link in a thread are one read, not ten.
 There is no detail view for an event — the card in the feed IS the
 event — so View goes to the feed. It closes the conversation, opens the
 tab the event lives in, lands on its card, and leaves a `returnChip`:
-one tap back to the person, gone after nine seconds, and cleared by
-`switchScreen` so it can never point at a conversation you are no
-longer coming from.
+one tap back to the person, cleared by `switchScreen` so it can never
+point at a conversation you are no longer coming from.
+
+THE CHIP IS IN THE COLUMN, NOT OVER IT, and that took two goes. It was
+appended to `<body>` and positioned fixed at the bottom left, which was
+wrong in two ways that were both reported from the running app. It
+covered whatever sat beneath it, which was reliably a card's ACTION
+ROW, since that is what lives at the bottom of a card. And its desktop
+offset was arithmetic — sidebar width plus a gutter — which only held
+while the app frame started at x=0; past about 1400px the frame is
+centred, the sidebar begins at 40px, and the chip landed inside it.
+
+As the first child of `#home` it covers nothing at any width and needs
+no coordinates at all, because the column already has them. It sits
+outside `#eventsTab` and `#recapTab` so switching tabs cannot strand it
+in the hidden one. The nine-second timer went with the move: an element
+in the FLOW that removes itself on a clock yanks the feed up under a
+thumb that is already moving.
+
+Two consequences of being in the flow, both deliberate. It is created
+BEFORE `land()`, because it takes real height and adding it after
+`focusEvent` had scrolled would push the card back down by exactly the
+chip. And `focusEvent` no longer scrolls a card that is already fully
+on screen — centring would scroll the top of the column away, taking
+the way back with it, and a shared event is usually near the top of a
+feed that is newest-first anyway. When the card really is far down, the
+chip does scroll out of view; the sidebar and the bottom nav still
+offer Chats, so it is a convenience rather than the only route.
 
 It used to fork on width. A laptop kept the thread open and flashed the
 card in a 360px column beside it, on the theory that closing the

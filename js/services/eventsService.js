@@ -600,11 +600,18 @@ function renderLiveRail(order, now) {
   }
 }
 
-/** Rail shortcut: scroll a card into view and flash it. */
+/** Rail shortcut: bring a card into view and flash it. */
 export function focusEvent(eventId) {
   const card = document.getElementById(`event-${eventId}`);
   if (!card) return;
-  card.scrollIntoView({ behavior: "smooth", block: "center" });
+  // A card that is already fully on screen does not need moving, and
+  // moving it costs something now: centring scrolls the top of the
+  // column away, and the way back to a conversation lives up there.
+  // The common case — a shared event still near the top of a feed that
+  // is newest-first — therefore leaves the chip where you can see it.
+  const box = card.getBoundingClientRect();
+  const fits = box.top >= 0 && box.bottom <= (window.innerHeight || 0);
+  if (!fits) card.scrollIntoView({ behavior: "smooth", block: "center" });
   card.classList.remove("flash");
   void card.offsetWidth;
   card.classList.add("flash");
@@ -704,14 +711,18 @@ export function showSharedEvent(eventId) {
   window.closeChat?.({ silent: true });
   switchScreen("home");
   showTab(ended ? "recap" : "events");
-  land();
+  // BEFORE land(), not after. The chip is a row at the top of the
+  // column now, so it takes real height; adding it once focusEvent had
+  // already scrolled the card into view would push the card back down
+  // by exactly the chip. It used to float over the feed, where it cost
+  // no height and could safely arrive late.
   if (backTo) {
-    // After the chip's own entrance, so it doesn't race the tab swap.
-    setTimeout(() => returnChip({
+    returnChip({
       text: name ? `Back to ${name}` : "Back to the chat",
       onTap: () => window.startChatWithUid?.(backTo)
-    }), 420);
+    });
   }
+  land();
   return true;
 }
 
