@@ -107,7 +107,8 @@ Each line is the whole rule. The file after it is the argument for it.
   its second stat.
 - The card's action row WRAPS, and must keep wrapping; the primary is
   held right by `margin-left: auto`, never a `flex:1` spacer. Below
-  390px it takes the whole line instead.
+  560px it is two rows instead: Hype at the left edge, Share at the
+  right, Chat centred when it exists, primary full width beneath.
 - Nothing on screen may be sliced or reach past its column. The smoke
   group "nothing is cut off" holds this at 320, 390 and 1280.
 - No `overflow: auto` box may be taller than the window with nothing to
@@ -122,7 +123,8 @@ Each line is the whole rule. The file after it is the argument for it.
   base sheet, and specificity beats source order. Anything you turn into
   a button must shed all three.
 - Boxicons has no `bx-hot`. Check a class exists; anything load-bearing
-  is inline SVG.
+  is inline SVG — and a button with an icon and NO label (hype, share)
+  must be drawn, or a font that fails to load leaves nothing there.
 - Zoom is off everywhere, on purpose. The keyboard is handled by the
   visual viewport, not `innerHeight`.
 

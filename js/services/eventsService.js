@@ -1019,7 +1019,17 @@ export function renderEvents() {
     </svg>`;
     const hypeBtn = `<button class="act ${hasHyped ? "hyped" : ""}" aria-label="Hype" onclick="window.toggleHype('${id}')">${flame} ${hypeCount || "Hype"}</button>`;
     const chatBtn = `<button class="act" onclick="window.openEventChat('${id}')"><i class='bx bx-message-rounded-dots'></i> Chat</button>`;
-    const shareBtn = `<button class="act" aria-label="Share" onclick="window.openShare('${id}')"><i class='bx bx-share-alt'></i></button>`;
+    // DRAWN, not set in the icon font, for the same reason the flame is:
+    // this button has no label, so an icon font that fails to load
+    // leaves an invisible control. It sits at the far right of the row
+    // on a phone, where an invisible control is worse still.
+    const shareGlyph = `<svg class="act-glyph" viewBox="0 0 24 24" width="18" height="18"
+      fill="none" stroke="currentColor" stroke-width="1.8"
+      stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <circle cx="18" cy="5.5" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="18.5" r="2.6"/>
+      <path d="M8.35 10.75 15.65 7.1M8.35 13.25l7.3 3.65"/>
+    </svg>`;
+    const shareBtn = `<button class="act" aria-label="Share" onclick="window.openShare('${id}')">${shareGlyph}</button>`;
 
     const pending = e.pendingUids || [];
     const hasRequested = pending.includes(state.uid);

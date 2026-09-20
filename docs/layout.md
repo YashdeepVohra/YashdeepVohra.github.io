@@ -48,14 +48,36 @@ child, not by a `flex:1` spacer. A spacer is a flex ITEM: the moment
 the row wraps it claims a whole line to itself. An auto margin just
 stops mattering.
 
-On top of that, below 390px the primary takes the whole line. Measured
-with the feed at full width: nothing wraps at 390 or above, and below
-it Manage, Going and "N requests" go over. Right-aligned on a line of
-its own left a 170-200px gap beside it, which reads as a mistake rather
-than a layout — so below 390 EVERY card gets the same full-width
-primary, whether or not that particular one would have fitted. A feed
-where some cards wrap and some don't, at one width, looks worse than
-either. The query is polish; the wrap is the guarantee.
+On top of that, ON A PHONE THE ROW IS TWO ROWS, and that is a decision
+rather than a fallback. Four controls in one line read as a jumble: the
+three secondaries bunched at the left — and Chat, which only appears
+once you are in, landed hard against Hype and made the bunch worse —
+while the one control the card is actually asking you to press sat
+squeezed at the other end.
+
+So the secondaries get a line of their own, SPREAD rather than bunched:
+Hype at the left edge, Share at the right edge, Chat centred between
+them when it is there and simply absent when it is not. One
+`justify-content: space-between` does all of that, because
+justify-content is resolved per LINE in a wrapped flex container — so
+it spreads that line and leaves the primary, which fills its own line
+completely, untouched. The primary then takes the full width below
+them: it is the point of the card, and on a phone it should be the
+width of a thumb's travel rather than whatever is left over.
+
+The breakpoint is 560px, and it is deliberately neither of the two
+numbers already in the sheet. 390 is the measured point where the
+single row stops FITTING, which is a different question from where it
+stops reading well — it fits at 412 and still looked bunched. 768 is
+where the app's chrome becomes a laptop (gutter, columns, bubble
+width), which is a third question again. 560 is above every phone in
+common use and below any tablet, and by then a card is wide enough
+that one line is comfortable and a full-width button would just look
+stretched.
+
+The wrap above is still the guarantee and this is still only polish:
+above 560 a row that overflows anyway is right-aligned, and never
+sliced.
 
 The smoke group "nothing is cut off" seeds all six primaries — Join,
 Manage, Going, requests, Request, Full — because it used to seed six
@@ -179,6 +201,17 @@ Either one alone is enough to break it, so the smoke test under
 "desktop columns" measures the BEHAVIOUR — scroll the page, assert
 the columns stayed at top 0 — rather than either cause. Fixing one
 and leaving the other cannot fool it.
+
+### An icon-only button must not depend on the icon font
+
+`bx-share-alt` on a button with no label means that if Boxicons fails
+to load — a slow campus network, a blocked CDN — the control is not a
+broken glyph, it is nothing at all. It sits at the far right of the
+action row on a phone, which makes an invisible one worse still. It is
+an inline `<svg class="act-glyph">` now, the same treatment the hype
+flame already had, and the smoke group "the action bar on a phone"
+asserts the element is there. Chat gets away with the font because it
+carries a word; anything that does not needs drawing.
 
 ### Boxicons has no `bx-hot`
 

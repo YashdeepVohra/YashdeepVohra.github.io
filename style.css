@@ -1208,17 +1208,34 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   border-top: 1.5px dotted var(--ash);
 }
 .card-actions > .act:last-child { margin-left: auto; }
-/* AND WHEN IT WRAPS, THE PRIMARY TAKES THE WHOLE LINE. Right-aligned on
-   a line of its own left a 170-200px gap beside it, which reads as a
-   mistake rather than a layout. Measured with the feed at full width:
-   nothing wraps at 390px or above, and below that it is Manage, Going
-   and "N requests" that go over. So below 390 every card gets the same
-   full-width primary, whether or not that particular one would have
-   fitted — a feed where some cards wrap and some don't, at one width,
-   looks worse than either. This is polish ON TOP OF the wrap above,
-   never instead of it: the odd case that still wraps above 390 is
-   merely right-aligned, and still not sliced. */
-@media (max-width: 389px) {
+/* ON A PHONE THE ROW IS TWO ROWS, and that is a decision, not a
+   fallback. Four controls in one line on a phone read as a jumble: the
+   secondary three bunched at the left — and Chat, which only appears
+   once you are in, landed right against Hype and made the bunch worse
+   — while the one control the card is actually asking you to press sat
+   squeezed at the other end.
+
+   So the secondaries get a line of their own, spread rather than
+   bunched: Hype at the left edge, Share at the right edge, Chat
+   centred between them when it is there and simply absent when it is
+   not. `justify-content` is resolved per LINE in a wrapped flex
+   container, which is what lets one rule spread that line while
+   leaving the primary, which fills its own line completely, untouched.
+
+   And the primary takes the full width below them. It is the point of
+   the card; on a phone it should be the width of a thumb's travel, not
+   whatever is left over.
+
+   560px, not 390 and not 768. 390 was the measured point where the
+   single row stops FITTING, which is a different question from where
+   it stops reading well — it fits at 412 and still looked bunched. 768
+   is where the app's chrome becomes a laptop (gutter, columns, bubble
+   width), which is also a different question; by 560 a card is wide
+   enough that one line is comfortable again and a full-width button
+   would just look stretched. This is above every phone in common use
+   and below any tablet. */
+@media (max-width: 560px) {
+  .card-actions { justify-content: space-between; }
   .card-actions > .act:last-child { margin-left: 0; flex: 1 0 100%; }
 }
 .act {
@@ -3037,10 +3054,11 @@ html:not(.kb-open) .chat-footer {
    the outline state — which is what everyone who had NOT hyped saw —
    rendered as nothing at all.
    ===================================================================== */
-.hype-flame {
+.hype-flame, .act-glyph {
   flex-shrink: 0;
   transition: transform 0.2s var(--spring);
 }
+.act:active .act-glyph { transform: scale(0.88); }
 .act.hyped { color: var(--vibe-food); }
 .act.hyped .hype-flame { animation: flameIn 0.34s var(--spring); }
 .act:active .hype-flame { transform: scale(0.88); }

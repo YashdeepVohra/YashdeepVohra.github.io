@@ -1170,6 +1170,71 @@ group('sharing an event');
 }
 
 /* ------------------------------------------------------------------ */
+group('the action bar on a phone');
+{
+  // Four controls on one line read as a jumble on a phone: the three
+  // secondaries bunched at the left — and Chat, which only shows once
+  // you are in, landed hard against Hype and made the bunch worse —
+  // while the one control the card is asking you to press was squeezed
+  // at the other end. Two rows now: Hype at the left edge, Share at the
+  // right edge, Chat centred between them when it exists, and the
+  // primary across the full width below.
+  const bar = await page.evaluate(async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const { state } = await import('/js/state/store.js');
+    const ev = await import('/js/services/eventsService.js');
+    const now = Date.now();
+    const rows = [
+      { k: 'Join',   hostUid: 'a',  participantUids: ['a', 'b'] },
+      { k: 'Manage', hostUid: 'me', participantUids: ['me'] },
+      { k: 'Going',  hostUid: 'a',  participantUids: ['a', 'b', 'me'] }
+    ];
+    state.eventCache = {}; state.eventOrder = [];
+    rows.forEach((row, i) => {
+      const id = 'b' + i;
+      state.eventCache[id] = Object.assign({ id, title: 'Chai ' + i, place: 'Lawn',
+        tag: '\u2615 Chill', hypedUids: ['a'], startTime: now - 6e4, expiresAt: now + 72e5,
+        description: '', pendingUids: [], unconfirmedUids: [] }, row);
+      state.eventOrder.push(id);
+    });
+    state.recapOrder = []; state.recapDone = true; state.currentLiveFilter = 'All';
+    window.switchScreen('home'); window.showTab('events'); ev.renderEvents();
+    await wait(350);
+
+    return [...document.querySelectorAll('#events .event')].map((card, i) => {
+      const row = card.querySelector('.card-actions');
+      const rb = row.getBoundingClientRect();
+      const cs = getComputedStyle(row);
+      const pl = parseFloat(cs.paddingLeft), pr = parseFloat(cs.paddingRight);
+      const kids = [...row.children];
+      const hype = kids[0].getBoundingClientRect();
+      const primary = kids[kids.length - 1].getBoundingClientRect();
+      const share = kids.find((k) => k.getAttribute('aria-label') === 'Share').getBoundingClientRect();
+      return {
+        k: rows[i].k,
+        hypeAtLeft: Math.abs(hype.left - (rb.left + pl)) < 1.5,
+        shareAtRight: Math.abs((rb.right - pr) - share.right) < 1.5,
+        primaryOnItsOwnLine: primary.top >= hype.bottom - 4,
+        primaryFullWidth: Math.abs(primary.width - (rb.width - pl - pr)) < 1.5,
+        // Nothing here may be an icon with no label and no fallback.
+        shareHasGlyph: !!kids.find((k) => k.getAttribute('aria-label') === 'Share').querySelector('svg')
+      };
+    });
+  });
+
+  ok('hype sits at the left edge on every card',
+     bar.every((b) => b.hypeAtLeft), JSON.stringify(bar));
+  ok('and share at the right edge, chat or no chat',
+     bar.every((b) => b.shareAtRight), JSON.stringify(bar));
+  ok('the primary gets a line of its own',
+     bar.every((b) => b.primaryOnItsOwnLine), JSON.stringify(bar));
+  ok('and the whole width of it',
+     bar.every((b) => b.primaryFullWidth), JSON.stringify(bar));
+  ok('share is drawn, not set in the icon font \u2014 it has no label to fall back on',
+     bar.every((b) => b.shareHasGlyph));
+}
+
+/* ------------------------------------------------------------------ */
 group('an event that has already ended');
 {
   // Tapping a shared card used to swap the tab whatever the event had
