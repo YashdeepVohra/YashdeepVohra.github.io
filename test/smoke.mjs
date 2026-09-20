@@ -1172,13 +1172,23 @@ group('sharing an event');
 /* ------------------------------------------------------------------ */
 group('the action bar on a phone');
 {
-  // Four controls on one line read as a jumble on a phone: the three
-  // secondaries bunched at the left — and Chat, which only shows once
-  // you are in, landed hard against Hype and made the bunch worse —
-  // while the one control the card is asking you to press was squeezed
-  // at the other end. Two rows now: Hype at the left edge, Share at the
-  // right edge, Chat centred between them when it exists, and the
-  // primary across the full width below.
+  // Two things were wrong and only one of them was the arrangement.
+  //
+  // The arrangement: four controls on one line read as a jumble, and
+  // the one control the card is asking you to press was squeezed at the
+  // end of it. Two rows now — Hype and Chat as a pair on the left,
+  // Share alone on the right, the primary across the full width below.
+  // Spreading all three put Chat in the middle of nowhere; the two that
+  // act on the event belong together, and Share, which leaves the app,
+  // gets the far edge to itself.
+  //
+  // The spacing, which is what actually made it look unmanaged: `.act`
+  // carries `padding: 8px 14px` INSIDE its box, so the flame sat 30px
+  // from the card's edge while the title, the place and the byline
+  // above it all start at 16. The row was indented from the card it
+  // belongs to. So these assertions are against the TITLE, never
+  // against the row's own padding box — the glyphs have to land on the
+  // same column the words do.
   const bar = await page.evaluate(async () => {
     const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     const { state } = await import('/js/state/store.js');
@@ -1202,34 +1212,46 @@ group('the action bar on a phone');
     await wait(350);
 
     return [...document.querySelectorAll('#events .event')].map((card, i) => {
+      const cb = card.getBoundingClientRect();
+      const title = card.querySelector('.event-title').getBoundingClientRect();
       const row = card.querySelector('.card-actions');
-      const rb = row.getBoundingClientRect();
-      const cs = getComputedStyle(row);
-      const pl = parseFloat(cs.paddingLeft), pr = parseFloat(cs.paddingRight);
       const kids = [...row.children];
-      const hype = kids[0].getBoundingClientRect();
+      const hypeEl = kids[0];
+      const shareEl = kids.find((k) => k.getAttribute('aria-label') === 'Share');
+      const chatEl = kids.find((k) => (k.innerText || '').trim() === 'Chat');
+      const hype = hypeEl.getBoundingClientRect();
       const primary = kids[kids.length - 1].getBoundingClientRect();
-      const share = kids.find((k) => k.getAttribute('aria-label') === 'Share').getBoundingClientRect();
+      // The GLYPH, not the button box: the box is pulled out by its own
+      // padding precisely so the glyph lands on the column.
+      const flame = hypeEl.querySelector('svg').getBoundingClientRect();
+      const shareGlyph = shareEl.querySelector('svg');
+      const sg = shareGlyph && shareGlyph.getBoundingClientRect();
+      const gutter = title.left - cb.left;
       return {
         k: rows[i].k,
-        hypeAtLeft: Math.abs(hype.left - (rb.left + pl)) < 1.5,
-        shareAtRight: Math.abs((rb.right - pr) - share.right) < 1.5,
+        flameOnTextColumn: Math.abs(flame.left - title.left) < 1.5,
+        shareOnTextColumn: !!sg && Math.abs((cb.right - gutter) - sg.right) < 1.5,
+        // Chat belongs NEXT TO Hype, not adrift in the middle.
+        chatBesideHype: !chatEl || (chatEl.getBoundingClientRect().left - hype.right) < 12,
         primaryOnItsOwnLine: primary.top >= hype.bottom - 4,
-        primaryFullWidth: Math.abs(primary.width - (rb.width - pl - pr)) < 1.5,
+        primaryOnTextColumn: Math.abs(primary.left - title.left) < 1.5 &&
+                             Math.abs((cb.right - primary.right) - gutter) < 1.5,
         // Nothing here may be an icon with no label and no fallback.
-        shareHasGlyph: !!kids.find((k) => k.getAttribute('aria-label') === 'Share').querySelector('svg')
+        shareHasGlyph: !!shareGlyph
       };
     });
   });
 
-  ok('hype sits at the left edge on every card',
-     bar.every((b) => b.hypeAtLeft), JSON.stringify(bar));
-  ok('and share at the right edge, chat or no chat',
-     bar.every((b) => b.shareAtRight), JSON.stringify(bar));
+  ok('the flame lands on the same column as the title, not 14px in',
+     bar.every((b) => b.flameOnTextColumn), JSON.stringify(bar));
+  ok('and share on the column at the other edge',
+     bar.every((b) => b.shareOnTextColumn), JSON.stringify(bar));
+  ok('chat sits beside hype, not adrift in the middle',
+     bar.every((b) => b.chatBesideHype), JSON.stringify(bar));
   ok('the primary gets a line of its own',
      bar.every((b) => b.primaryOnItsOwnLine), JSON.stringify(bar));
-  ok('and the whole width of it',
-     bar.every((b) => b.primaryFullWidth), JSON.stringify(bar));
+  ok('and spans the text column exactly',
+     bar.every((b) => b.primaryOnTextColumn), JSON.stringify(bar));
   ok('share is drawn, not set in the icon font \u2014 it has no label to fall back on',
      bar.every((b) => b.shareHasGlyph));
 }

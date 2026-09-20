@@ -1235,9 +1235,26 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
    would just look stretched. This is above every phone in common use
    and below any tablet. */
 @media (max-width: 560px) {
-  .card-actions { justify-content: space-between; }
-  .card-actions > .act:last-child { margin-left: 0; flex: 1 0 100%; }
+  /* Hype and Chat as a pair on the left, Share alone on the right. An
+     auto margin on Share, not space-between: spreading all three put
+     Chat in the middle of nowhere, and the two that both act on the
+     event belong together. Share is a different kind of verb — it
+     leaves the app — so it gets the far edge to itself. */
+  .card-actions > .act[aria-label="Share"] { margin-left: auto; margin-right: -14px; }
+  .card-actions > .act:last-child { margin-left: 0; margin-right: 0; flex: 1 0 100%; }
 }
+/* A GHOST BUTTON AT THE END OF A LINE IS PULLED OUT BY ITS OWN PADDING.
+   This is the spacing that was wrong, and it was wrong everywhere, not
+   just on a phone. `.act` carries `padding: 8px 14px` INSIDE its box,
+   so the flame sat 30px from the card's edge while the title, the
+   place and the byline above it all start at 16px. The row read as
+   indented from the card it belongs to.
+   Pulling the end button out by exactly its own horizontal padding
+   puts its GLYPH on the text column at 16px, and leaves the tap target
+   the size it was. Only transparent buttons get this: a filled or
+   outlined one is aligned by its border, which already sits on the
+   column, which is why the primary is untouched. */
+.card-actions > .act:first-child { margin-left: -14px; }
 .act {
   width: auto; flex-shrink: 0; max-width: 100%;
   padding: 8px 14px;

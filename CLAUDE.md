@@ -107,8 +107,11 @@ Each line is the whole rule. The file after it is the argument for it.
   its second stat.
 - The card's action row WRAPS, and must keep wrapping; the primary is
   held right by `margin-left: auto`, never a `flex:1` spacer. Below
-  560px it is two rows instead: Hype at the left edge, Share at the
-  right, Chat centred when it exists, primary full width beneath.
+  560px it is two rows instead: Hype and Chat paired at the left, Share
+  at the right, primary full width beneath.
+- A transparent button at the end of a row is pulled out by its own
+  padding, so its GLYPH lands on the text column rather than 14px
+  inside it. Filled and outlined buttons align by their border.
 - Nothing on screen may be sliced or reach past its column. The smoke
   group "nothing is cut off" holds this at 320, 390 and 1280.
 - No `overflow: auto` box may be taller than the window with nothing to

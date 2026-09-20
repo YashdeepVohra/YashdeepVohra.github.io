@@ -55,15 +55,31 @@ once you are in, landed hard against Hype and made the bunch worse —
 while the one control the card is actually asking you to press sat
 squeezed at the other end.
 
-So the secondaries get a line of their own, SPREAD rather than bunched:
-Hype at the left edge, Share at the right edge, Chat centred between
-them when it is there and simply absent when it is not. One
-`justify-content: space-between` does all of that, because
-justify-content is resolved per LINE in a wrapped flex container — so
-it spreads that line and leaves the primary, which fills its own line
-completely, untouched. The primary then takes the full width below
-them: it is the point of the card, and on a phone it should be the
-width of a thumb's travel rather than whatever is left over.
+So the secondaries get a line of their own: Hype and Chat as a PAIR at
+the left, Share alone at the right. An auto margin on Share, not
+`space-between` — spreading all three put Chat in the middle of
+nowhere. The two that act on the event belong together; Share is a
+different kind of verb, it leaves the app, so it gets the far edge to
+itself. The primary then takes the full width below them: it is the
+point of the card, and on a phone it should be the width of a thumb's
+travel rather than whatever is left over.
+
+### A ghost button at the end of a line is pulled out by its own padding
+
+This is the spacing that was wrong, and it was wrong at EVERY width,
+not just on a phone. `.act` carries `padding: 8px 14px` inside its box,
+so the flame sat 30px from the card's edge while the title, the place
+and the byline above it all start at 16. The row read as indented from
+the card it belongs to, which is what made the whole thing look
+unmanaged however the buttons were arranged.
+
+Pulling the end button out by exactly its own horizontal padding puts
+its GLYPH on the text column at 16px and leaves the tap target the size
+it was. Only transparent buttons get this: a filled or outlined one is
+aligned by its border, which already sits on the column, which is why
+the primary is untouched. The smoke group measures the glyphs against
+the TITLE rather than against the row's own padding box — measuring
+against the box is what would hide this bug.
 
 The breakpoint is 560px, and it is deliberately neither of the two
 numbers already in the sheet. 390 is the measured point where the
