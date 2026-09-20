@@ -205,6 +205,69 @@ test/               stub.js + smoke.mjs + contrast.mjs
   the band's height exactly, which is why `.stub .poster` is a fixed
   height; a notch a few pixels off the seam looks like a bug. A browser
   without mask support just gets straight sides.
+- **The card's action row WRAPS, and it must keep wrapping.** Five
+  things live there - hype, chat, share, the primary action - and
+  `.act` is deliberately un-shrinkable, so a host looking at their own
+  card asks for about 346px of row. A 320px phone gives the card 256px
+  and the chat-open middle column gives it 296px, and the card clips,
+  so Manage was sliced clean off its right edge; Going and "2 requests"
+  went the same way. It shipped the day Share joined the row.
+
+  Width media queries cannot fix this, and that is the part worth
+  remembering: the narrow case is not a narrow VIEWPORT. The feed
+  column beside an open chat is 360px on a 1280px laptop, where no
+  `max-width` query would ever fire. `flex-wrap: wrap` is the only
+  answer that holds at every container width.
+
+  The primary is held at the far end by `margin-left: auto` on the last
+  child, not by a `flex:1` spacer. A spacer is a flex ITEM: the moment
+  the row wraps it claims a whole line to itself. An auto margin just
+  stops mattering.
+
+  The smoke group "nothing is cut off" now seeds all six primaries -
+  Join, Manage, Going, requests, Request, Full - because it used to
+  seed six events hosted by somebody else and joined by nobody, which
+  is the NARROWEST row the app can draw. The bug lived in the three
+  rows the test never rendered.
+
+- **A cross-origin iframe's scrollbars are reachable only through
+  `scrolling="no"`.** The YouTube and Spotify embeds sit in a wrapper
+  with `overflow: hidden`, which clips the FRAME'S box and does nothing
+  at all to the bars drawn inside it - no stylesheet of ours crosses
+  that boundary. A chat bubble is 76% of the thread, so Spotify's
+  player gets roughly 260px and lays itself out wider, and on Windows a
+  scrollbar takes real space: the horizontal bar ate into the 152px,
+  which brought a vertical bar, which narrowed the content again. Two
+  scrollbars around one song, invisible on a Mac because overlay
+  scrollbars float over the artwork. The attribute is deprecated in the
+  HTML spec and implemented by every engine; there is no replacement.
+  Their sizing lives in `.media-embed` in the stylesheet now rather
+  than in a `style` attribute, so there is one place to change it.
+
+- **A finished event has THREE states in a chat, not two.** It is still
+  on; it is over but still has a stub in Recap; or it is over and aged
+  out, and there is no card for it anywhere in the app. Tapping the
+  card used to swap the tab whatever it had become - and on a phone
+  that closed the conversation on the way - so the reward for a dead
+  event was an empty tab. An event missing from the cache entirely read
+  as `ended === false` and went to LIVE NOW, which is what it looked
+  like from the outside. `showSharedEvent` asks `inRecap()` first now
+  and toasts instead of travelling; the embed says View, Recap or
+  nothing to match, and a dead one carries `.dead` so it stops looking
+  tappable. It stays an `<a>` either way - the link still means
+  something pasted somewhere else.
+
+  One trap on the way: Recap is PAGED. `recapOrder` holds only what
+  `loadRecap` has walked back to, and `renderEvents` builds stubs from
+  that list, so an event well inside its window can still have no card.
+  The id is pushed into `recapOrder` before the tab swaps. It is
+  already in the cache and `inRecap` has just vouched for it, so this
+  costs no read.
+
+  And in a test, `window.showTab` is app.js's `goToTab`, which closes
+  any open chat on its way. Use `ui.showTab` when the point of the test
+  is that the chat stays open.
+
 - **A shared link is `?e=<id>`, and that is not cosmetic.** `firebase.json`
   has no `hosting` block, so there is no rewrite: a pretty `/e/<id>` would
   404 on the static host before any JavaScript ran. `shareRules.js` still

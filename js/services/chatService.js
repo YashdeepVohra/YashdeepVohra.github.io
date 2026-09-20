@@ -31,6 +31,7 @@ import { primeEvent } from './shareService.js';
 import { openProfileScreen } from './profileService.js';
 import { isBlocked } from './blockService.js';
 import { vibeColor } from './eventsService.js';
+import { inRecap } from './recapRules.js';
 import { searchPeople } from './searchService.js';
 import {
   primeUsers, fetchUser, displayNameFor, usernameFor, avatarFor,
@@ -1352,22 +1353,33 @@ function fillEventEmbeds(box) {
   const nodes = box.querySelectorAll("[data-event-embed]");
   if (!nodes.length) return;
 
+  // A finished event is not automatically a dead one: it keeps a stub
+  // in Recap for as long as recapRules says it earned. So the card has
+  // THREE states, not two, and the button has to name which — View for
+  // something still on, Recap for something that has a stub to go to,
+  // and nothing at all once there is no card anywhere to land on. The
+  // `dead` class is what stops it looking tappable; showSharedEvent
+  // refuses the trip either way, but a card that looks like a link and
+  // does nothing is its own small bug.
   const paint = (el, e) => {
     if (!e) {
-      el.classList.add("gone");
+      el.classList.add("gone", "dead");
       el.querySelector(".event-embed-title").innerText = "This event has ended";
       el.querySelector(".event-embed-go").innerText = "";
       return;
     }
-    const live = Date.now() >= e.startTime && e.expiresAt > Date.now();
-    const ended = e.expiresAt <= Date.now();
+    const now = Date.now();
+    const live = now >= e.startTime && e.expiresAt > now;
+    const ended = e.expiresAt <= now;
+    const stub = ended && inRecap(e, now, state.uid);
     el.classList.toggle("gone", ended);
+    el.classList.toggle("dead", ended && !stub);
     el.style.setProperty("--vibe", vibeColor(e.tag));
     el.querySelector(".event-embed-tag").innerText = e.tag || "";
     el.querySelector(".event-embed-title").innerText = e.title || "";
     el.querySelector(".event-embed-meta").innerText =
       [ended ? "Ended" : live ? "Happening now" : "Starting soon", e.place].filter(Boolean).join(" \u00b7 ");
-    el.querySelector(".event-embed-go").innerText = ended ? "" : "View";
+    el.querySelector(".event-embed-go").innerText = ended ? (stub ? "Recap" : "") : "View";
   };
 
   nodes.forEach((el) => {

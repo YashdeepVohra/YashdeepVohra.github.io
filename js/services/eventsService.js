@@ -628,6 +628,20 @@ export function openSharedEvent(eventId, ev) {
 }
 
 /**
+ * Is there anywhere for this event to land?
+ *
+ * A live event is in the feed. A finished one is in Recap, but only
+ * until recapRules ages it out — after that there is no card for it
+ * anywhere in the app, and an event the viewer has never seen is not
+ * in the cache at all (fillEventEmbeds already primed it; if it is
+ * still missing, the document is gone).
+ */
+function hasSomewhereToLand(e, now = Date.now()) {
+  if (!e) return false;
+  return e.expiresAt > now || inRecap(e, now, state.uid);
+}
+
+/**
  * Two layouts, two right answers.
  *
  * On a laptop the thread and the feed are different COLUMNS, so there
@@ -641,7 +655,34 @@ export function openSharedEvent(eventId, ev) {
  */
 export function showSharedEvent(eventId) {
   const e = state.eventCache[eventId];
-  const ended = e && e.expiresAt <= Date.now();
+  const now = Date.now();
+
+  // GOING NOWHERE IS BETTER THAN GOING SOMEWHERE EMPTY. This used to
+  // swap the tab whatever the event turned out to be — and on a phone
+  // that also closed the conversation you were reading. For an event
+  // that had ended and aged out of Recap, or one whose document is
+  // gone entirely, the reward for all that was an empty tab: the card
+  // it scrolled to does not exist. An undefined event also read as
+  // `ended === false`, so it went to Live Now rather than Recap, which
+  // is how a finished event ended up bouncing people into the events
+  // tab. Say so and stay put instead.
+  if (!hasSomewhereToLand(e, now)) {
+    toast("That event has ended.");
+    return false;
+  }
+
+  const ended = e.expiresAt <= now;
+
+  // Recap is PAGED — `recapOrder` holds only what loadRecap has walked
+  // back to so far, and renderEvents builds cards from that list. An
+  // event still inside its window can easily not be in it yet, so the
+  // tab would swap to a stub that never gets built. It is already in
+  // the cache, and inRecap() has just vouched for it, so adding the id
+  // costs nothing and no read.
+  if (ended && !(state.recapOrder || []).includes(eventId)) {
+    state.recapOrder = (state.recapOrder || []).concat(eventId);
+  }
+
   const land = () => setTimeout(() => {
     // After the tab has actually swapped, or there is nothing to find.
     if (!document.getElementById(`event-${eventId}`)) renderEvents();
@@ -660,7 +701,7 @@ export function showSharedEvent(eventId) {
     }
     showTab(ended ? "recap" : "events");
     land();
-    return;
+    return true;
   }
 
   const backTo = state.currentOtherUid;
@@ -681,6 +722,7 @@ export function showSharedEvent(eventId) {
       onTap: () => window.startChatWithUid?.(backTo)
     }), 420);
   }
+  return true;
 }
 
 /* ---------------------------------------------------------------------
@@ -1007,12 +1049,16 @@ export function renderEvents() {
       primary = `<button class="act primary" onclick="window.joinEvent('${id}')">Join</button>`;
     }
 
+    // No spacer div between the secondary actions and the primary one.
+    // A spacer is a flex ITEM, so the moment the row is allowed to wrap
+    // it claims a whole line to itself; an auto margin on the primary
+    // does the same job on one line and simply stops mattering on two.
+    // See .card-actions in style.css for why the row wraps at all.
     const actions = `
       <div class="card-actions">
         ${hypeBtn}
         ${(isHost || hasJoined) ? chatBtn : ""}
         ${shareBtn}
-        <div style="flex:1"></div>
         ${primary}
       </div>`;
 

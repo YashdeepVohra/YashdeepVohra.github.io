@@ -146,7 +146,9 @@ export function formatMessage(text, isMediaOnly = false) {
 
   return safeText.replace(urlRegex, function (escapedUrl) {
     const rawUrl = decodeEntities(escapedUrl);
-    const margin = isMediaOnly ? "0" : "8px";
+    // An embed that IS the message needs no gap above it; one that
+    // follows text does.
+    const spaced = isMediaOnly ? "" : " spaced";
     const lead = isMediaOnly ? "" : "<br>";
 
     // ---- One of ours ----
@@ -157,11 +159,10 @@ export function formatMessage(text, isMediaOnly = false) {
     const videoId = youTubeId(rawUrl);
     if (/^[A-Za-z0-9_-]{6,20}$/.test(videoId)) {
       return `${lead}
-        <div style="margin-top: ${margin}; width: 100%; max-width: 280px; border-radius: 16px; overflow: hidden; border: 1px solid var(--ash); background: #18181b; position: relative; min-height: 160px;">
-          <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #ff0000; font-size: 36px; z-index: 1;">
-            <i class='bx bxl-youtube bx-flashing'></i>
-          </div>
-          <iframe width="100%" height="160" src="https://www.youtube.com/embed/${videoId}" frameborder="0" style="display: block; position: relative; z-index: 2;" allowfullscreen></iframe>
+        <div class="media-embed yt${spaced}">
+          <i class='bx bxl-youtube bx-flashing' aria-hidden="true"></i>
+          <iframe src="https://www.youtube.com/embed/${videoId}" title="YouTube"
+                  scrolling="no" frameborder="0" loading="lazy" allowfullscreen></iframe>
         </div>`;
     }
 
@@ -169,11 +170,11 @@ export function formatMessage(text, isMediaOnly = false) {
     const embedUrl = spotifyEmbed(rawUrl);
     if (embedUrl) {
       return `${lead}
-        <div style="margin-top: ${margin}; width: 100%; max-width: 280px; border-radius: 16px; overflow: hidden; border: 1px solid var(--ash); background: #121212; position: relative; min-height: 152px;">
-          <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #1ed760; font-size: 32px; z-index: 1;">
-            <i class='bx bxl-spotify bx-flashing'></i>
-          </div>
-          <iframe src="${escapeHtml(embedUrl)}" width="100%" height="152" frameborder="0" style="display: block; position: relative; z-index: 2;" allowfullscreen="" allow="clipboard-write; encrypted-media; picture-in-picture" loading="lazy"></iframe>
+        <div class="media-embed sp${spaced}">
+          <i class='bx bxl-spotify bx-flashing' aria-hidden="true"></i>
+          <iframe src="${escapeHtml(embedUrl)}" title="Spotify"
+                  scrolling="no" frameborder="0" loading="lazy" allowfullscreen=""
+                  allow="clipboard-write; encrypted-media; picture-in-picture"></iframe>
         </div>`;
     }
 

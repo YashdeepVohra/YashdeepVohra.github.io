@@ -1170,6 +1170,143 @@ group('sharing an event');
 }
 
 /* ------------------------------------------------------------------ */
+group('an event that has already ended');
+{
+  // Tapping a shared card used to swap the tab whatever the event had
+  // become — and on a phone it closed the conversation on the way. An
+  // event that is over has a stub in Recap only for as long as
+  // recapRules says it earned; after that there is no card anywhere,
+  // so the reward for closing the chat was an empty tab. Worse, an
+  // event missing from the cache entirely read as `ended === false`,
+  // so it went to LIVE NOW — a finished event bouncing you into the
+  // events tab, which is exactly what it looked like.
+  const r = await page.evaluate(async () => {
+    const wait = (ms) => new Promise((res) => setTimeout(res, ms));
+    const { state } = await import('/js/state/store.js');
+    const chat = await import('/js/services/chatService.js');
+    const ev = await import('/js/services/eventsService.js');
+    const sr = await import('/js/services/shareRules.js');
+    // ui.showTab, NOT window.showTab: the one on window is app.js's
+    // goToTab, which closes any open chat on its way to the tab. That
+    // is right for a nav button and wrong here — it would close the
+    // conversation this group is trying to prove stays open.
+    const ui = await import('/js/utils/ui.js');
+    const now = Date.now();
+    const HOUR = 36e5;
+
+    const mk = (id, expiresAt) => ({ id, title: 'Chai ' + id, place: 'Back lawn',
+      tag: '\u2615 Chill', hostUid: 'a', participantUids: ['a', 'b'], hypedUids: [],
+      startTime: now - 3 * HOUR, expiresAt, description: '',
+      pendingUids: [], unconfirmedUids: [] });
+
+    // Over ten minutes ago: earned a stub, still in Recap.
+    // Over three days ago: past even the 48h ceiling, gone from Recap.
+    state.eventCache.endedFresh = mk('endedFresh', now - 10 * 6e4);
+    state.eventCache.endedOld = mk('endedOld', now - 72 * HOUR);
+    state.eventOrder = []; state.recapOrder = []; state.recapDone = true;
+
+    state.currentChat = 'a_me'; state.currentChatType = 'direct';
+    state.currentChatStatus = 'unlocked'; state.currentChatData = { unreadByUid: '' };
+    state.currentOtherUid = 'a'; state.currentEventData = null;
+    window.switchScreen('chatScreen');
+    window.__docs = [
+      { id: 'e1', data: () => ({ senderUid: 'a', text: sr.eventLink('endedFresh'), time: now - 6e4 }) },
+      { id: 'e2', data: () => ({ senderUid: 'a', text: sr.eventLink('endedOld'), time: now - 5e4 }) }
+    ];
+    chat.loadMessages();
+    await wait(450);
+
+    const box = document.getElementById('messages');
+    const cardOf = (id) => box.querySelector('[data-event-embed="' + id + '"]');
+    const read = (id) => {
+      const c = cardOf(id);
+      return c && { gone: c.classList.contains('gone'), dead: c.classList.contains('dead'),
+                    go: c.querySelector('.event-embed-go').innerText.trim() };
+    };
+    const fresh = read('endedFresh');
+    const old = read('endedOld');
+
+    const tabNow = () => ['eventsTab', 'recapTab', 'chatsTab']
+      .find((t) => !document.getElementById(t).classList.contains('hidden')) || 'none';
+    const chatOpen = () => !document.getElementById('chatScreen').classList.contains('hidden');
+
+    // 1. The dead one must not move anything at all.
+    ui.showTab('chats');
+    const deadTook = ev.showSharedEvent('endedOld');
+    await wait(250);
+    const afterDead = { tab: tabNow(), chat: chatOpen() };
+
+    // 2. Neither must an event nobody has ever seen.
+    const unknownTook = ev.showSharedEvent('neverHeardOfIt');
+    await wait(250);
+    const afterUnknown = { tab: tabNow(), chat: chatOpen() };
+
+    // 3. The one still in Recap goes to RECAP, and lands on a real
+    //    stub — recapOrder is paged, so the id has to be put in it or
+    //    renderEvents builds nothing to scroll to.
+    const freshTook = ev.showSharedEvent('endedFresh');
+    await wait(500);
+    const afterFresh = { tab: tabNow(), inOrder: (state.recapOrder || []).includes('endedFresh'),
+                         stub: !!document.getElementById('event-endedFresh') };
+
+    chat.closeChat({ silent: true });
+    window.showTab('events');
+    await wait(200);
+    return { fresh, old, deadTook, unknownTook, freshTook, afterDead, afterUnknown, afterFresh };
+  });
+
+  ok('a finished event still in Recap offers Recap, not View',
+     r.fresh && r.fresh.gone && !r.fresh.dead && r.fresh.go === 'Recap', JSON.stringify(r.fresh));
+  ok('one that has aged out offers nothing and is marked dead',
+     r.old && r.old.gone && r.old.dead && r.old.go === '', JSON.stringify(r.old));
+  ok('tapping a dead card does not change the tab or close the chat',
+     r.deadTook === false && r.afterDead.tab === 'chatsTab' && r.afterDead.chat === true,
+     JSON.stringify(r.afterDead));
+  ok('nor does an event that is not in the cache at all',
+     r.unknownTook === false && r.afterUnknown.tab === 'chatsTab' && r.afterUnknown.chat === true,
+     JSON.stringify(r.afterUnknown));
+  ok('one still in Recap opens Recap and lands on a real stub',
+     r.freshTook === true && r.afterFresh.tab === 'recapTab' &&
+     r.afterFresh.inOrder && r.afterFresh.stub, JSON.stringify(r.afterFresh));
+}
+
+/* ------------------------------------------------------------------ */
+group('a song in a thread');
+{
+  // The Spotify player drew a scrollbar down its side AND along its
+  // bottom on Windows. The frame is cross-origin, so no rule of ours
+  // reaches inside it and the wrapper's overflow: hidden clips the
+  // frame's box without touching the bars drawn within it. The only
+  // lever is the attribute, and it cannot be seen on a Mac, where
+  // scrollbars float over the content instead of taking space.
+  const media = await page.evaluate(async () => {
+    const f = await import('/js/utils/formatters.js');
+    const wrap = document.createElement('div');
+    wrap.innerHTML =
+      f.formatMessage('https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT', true) +
+      f.formatMessage('https://www.youtube.com/watch?v=dQw4w9WgXcQ', true) +
+      f.formatMessage('look at this https://open.spotify.com/album/1ATL5GLyefJaxhQzSPVrLX', false);
+    const frames = [...wrap.querySelectorAll('iframe')];
+    const boxes = [...wrap.querySelectorAll('.media-embed')];
+    return {
+      frames: frames.length,
+      allNoScroll: frames.every((i) => i.getAttribute('scrolling') === 'no'),
+      spotifySrc: frames[0] && frames[0].getAttribute('src'),
+      spaced: boxes.map((b) => b.classList.contains('spaced')),
+      noInlineWidths: boxes.every((b) => !b.getAttribute('style'))
+    };
+  });
+
+  ok('both players render as frames', media.frames === 3, String(media.frames));
+  ok('and neither is allowed to draw a scrollbar', media.allNoScroll);
+  ok('the spotify frame points at the embed host',
+     /^https:\/\/open\.spotify\.com\/embed\/track\//.test(media.spotifySrc || ''), media.spotifySrc);
+  ok('an embed that IS the message has no gap above it, one after text does',
+     JSON.stringify(media.spaced) === JSON.stringify([false, false, true]), JSON.stringify(media.spaced));
+  ok('the sizing lives in the stylesheet, not in a style attribute', media.noInlineWidths);
+}
+
+/* ------------------------------------------------------------------ */
 group('the minute tick');
 {
   // A tick once a minute is what moves an event out of Live Now when
@@ -1686,14 +1823,31 @@ group('nothing is cut off');
       state.userCache = Object.fromEntries(['me', 'a', 'b', 'c'].map((u) => [u, mk(u)]));
       state.following = []; state.orbitUids = [];
       const tags = ['☕ Chill', '\u{1F355} Food', '\u{1F389} Party', '\u{1F4DA} Study', '\u{1F3C0} Sports'];
+      // THE ACTION ROW IS WIDEST WHEN THE CARD IS YOURS, and this used
+      // to seed six identical events hosted by somebody else, joined by
+      // nobody. That is the NARROWEST row the app can draw - hype,
+      // share, Join - so the day Share was added to the row, the three
+      // variants that then overflowed (Manage, Going and "2 requests",
+      // each of which also brings the Chat button along) were the three
+      // this never rendered. Every variant is seeded now.
+      const rows = [
+        { hostUid: 'a', participantUids: ['a', 'b'] },                  // Join
+        { hostUid: 'me', participantUids: ['me'] },                     // Chat + Manage
+        { hostUid: 'a', participantUids: ['a', 'b', 'me'] },            // Chat + Going
+        { hostUid: 'me', participantUids: ['me'], pendingUids: ['b', 'c'] }, // Chat + 2 requests
+        { hostUid: 'a', participantUids: ['a'], requiresApproval: true },    // Request
+        { hostUid: 'a', participantUids: ['a', 'b'], maxCapacity: 2 }        // Full
+      ];
       state.eventCache = {}; state.eventOrder = [];
-      for (let i = 0; i < 6; i++) {
+      rows.forEach((row, i) => {
         const id = 'o' + i;
-        state.eventCache[id] = { id, title: 'Chai + assignment panic ' + i, place: 'Nescafe, back lawn',
-          tag: tags[i % 5], hostUid: 'a', participantUids: ['a', 'b'], hypedUids: ['a'],
-          startTime: now - 6e4, expiresAt: now + 36e5, description: '', pendingUids: [], unconfirmedUids: [] };
+        state.eventCache[id] = Object.assign({
+          id, title: 'Chai + assignment panic ' + i, place: 'Nescafe, back lawn',
+          tag: tags[i % 5], hypedUids: ['a'],
+          startTime: now - 6e4, expiresAt: now + 36e5, description: '',
+          pendingUids: [], unconfirmedUids: [] }, row);
         state.eventOrder.push(id);
-      }
+      });
       state.recapOrder = []; state.recapDone = true; state.currentLiveFilter = 'All';
       document.getElementById('loading-screen').classList.add('hidden');
       document.querySelector('.app-frame').classList.remove('hidden');
@@ -1713,6 +1867,8 @@ group('nothing is cut off');
           m('x3', 'me', 'hello', { editedAt: now - 500, reactions: { a: '\u{1F525}' } }),
           m('x4', 'me', 'https://livesociya.com/?e=o0'),
           m('x5', 'a', 'https://example.com/a/very/long/url/that/will/not/wrap/at/all/ever/no/spaces/here'),
+          // An embed is the widest fixed thing a bubble ever holds.
+          m('x5b', 'a', 'https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT'),
           m('x6', 'me', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
         ];
         chat.loadMessages();

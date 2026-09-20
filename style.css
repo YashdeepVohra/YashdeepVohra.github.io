@@ -808,6 +808,13 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 .event-embed-go:empty { display: none; }
 .event-embed.gone { border-left-color: var(--ash); opacity: 0.7; }
 .event-embed.gone .event-embed-title { color: var(--fog); }
+/* Ended AND aged out of Recap: there is no card left to open, so it
+   stops offering. It stays an <a> because the link still copies and
+   still means something outside the app - it just no longer pretends
+   a tap will go anywhere. */
+.event-embed.dead { cursor: default; }
+.event-embed.dead:hover { border-color: var(--ash); }
+.event-embed.dead:active { transform: none; }
 /* Inside a sent bubble the card keeps the app's own colours rather
    than inheriting the bubble's, or it becomes unreadable. */
 .msg-sent .event-embed, .msg-received .event-embed { color: var(--ink); }
@@ -1178,14 +1185,30 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 /* ---- Action bar ---- */
 /* A dotted rule, borrowed straight from Caldera. It is one property,
    it reads as a tear-off line on a printed listing, and it separates
-   the actions from the content without adding another box. */
+   the actions from the content without adding another box.
+
+   AND THE ROW WRAPS, which is the whole fix for a bug that shipped the
+   day Share was added to it. Five things could sit here — hype, chat,
+   share, a spacer and the primary — and none of them could shrink,
+   so a host looking at their own card needed about 346px of row inside
+   a card that gives 256px on a 320px phone and 296px in the chat-open
+   middle column. The card clips (overflow: hidden), so Manage was
+   simply sliced off its right edge; Going and Request went the same
+   way. Wrapping is the only answer that holds at EVERY container
+   width, which matters because the narrow case here is not a narrow
+   VIEWPORT — the feed column beside an open chat is 360px on a 1280px
+   laptop, where no width media query would ever fire.
+   The primary is pushed to the far end by an auto margin rather than a
+   spacer element; on a wrapped row it lands right-aligned on its own
+   line instead of eating one. */
 .card-actions {
-  display: flex; align-items: center; gap: var(--s-8);
+  display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-8);
   margin-top: var(--s-16); padding-top: var(--s-12);
   border-top: 1.5px dotted var(--ash);
 }
+.card-actions > .act:last-child { margin-left: auto; }
 .act {
-  width: auto; flex-shrink: 0;
+  width: auto; flex-shrink: 0; max-width: 100%;
   padding: 8px 14px;
   background: transparent; color: var(--fog);
   border-radius: var(--r-pill);
@@ -1421,6 +1444,47 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   outline: none !important;
 }
 .msg-bubble.media-only { padding: 5px; background: var(--bone); }
+
+/* ---- A YouTube or Spotify link, embedded ---- */
+/* `scrolling="no"` is not decoration and it is not legacy cruft: the
+   frame is cross-origin, so no stylesheet of ours reaches inside it
+   and `overflow: hidden` on this wrapper clips the frame's box without
+   touching the scrollbars drawn INSIDE it. The attribute is the only
+   lever there is.
+   It matters on Windows and nowhere else, which is why it survived so
+   long. A chat bubble is 76% of the thread, so Spotify's player gets
+   roughly 260px and lays itself out wider than that. On macOS the
+   overflow scrollbar floats over the artwork and disappears; on
+   Windows a scrollbar takes real space, so the horizontal bar eats
+   into the 152px of height, which brings a vertical bar with it,
+   which narrows the content again. Two scrollbars around one song.
+   The icon underneath is what you look at while the frame loads, so
+   it must not be painted over the player afterwards - hence the
+   z-index pair rather than a background image. */
+.media-embed {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%; max-width: 280px;
+  border: 1px solid var(--ash);
+  border-radius: 16px;
+  overflow: hidden;
+}
+.media-embed.spaced { margin-top: var(--s-8); }
+.media-embed > i {
+  position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1;
+}
+.media-embed > iframe {
+  display: block; position: relative; z-index: 2;
+  width: 100%; border: 0;
+}
+.media-embed.yt { background: #18181b; min-height: 160px; }
+.media-embed.yt > i { color: #ff0000; font-size: 36px; }
+.media-embed.yt > iframe { height: 160px; }
+.media-embed.sp { background: #121212; min-height: 152px; }
+.media-embed.sp > i { color: #1ed760; font-size: 32px; }
+.media-embed.sp > iframe { height: 152px; }
 .msg-sent { background: var(--forest); color: var(--on-accent); align-self: flex-end; box-shadow: none; }
 .msg-received {
   background: var(--paper); color: var(--obsidian); align-self: flex-start;
