@@ -25,24 +25,31 @@ event is already known — **no read** — and otherwise costs exactly one
 read per unseen event, de-duplicated through `pendingFetches` so ten
 copies of the same link in a thread are one read, not ten.
 
-### Opening a shared event: two layouts, two right answers
+### Opening a shared event is one path, at every width
 
-There is
-no detail view for an event — the card in the feed IS the event — so
-View has always gone to the feed. What it also did, at every width,
-was close the conversation. On a laptop the thread and the feed are
-different COLUMNS, so that threw away the place you were reading for
-nothing: the wide branch now leaves the chat open and flashes the
-card beside it. On a phone the chat does have to go, and it leaves a
-`returnChip` behind — one tap back to the person, gone after nine
-seconds, and cleared by `switchScreen` so it can never point at a
-conversation you are no longer coming from.
+There is no detail view for an event — the card in the feed IS the
+event — so View goes to the feed. It closes the conversation, opens the
+tab the event lives in, lands on its card, and leaves a `returnChip`:
+one tap back to the person, gone after nine seconds, and cleared by
+`switchScreen` so it can never point at a conversation you are no
+longer coming from.
 
-The phone branch also has to call `switchScreen("home")` itself.
-`closeChat({ silent: true })` deliberately does NOT swap screens, and
-the thread is a full-screen layer on a phone — so before this, View
-changed the tab underneath a conversation that was still covering it,
-and looked like it did nothing at all.
+It used to fork on width. A laptop kept the thread open and flashed the
+card in a 360px column beside it, on the theory that closing the
+conversation threw away the place you were reading. What it actually
+threw away was the card: 360px is NARROWER THAN A PHONE gives the feed,
+so the poster was cramped and the action row wrapped inside a 1280px
+window. The split is gone, the fork with it, and the event now gets the
+whole column everywhere. The chip was `display: none` above 1100px for
+as long as the laptop kept the conversation open; it is the only way
+back now, so it is on screen at every width and sits at the foot of the
+feed column rather than in the sidebar.
+
+`closeChat({ silent: true })` deliberately does NOT swap screens, so
+the `switchScreen("home")` that follows it is not optional — without it
+the tab changes underneath a thread that is still covering it, and View
+looks like it did nothing at all. That was true on a phone before and
+it is true everywhere now.
 
 ### A finished event has THREE states in a chat, not two
 

@@ -10,10 +10,10 @@ The
 container's side padding, the live rail's negative margin (it runs
 edge to edge, so it bleeds back out by exactly one gutter) and the
 rail's own inner padding (so the first avatar lines up with the first
-card). Those used to be three hard-coded 16s and 24s. The chat-open
-layout changed one of them and left the rail hanging 7px past the
-column, over the divider and into the conversation — and the same
-mismatch was sitting on every tablet width unnoticed. Change the
+card). Those used to be three hard-coded 16s and 24s. A since-removed
+two-column layout changed one of them and left the rail hanging 7px
+past the column, over the divider and into the conversation — and the
+same mismatch was sitting on every tablet width unnoticed. Change the
 number in `:root` and in the two media queries; never at a call site.
 
 ### A poster band needs a 308px card, measured
@@ -22,39 +22,46 @@ Below that the
 halftone has already yielded all its width (that is what it is for)
 and `.poster-type`, which is deliberately un-shrinkable, runs past
 the card's `overflow: hidden` — so "GOING" gets sliced mid-word. Two
-places were under it: a 320px phone (lost 21px) and the chat-open
-middle column, which was 330px because it had been sized for the chat
-LIST, not for a feed. The column is 360px now, and under 350px
-viewport width the band drops its second stat. The second stat is the
+places were under it: a 320px phone (lost 21px) and a 330px column that
+a laptop used to put the feed in beside an open chat. That column is
+gone entirely — see docs/sharing.md — so the card now tracks the
+viewport at every width, and under 350px the band drops its second
+stat. The second stat is the
 one to drop because the body row below already names who is going;
 the first stat — when it is — is said nowhere else on the card.
 
-### The card's action row WRAPS, and it must keep wrapping
+### The card's action row WRAPS, and the primary takes the line when it does
 
-Five
-things live there - hype, chat, share, the primary action - and
-`.act` is deliberately un-shrinkable, so a host looking at their own
-card asks for about 346px of row. A 320px phone gives the card 256px
-and the chat-open middle column gives it 296px, and the card clips,
-so Manage was sliced clean off its right edge; Going and "2 requests"
-went the same way. It shipped the day Share joined the row.
+Five things could sit here — hype, chat, share, a spacer and the
+primary — and `.act` is deliberately un-shrinkable, so a host looking
+at their own card asked for about 346px of row. A 320px phone gives the
+card 256px, and the card clips, so Manage was sliced clean off its
+right edge; Going and "2 requests" went the same way. It shipped the
+day Share joined the row.
 
-Width media queries cannot fix this, and that is the part worth
-remembering: the narrow case is not a narrow VIEWPORT. The feed
-column beside an open chat is 360px on a 1280px laptop, where no
-`max-width` query would ever fire. `flex-wrap: wrap` is the only
-answer that holds at every container width.
+`flex-wrap: wrap` is the guarantee, and it is deliberately NOT a media
+query: a longer count or a larger text size can overflow the row at any
+width, and wrapping catches every one of them. Nothing is ever sliced.
 
 The primary is held at the far end by `margin-left: auto` on the last
 child, not by a `flex:1` spacer. A spacer is a flex ITEM: the moment
 the row wraps it claims a whole line to itself. An auto margin just
 stops mattering.
 
-The smoke group "nothing is cut off" now seeds all six primaries -
-Join, Manage, Going, requests, Request, Full - because it used to
-seed six events hosted by somebody else and joined by nobody, which
-is the NARROWEST row the app can draw. The bug lived in the three
-rows the test never rendered.
+On top of that, below 390px the primary takes the whole line. Measured
+with the feed at full width: nothing wraps at 390 or above, and below
+it Manage, Going and "N requests" go over. Right-aligned on a line of
+its own left a 170-200px gap beside it, which reads as a mistake rather
+than a layout — so below 390 EVERY card gets the same full-width
+primary, whether or not that particular one would have fitted. A feed
+where some cards wrap and some don't, at one width, looks worse than
+either. The query is polish; the wrap is the guarantee.
+
+The smoke group "nothing is cut off" seeds all six primaries — Join,
+Manage, Going, requests, Request, Full — because it used to seed six
+events hosted by somebody else and joined by nobody, which is the
+NARROWEST row the app can draw. The bug lived in the three rows the
+test never rendered.
 
 ### Nothing on screen may be sliced or reach past its column
 

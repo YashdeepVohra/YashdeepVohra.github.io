@@ -3,33 +3,23 @@ import { escapeHtml, safeId } from './formatters.js';
 
 const SCREENS = ["login", "home", "usernameScreen", "profileScreen", "chatScreen"];
 
-/** True when the layout is the sidebar + feed + rail desktop grid. */
-export function isWideLayout() {
-  return window.matchMedia("(min-width: 1100px)").matches;
-}
-
 /**
- * Show one screen.
+ * Show one screen. ONE swap, at every width.
  *
- * On phones this is a straight swap. On a laptop the app is a grid, so
- * opening a chat must NOT hide the feed column — the conversation list
- * stays beside the thread. That is the whole difference between the two
- * layouts, and it lives here rather than in every caller.
+ * A laptop used to keep the feed column open beside a thread. It read
+ * well in the abstract and badly in practice: the feed got 360px, which
+ * is narrower than a phone gives it, so cards were cramped and the
+ * action row had to wrap inside a 1280px window. A conversation is now
+ * a screen like any other, the sidebar is the way out of it, and the
+ * feed always has the whole column.
  */
 export function switchScreen(screenId) {
   // A way back to somewhere you are no longer coming from is worse
   // than no way back at all.
   clearReturnChip();
   const frame = document.querySelector(".app-frame");
-  const wide = isWideLayout();
-  const twoPaneChat = wide && screenId === "chatScreen";
 
-  SCREENS.forEach((id) => {
-    // In two-pane chat the home column stays on screen behind the thread.
-    if (twoPaneChat && id === "home") return;
-    document.getElementById(id)?.classList.add("hidden");
-  });
-
+  SCREENS.forEach((id) => document.getElementById(id)?.classList.add("hidden"));
   if (screenId) document.getElementById(screenId)?.classList.remove("hidden");
 
   // The sign-in screen is a full-viewport overlay; the app grid behind
@@ -37,9 +27,6 @@ export function switchScreen(screenId) {
   const signedOut = screenId === "login";
   if (signedOut) frame?.classList.add("hidden");
   else if (screenId) frame?.classList.remove("hidden");
-
-  frame?.classList.toggle("chat-open", twoPaneChat);
-  if (twoPaneChat) showTab("chats");
 
   const hideNav = !screenId || signedOut || screenId === "usernameScreen" || screenId === "chatScreen";
   document.querySelector(".bottom-nav")?.classList.toggle("hidden", hideNav);

@@ -1665,10 +1665,15 @@ group('search that forgives a typo');
 group('opening an event somebody shared');
 {
   // There is no separate detail view for an event — the card in the
-  // feed IS the event — so View has always gone to the feed. What it
-  // also did, at every width, was close the conversation. On a laptop
-  // the thread and the feed are different COLUMNS, so that threw away
-  // the place you were reading for nothing.
+  // feed IS the event — so View goes to the feed.
+  //
+  // It used to fork on width: a laptop kept the thread open and put the
+  // card in a 360px column beside it, on the theory that closing the
+  // conversation threw away the place you were reading. What it threw
+  // away was the card. 360px is narrower than a phone gives the feed,
+  // so the poster was cramped and the action row wrapped inside a
+  // 1280px window. One path now, and the assertions below are
+  // deliberately the SAME at both widths.
   const wideCtx = await browser.newContext({ viewport: { width: 1280, height: 860 } });
   const wide = await wideCtx.newPage();
   await wide.addInitScript({ path: fileURLToPath(new URL('./stub.js', import.meta.url)) });
@@ -1683,7 +1688,7 @@ group('opening an event somebody shared');
     window.__authSingleton.currentUser = { uid: 'me' };
     state.uid = 'me'; state.blockedUids = []; state.privacyChosen = true;
     const mk = (u) => ({ uid: u, username: u, displayName: u, avatar: 'x', followers: [], following: [], vouchedBy: [] });
-    state.userCache = Object.fromEntries(['me', 'a'].map((u) => [u, mk(u)]));
+    state.userCache = { me: mk('me'), a: Object.assign(mk('a'), { displayName: 'Riya' }) };
     state.following = []; state.orbitUids = [];
     state.eventCache = { sh1: { id: 'sh1', title: 'Chai + assignment panic', place: 'Nescafe',
       tag: '☕ Chill', hostUid: 'a', participantUids: [], hypedUids: [],
@@ -1700,20 +1705,33 @@ group('opening an event somebody shared');
     await wait(200);
 
     ev.showSharedEvent('sh1');
-    await wait(400);
+    await wait(700);
+    const chip = document.getElementById('returnChip');
     return {
-      chatStillOpen: !document.getElementById('chatScreen').classList.contains('hidden'),
+      chatClosed: document.getElementById('chatScreen').classList.contains('hidden'),
       feedShowing: !document.getElementById('eventsTab').classList.contains('hidden'),
       cardOnScreen: !!document.getElementById('event-sh1'),
-      noChip: !document.getElementById('returnChip')
+      // The chip is the only way back now that the thread is gone, so
+      // it must not merely exist — it has to be on screen. It was
+      // display:none above 1100px for as long as the laptop kept the
+      // conversation open, which would have stranded you here.
+      chipShown: !!chip && getComputedStyle(chip).display !== 'none',
+      chipText: chip ? chip.innerText.trim() : '',
+      // Nothing may still be marked as the old two-pane layout.
+      noSplit: !document.querySelector('.app-frame').classList.contains('chat-open'),
+      // And the feed must have the whole column, not 360px of it.
+      feedWidth: Math.round(document.getElementById('home').getBoundingClientRect().width)
     };
   });
   await wideCtx.close();
 
-  ok('on a laptop the conversation stays open', desk.chatStillOpen);
-  ok('and the feed comes up beside it', desk.feedShowing && desk.cardOnScreen,
+  ok('on a laptop the conversation closes, same as a phone', desk.chatClosed);
+  ok('and the card is on screen in the feed', desk.feedShowing && desk.cardOnScreen,
      JSON.stringify(desk));
-  ok('with no way-back chip, because you never left', desk.noChip);
+  ok('the way back is a chip, and it is actually visible at this width',
+     desk.chipShown && /Back to Riya/.test(desk.chipText), JSON.stringify(desk));
+  ok('the two-pane split is gone', desk.noSplit);
+  ok('so the feed gets a real column, not 360px', desk.feedWidth > 500, String(desk.feedWidth));
 
   // On a phone only one of them fits, so the chat does go — but it
   // leaves a way back rather than just vanishing.
@@ -1769,7 +1787,7 @@ group('opening an event somebody shared');
   });
   await narrowCtx.close();
 
-  ok('on a phone the chat does close, because only one fits', ph.chatClosed);
+  ok('and on a phone, the very same thing', ph.chatClosed);
   ok('and the shared card is the one on screen', ph.cardOnScreen);
   ok('but it leaves a way back, by name', /Back to Riya/.test(ph.chipText), ph.chipText);
   ok('the name goes in as text, never markup', ph.chipIsText);
@@ -1874,15 +1892,14 @@ group('nothing is cut off');
         chat.loadMessages();
         await wait(450);
       }
-      // The state a laptop lands in when a chat is open and the sidebar
-      // is used to go back to Live Now: both columns on screen at once.
+      // The state a laptop lands in after tapping View in a thread.
+      // This used to set up the two-pane split by hand; there is no
+      // split any more, so it walks the real path instead — which is
+      // the screenshot that started this: a card, at 1280, reached
+      // from a conversation.
       if (mode === 'both') {
-        window.showTab('events');
-        document.querySelector('.app-frame').classList.add('chat-open');
-        document.getElementById('chatScreen').classList.remove('hidden');
-        document.getElementById('home').classList.remove('hidden');
-        ev.renderEvents();
-        await wait(300);
+        ev.showSharedEvent('o1');
+        await wait(700);
       }
 
       const out = [];
@@ -1963,7 +1980,7 @@ group('nothing is cut off');
   ok('a normal phone thread is clean', phone.rows.length === 0, JSON.stringify(phone.rows));
 
   const beside = await look(1280, 860, 'both');
-  ok('the feed still fits when a chat is open beside it',
+  ok('and after View lands you on a card from a thread, at 1280',
      beside.rows.length === 0, JSON.stringify(beside.rows));
 
   ok('no errors while measuring any of that',

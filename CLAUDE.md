@@ -106,16 +106,18 @@ Each line is the whole rule. The file after it is the argument for it.
 - A poster band needs a 308px card, measured. Under 350px the band drops
   its second stat.
 - The card's action row WRAPS, and must keep wrapping; the primary is
-  held right by `margin-left: auto`, never a `flex:1` spacer.
+  held right by `margin-left: auto`, never a `flex:1` spacer. Below
+  390px it takes the whole line instead.
 - Nothing on screen may be sliced or reach past its column. The smoke
   group "nothing is cut off" holds this at 320, 390 and 1280.
 - No `overflow: auto` box may be taller than the window with nothing to
   scroll. A dead scroll container is worse than no scroller at all.
 - Scroll chaining behind an open layer cannot be fixed with
   `overscroll-behavior`. Left alone on purpose — don't try.
-- The narrow case is often not a narrow VIEWPORT: the feed column beside
-  an open chat is 360px on a 1280px laptop. Prefer a rule that holds at
-  any container width over a media query.
+- One screen at a time, at every width. A conversation replaces the feed
+  the way the profile does; the sidebar is the way out. The old
+  two-pane layout gave the feed 360px on a 1280px laptop — narrower
+  than a phone — and is gone. Don't bring it back.
 - `button { display: flex; padding: 13px 24px; width: 100% }` is in the
   base sheet, and specificity beats source order. Anything you turn into
   a button must shed all three.
@@ -147,6 +149,9 @@ Each line is the whole rule. The file after it is the argument for it.
 - A finished event has THREE states: on, over but still in Recap, and
   gone. Ask `inRecap()` before swapping a tab; say so instead of
   travelling to an empty one.
+- View closes the chat, opens the event's tab and leaves a `returnChip`
+  — the same at every width. The chip must stay visible on desktop; it
+  is the only way back.
 - A cross-origin iframe's scrollbars are reachable only through
   `scrolling="no"`.
 

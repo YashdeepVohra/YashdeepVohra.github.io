@@ -664,7 +664,20 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 .return-chip:hover { filter: brightness(1.06); transform: translateY(-1px); box-shadow: var(--lift-3); }
 .return-chip:active { transform: scale(0.95); }
 .return-chip i { font-size: 18px; }
-@media (min-width: 1100px) { .return-chip { display: none; } }
+/* It used to be display:none here, because a laptop kept the
+   conversation open beside the feed and there was nothing to go back
+   to. The split is gone, so the chip is the ONLY way back at this
+   width and has to be on screen. It moves out of the sidebar and sits
+   at the foot of the feed column, where it reads as a floating action
+   on the content rather than a stray nav item; there is no bottom nav
+   up here, so it does not need to clear one. */
+@media (min-width: 1100px) {
+  .return-chip {
+    left: calc(var(--sidebar-w) + var(--s-24));
+    bottom: var(--s-24);
+    max-width: calc(100% - var(--sidebar-w) - var(--s-48));
+  }
+}
 
 .fab:hover { filter: brightness(1.08); }
 .fab:active { transform: scale(0.92); }
@@ -1189,24 +1202,37 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 
    AND THE ROW WRAPS, which is the whole fix for a bug that shipped the
    day Share was added to it. Five things could sit here — hype, chat,
-   share, a spacer and the primary — and none of them could shrink,
-   so a host looking at their own card needed about 346px of row inside
-   a card that gives 256px on a 320px phone and 296px in the chat-open
-   middle column. The card clips (overflow: hidden), so Manage was
-   simply sliced off its right edge; Going and Request went the same
-   way. Wrapping is the only answer that holds at EVERY container
-   width, which matters because the narrow case here is not a narrow
-   VIEWPORT — the feed column beside an open chat is 360px on a 1280px
-   laptop, where no width media query would ever fire.
-   The primary is pushed to the far end by an auto margin rather than a
-   spacer element; on a wrapped row it lands right-aligned on its own
-   line instead of eating one. */
+   share, a spacer and the primary — and none of them could shrink, so
+   a host looking at their own card needed about 346px of row inside a
+   card that gives 256px on a 320px phone. The card clips
+   (overflow: hidden), so Manage was simply sliced off its right edge;
+   Going and Request went the same way. Wrapping is the guarantee, and
+   it is deliberately not a media query: a longer count or a larger
+   text size can overflow the row at any width, and wrapping catches
+   all of them. Nothing is ever sliced.
+   The primary is held at the far end by an auto margin rather than a
+   spacer element. A spacer is a flex ITEM, so it would claim a whole
+   line to itself the moment the row wrapped; an auto margin just stops
+   mattering. */
 .card-actions {
   display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-8);
   margin-top: var(--s-16); padding-top: var(--s-12);
   border-top: 1.5px dotted var(--ash);
 }
 .card-actions > .act:last-child { margin-left: auto; }
+/* AND WHEN IT WRAPS, THE PRIMARY TAKES THE WHOLE LINE. Right-aligned on
+   a line of its own left a 170-200px gap beside it, which reads as a
+   mistake rather than a layout. Measured with the feed at full width:
+   nothing wraps at 390px or above, and below that it is Manage, Going
+   and "N requests" that go over. So below 390 every card gets the same
+   full-width primary, whether or not that particular one would have
+   fitted — a feed where some cards wrap and some don't, at one width,
+   looks worse than either. This is polish ON TOP OF the wrap above,
+   never instead of it: the odd case that still wraps above 390 is
+   merely right-aligned, and still not sliced. */
+@media (max-width: 389px) {
+  .card-actions > .act:last-child { margin-left: 0; flex: 1 0 100%; }
+}
 .act {
   width: auto; flex-shrink: 0; max-width: 100%;
   padding: 8px 14px;
@@ -1876,18 +1902,14 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   .profile-scroll-body { padding: var(--s-32) var(--s-24); max-width: var(--feed-max); }
   .profile-screen-wrapper .back-btn { display: none; }
 
-  /* 360, not 330. The middle column was sized for the chat LIST, but
-     the sidebar can put the feed there too, and a poster band needs a
-     308px card before its stats start getting cut off by the card's
-     own overflow:hidden — 330 gave it 297. Measured, not guessed; the
-     "nothing is cut off" smoke group holds it. */
-  .app-frame.chat-open { grid-template-columns: var(--sidebar-w) 360px minmax(0, 1fr); --gut: var(--s-16); }
-  .app-frame.chat-open .rail { display: none; }
-  .app-frame.chat-open .container { max-width: none; padding: var(--s-24) var(--gut) var(--s-48); }
-  .app-frame.chat-open #home { border-right: 1px solid var(--ash); min-height: 100dvh; }
-  .app-frame.chat-open .section-head h3 { font-size: 24px; }
-
-  #chatScreen { position: relative; inset: auto; z-index: 1; grid-column: 3; height: 100dvh; animation: fadeIn 0.2s var(--ease); }
+  /* A conversation is a screen like any other: it takes the main column
+     and the feed stands down, exactly as the profile does. It used to
+     take a third column with the feed squeezed into 360px beside it —
+     narrower than a phone gives the feed, which is what cramped the
+     poster and wrapped the action row inside a 1280px window. The
+     sidebar is the way out; the back button stays hidden here for the
+     same reason it is hidden on the profile. */
+  #chatScreen { position: relative; inset: auto; z-index: 1; height: 100dvh; animation: fadeIn 0.2s var(--ease); }
   #chatScreen .back-btn { display: none; }
   .msg-bubble { max-width: 58%; }
 

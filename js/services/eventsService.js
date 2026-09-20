@@ -15,7 +15,7 @@
 import { auth, db, FieldValue } from '../config/firebase.js';
 import { state } from '../state/store.js';
 import { renderAvatar, escapeHtml, safeId } from '../utils/formatters.js';
-import { showTab, toast, isWideLayout, returnChip, switchScreen } from '../utils/ui.js';
+import { showTab, toast, returnChip, switchScreen } from '../utils/ui.js';
 import { openOverlay, closeOverlay, replaceOverlay, isOverlayTop } from '../utils/overlays.js';
 import { primeUsers, displayNameFor, usernameFor, avatarFor } from './userService.js';
 import { isBlocked, withoutBlocked } from './blockService.js';
@@ -642,16 +642,25 @@ function hasSomewhereToLand(e, now = Date.now()) {
 }
 
 /**
- * Two layouts, two right answers.
+ * Open a shared event: close the conversation, go to the tab it lives
+ * in, land on its card, and leave a way back.
  *
- * On a laptop the thread and the feed are different COLUMNS, so there
- * is no reason to close one to see the other: the conversation stays
- * open on the right and the card flashes in the middle. Closing it —
- * which is what this used to do at every width — threw away the place
- * you were reading for no gain at all.
+ * This used to fork on width. A laptop kept the thread open and flashed
+ * the card in a 360px column beside it, on the theory that closing the
+ * conversation threw away the place you were reading. What it actually
+ * threw away was the card: 360px is narrower than a phone gives the
+ * feed, so the poster was cramped and the action row wrapped inside a
+ * 1280px window. The column is gone and so is the fork — one path, one
+ * thing to reason about, and the event gets the whole width everywhere.
  *
- * On a phone only one of them fits, so the chat does have to go. It
- * leaves a way back instead of just vanishing.
+ * The way back is the `returnChip`: one tap to the person, gone after
+ * nine seconds, and cleared by `switchScreen` so it can never point at
+ * a conversation you are no longer coming from.
+ *
+ * `closeChat({ silent: true })` deliberately does NOT swap screens, so
+ * the `switchScreen("home")` below is not optional — without it the tab
+ * changes underneath a thread that is still covering it, and View looks
+ * like it did nothing at all.
  */
 export function showSharedEvent(eventId) {
   const e = state.eventCache[eventId];
@@ -689,28 +698,9 @@ export function showSharedEvent(eventId) {
     setTimeout(() => focusEvent(eventId), 60);
   }, 90);
 
-  if (isWideLayout()) {
-    // The two-pane state can be stale — a window dragged from phone
-    // width to laptop width while a chat was open never re-ran the
-    // screen swap, so the feed column is still marked hidden and
-    // switching its tab would show nothing at all.
-    const chatOpen = !document.getElementById("chatScreen")?.classList.contains("hidden");
-    if (chatOpen) {
-      document.querySelector(".app-frame")?.classList.add("chat-open");
-      document.getElementById("home")?.classList.remove("hidden");
-    }
-    showTab(ended ? "recap" : "events");
-    land();
-    return true;
-  }
-
   const backTo = state.currentOtherUid;
   const name = backTo ? displayNameFor(backTo) : "";
-  // silent, so closing doesn't announce itself or fight the tab swap —
-  // but silent also means closeChat leaves the screen where it is, and
-  // the thread is a full-screen layer on a phone. Without the swap
-  // below, View looked like it did nothing at all: the feed changed
-  // tab underneath a conversation that was still covering it.
+  // silent, so closing doesn't announce itself or fight the tab swap.
   window.closeChat?.({ silent: true });
   switchScreen("home");
   showTab(ended ? "recap" : "events");
