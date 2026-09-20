@@ -133,6 +133,27 @@ export function harvestReceipt(onChange) {
   });
 }
 
+/**
+ * Read the receipt because the Recap tab has been opened.
+ *
+ * THE CARD USED TO LIE, and this is the fix. `load()` was only ever
+ * called from harvestReceipt, and harvestReceipt returns early when
+ * nothing in the cache is countable — which is the ordinary case for
+ * somebody coming back, since everything finished has already been
+ * folded. So the document was never read, the in-memory receipt stayed
+ * empty, and renderReceipt painted "Go to something and this fills in"
+ * at a person with months of history behind them. It looked like the
+ * card had failed to load, and in every sense it had.
+ *
+ * Reading it here rather than on any feed repaint keeps the cost story
+ * intact: the card lives in Recap, so only somebody who opens Recap
+ * pays the one read, once per session.
+ */
+export function primeReceipt() {
+  if (loaded || loading || !state.uid) return;
+  Promise.resolve(load()).then((fresh) => { if (fresh) renderReceipt(); });
+}
+
 /** What the card would say right now, without touching the network. */
 export function receiptSummary(key = monthKey(Date.now())) {
   return summarise(receipt, key);
@@ -145,6 +166,12 @@ export function receiptSummary(key = monthKey(Date.now())) {
 export function renderReceipt() {
   const el = document.getElementById("receiptCard");
   if (!el) return;
+
+  // Nothing read yet is not the same as nothing to show. Painting the
+  // empty state before the document has come back is what made a full
+  // receipt look like a failed one, so this paints nothing at all and
+  // waits: primeReceipt() calls back here the moment it lands.
+  if (!loaded) return;
 
   const s = receiptSummary();
 

@@ -1260,8 +1260,23 @@ function renderMessages(msgs, { keepScroll = null } = {}) {
       : "";
 
     // Tapping shows when it was sent — and, if it was rewritten, when.
+    // The edit time does NOT repeat the day. formatTime() always spells
+    // one out ("Today at 22:48"), so an edited message read "Today at
+    // 22:48 · edited Today at 22:51" — the word Today twice, in mono,
+    // on a line under a bubble. A message is almost always edited on
+    // the day it was sent (the window is fifteen minutes), so the day
+    // is said once and the second stamp is just the clock. On the rare
+    // edit that crosses midnight it falls back to the full form,
+    // because then the day genuinely is new information.
+    const sameDay = edited &&
+      new Date(m.time).toDateString() === new Date(m.editedAt).toDateString();
+    const editStamp = edited
+      ? (sameDay
+          ? new Date(m.editedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+          : formatTime(m.editedAt))
+      : "";
     const timeLine = edited
-      ? `${escapeHtml(formatTime(m.time))} \u00b7 edited ${escapeHtml(formatTime(m.editedAt))}`
+      ? `${escapeHtml(formatTime(m.time))} \u00b7 edited ${escapeHtml(editStamp)}`
       : escapeHtml(formatTime(m.time));
 
     // ---- Sender label in event chats ----

@@ -2,10 +2,20 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>livesociya</title>
+  <!-- SEARCH. The title is the single line Google prints, so it carries
+       the name AND what the thing is: somebody who half-remembers
+       "that campus events app" has to be able to land here without
+       knowing the domain. The name is deliberately repeated in the
+       description, the OG title and the structured data below, because
+       an unusual coined word is only matched on what it is written
+       next to. -->
+  <title>livesociya — what's happening on campus, right now</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
   <meta name="theme-color" content="#e6f2dd">
-  <meta name="description" content="The campus live feed. See what's happening right now, join it, and meet the people who showed up.">
+  <meta name="description" content="livesociya is the campus live feed: see what's happening right now, join it, and meet the people who showed up. Events start in seconds and vanish when they end.">
+  <link rel="canonical" href="https://livesociya.com/">
+  <meta name="robots" content="index, follow, max-image-preview:large">
+  <meta name="application-name" content="livesociya">
 
   <!-- Installable. Without the manifest link and an icon of at least
        192px, a browser will not offer "add to home screen" at all — and
@@ -32,6 +42,43 @@
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="livesociya — what's happening on campus, right now">
+  <meta name="twitter:description" content="See what's on, join it, and meet the people who showed up. Events vanish when they end.">
+  <meta name="twitter:image" content="https://livesociya.com/og-image.png">
+
+  <!-- Structured data. Two things it buys that the tags above do not:
+       a search box for the site in Google's own results, and
+       alternateName — which is the whole point here, because a coined
+       word gets typed wrong. "live sociya", "livesocia" and "live
+       socia" are all the same app and none of them is the domain. -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        "@id": "https://livesociya.com/#website",
+        "url": "https://livesociya.com/",
+        "name": "livesociya",
+        "alternateName": ["live sociya", "livesocia", "live socia", "Livesociya"],
+        "description": "The campus live feed. See what's happening right now, join it, and meet the people who showed up.",
+        "inLanguage": "en"
+      },
+      {
+        "@type": "WebApplication",
+        "@id": "https://livesociya.com/#app",
+        "name": "livesociya",
+        "url": "https://livesociya.com/",
+        "applicationCategory": "SocialNetworkingApplication",
+        "operatingSystem": "Any",
+        "browserRequirements": "Requires JavaScript.",
+        "description": "A campus app for things happening right now. Somebody starts an event, everyone nearby sees it instantly, and it vanishes when it ends.",
+        "image": "https://livesociya.com/og-image.png",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "INR" }
+      }
+    ]
+  }
+  </script>
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

@@ -23,7 +23,7 @@ import { stampEvent, readLimits, limitMessage } from './limitsService.js';
 import { askConfirm } from '../utils/confirm.js';
 import { inOrbit, vouchersYouKnow } from './orbitService.js';
 import { RECAP_MAX_MS, inRecap, recapUntil, wasCalledOff } from './recapRules.js';
-import { harvestReceipt, renderReceipt } from './receiptService.js';
+import { harvestReceipt, renderReceipt, primeReceipt } from './receiptService.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -1819,6 +1819,11 @@ export async function loadRecap({ reset = false } = {}) {
 
 /** Called when the Recap tab is opened, and as it is scrolled. */
 export function ensureRecapLoaded() {
+  // The receipt card lives in this tab and nowhere else, so this is
+  // the moment its one read is worth paying for — and the moment it
+  // has to happen, because nothing else will trigger it for somebody
+  // who has no new events to fold. See primeReceipt().
+  primeReceipt();
   if (!state.recapOrder.length && !state.recapDone) loadRecap({ reset: true });
 }
 

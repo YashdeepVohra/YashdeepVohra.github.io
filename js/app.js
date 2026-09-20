@@ -130,6 +130,7 @@ import { confirmYes, confirmNo } from './utils/confirm.js';
 import { flushReceipt } from './services/receiptService.js';
 import { openShare, closeShare, capturePendingEvent, consumePendingEvent } from './services/shareService.js';
 import { initSwipeListeners } from './interactions/swipeReply.js';
+import { initPullRefresh } from './interactions/pullRefresh.js';
 import { initViewportFit, lockZoom } from './utils/viewport.js';
 import { popOverlay, anyOverlayOpen, clearOverlays } from './utils/overlays.js';
 import { openSearch, closeSearch, onSearchInput, searchOpenProfile, searchOpenEvent, refreshSearchResults } from './interactions/searchUI.js';
@@ -334,6 +335,7 @@ function boot() {
   checkRedirectLock();
   initAuthListener();
   initSwipeListeners();
+  initPullRefresh();
   initTheme();
   lockZoom();
   initViewportFit();

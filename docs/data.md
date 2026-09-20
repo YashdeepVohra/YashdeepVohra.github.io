@@ -71,6 +71,24 @@ pinned message is usually the first one ("meet by the north gate")
 and by then it has scrolled out of the 25-message live window — an id
 alone would cost a second read to display, on every open, forever.
 
+### The receipt card used to lie, and reading it is gated on Recap
+
+`load()` was only ever called from `harvestReceipt`, and
+`harvestReceipt` returns early when nothing in the cache is countable —
+which is the ordinary case for somebody coming back, since everything
+finished has already been folded. So the document was never read, the
+in-memory receipt stayed empty, and the card painted "Go to something
+and this fills in" at a person with months behind them. It read as a
+card that had failed to load, and in every sense it had.
+
+`primeReceipt()` is called from `ensureRecapLoaded()` instead. That
+keeps the cost story intact rather than loading on every feed repaint:
+the card lives in Recap and nowhere else, so only somebody who opens
+Recap pays the one read, once per session. And `renderReceipt()` now
+paints NOTHING until the document has come back — "not read yet" is
+not the same as "nothing to show", and painting the empty state in the
+gap is what made the bug look like a bug in the data.
+
 ### The receipt is folded out of events already on screen
 
 `js/services/receiptRules.js` is the arithmetic, `receiptService.js`

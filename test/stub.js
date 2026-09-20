@@ -48,7 +48,12 @@ const docRef = (path) => ({
   },
   delete: () => { window.__writes++; return Promise.resolve(); },
   onSnapshot: (cb) => { setTimeout(() => cb({ exists: false, data: () => ({}) }), 0); return noop; },
-  collection: () => collRef(),
+  // A subcollection keeps its parent's path. It used to drop it, so
+  // `users/me/private/receipt` arrived here as `/receipt` and a
+  // fixture keyed on the real path could never be found — which is
+  // exactly the kind of bug a stub is supposed to help catch, not
+  // create.
+  collection: (n) => collRef(n, path),
 });
 window.__orbit = [];
 window.__orbitCbs = [];
@@ -154,7 +159,8 @@ const eventsColl = () => {
   return q;
 };
 
-const collRef = (name) => {
+const collRef = (name, parent) => {
+  const base = (parent ? parent + '/' : '') + (name || '');
   if (name === 'orbit') return orbitColl();
   if (name === 'events') return eventsColl();
   if (name === 'blocks' && window.__fakeBlocks) {
@@ -163,7 +169,7 @@ const collRef = (name) => {
       endBefore: () => q2, startAfter: () => q2, startAt: () => q2, endAt: () => q2,
       get: () => Promise.resolve(snap(docs)),
       onSnapshot: (cb) => { setTimeout(() => cb(snap(docs)), 0); return noop; },
-      doc: (id) => docRef((name || '') + '/' + id), add: () => Promise.resolve({ id: 'x' }) };
+      doc: (id) => docRef(base + '/' + id), add: () => Promise.resolve({ id: 'x' }) };
     return q2;
   }
   const q = {
@@ -171,7 +177,7 @@ const collRef = (name) => {
     endBefore: () => q, startAfter: () => q, startAt: () => q, endAt: () => q,
     get: () => Promise.resolve(snap(window.__docs.splice(0, window.__docs.length))),
     onSnapshot: (cb) => { setTimeout(() => cb(snap(window.__docs.splice(0, window.__docs.length))), 0); return noop; },
-    doc: (id) => docRef((name || '') + '/' + id), add: () => Promise.resolve({ id: 'x' }),
+    doc: (id) => docRef(base + '/' + id), add: () => Promise.resolve({ id: 'x' }),
   };
   return q;
 };

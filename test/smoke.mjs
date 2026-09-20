@@ -1170,6 +1170,111 @@ group('sharing an event');
 }
 
 /* ------------------------------------------------------------------ */
+group('a receipt that already has history');
+{
+  // THE CARD USED TO LIE. load() was only ever called from
+  // harvestReceipt, and harvestReceipt returns early when nothing in
+  // the cache is countable — the ordinary case for somebody coming
+  // back, since everything finished has already been folded. So the
+  // document was never read, the in-memory receipt stayed empty, and
+  // the card painted "Go to something and this fills in" at a person
+  // with months behind them. It read as a card that had failed to
+  // load, and it had.
+  const r = await page.evaluate(async () => {
+    const wait = (ms) => new Promise((res) => setTimeout(res, ms));
+    const { state } = await import('/js/state/store.js');
+    const receipt = await import('/js/services/receiptService.js');
+    receipt.clearReceipt();
+
+    // A receipt on the server, and NOTHING new to fold: no finished
+    // events in the cache at all.
+    const key = new Date().toISOString().slice(0, 7);
+    window.__stubDocs['users/me/private/receipt'] = {
+      months: { [key]: { went: 4, hosted: 1, tags: { '\u2615 Chill': 3 }, people: { a: 2, b: 1 } } },
+      counted: ['old1', 'old2', 'old3', 'old4']
+    };
+    state.eventCache = {}; state.eventOrder = []; state.recapOrder = [];
+
+    window.showTab('recap');
+    await wait(500);
+    const card = document.getElementById('receiptCard');
+    const text = (card.innerText || '').replace(/\s+/g, ' ').trim();
+    window.showTab('events');
+    await wait(150);
+    return { text, went: receipt.receiptSummary().went };
+  });
+
+  ok('a receipt with history on the server is read when Recap opens',
+     r.went === 4, JSON.stringify(r));
+  ok('and the card says so instead of offering the empty state',
+     /showed up/.test(r.text) && !/fills in/.test(r.text), r.text);
+}
+
+/* ------------------------------------------------------------------ */
+group('the line under a bubble');
+{
+  // formatTime() always spells a day out, so an edited message read
+  // "Today at 22:48 · edited Today at 22:51" — the word Today twice,
+  // in mono, at the metadata tracking, on a line under a bubble. Wider
+  // than the bubble it belonged to.
+  const t = await page.evaluate(async () => {
+    const wait = (ms) => new Promise((res) => setTimeout(res, ms));
+    const { state } = await import('/js/state/store.js');
+    const chat = await import('/js/services/chatService.js');
+    const now = Date.now();
+    state.currentChat = 'a_me'; state.currentChatType = 'direct';
+    state.currentChatStatus = 'unlocked'; state.currentChatData = { unreadByUid: '' };
+    state.currentOtherUid = 'a'; state.currentEventData = null;
+    window.switchScreen('chatScreen');
+    window.__docs = [
+      { id: 'e1', data: () => ({ senderUid: 'me', text: 'hello', time: now - 9e5,
+                                 editedAt: now - 8.5e5 }) }
+    ];
+    chat.loadMessages();
+    await wait(400);
+    const wrap = document.querySelector('.msg-wrapper');
+    wrap.classList.add('show-time');
+    // The reveal is a max-height TRANSITION, so a computed style read
+    // in the same tick is the value it is animating from, not the one
+    // it is going to. Measuring straight away said max-height: 0 and
+    // called a perfectly good line clipped.
+    await wait(450);
+    const line = wrap.querySelector('.msg-time');
+    const cs = getComputedStyle(line);
+    const out = {
+      text: (line.innerText || '').trim(),
+      mono: /mono|Menlo|Consolas|Courier|ui-monospace/i.test(cs.fontFamily),
+      tracking: cs.letterSpacing,
+      size: parseFloat(cs.fontSize),
+      // It reveals by max-height; a wrapped line must not be clipped.
+      fits: line.scrollHeight <= parseFloat(cs.maxHeight) + 1,
+      // Not against the bubble — a five-letter message has a tiny one
+      // and the stamp is never going to be shorter than "Today at
+      // 22:48". Against the thread, which is what it can actually
+      // overflow.
+      overflowsThread: line.scrollWidth > wrap.clientWidth + 1
+    };
+    chat.closeChat({ silent: true });
+    window.showTab('events');
+    await wait(150);
+    return out;
+  });
+
+  // Not by counting the word "Today": the container's clock decides
+  // whether that is Today, Yesterday or a date, and a test that only
+  // passes before midnight is worse than no test.
+  ok('an edited message says the day once, not twice',
+     /\u00b7 edited \d{1,2}:\d{2}(\s?[APap][Mm])?$/.test(t.text), t.text);
+  ok('and still says when it was edited', /edited \d/.test(t.text), t.text);
+  ok('it is still mono, because a timestamp is metadata', t.mono, t.tracking);
+  ok('but not at the metadata tracking, which is for caps',
+     t.tracking === 'normal' || parseFloat(t.tracking) === 0, t.tracking);
+  ok('and smaller than the message above it', t.size <= 11, String(t.size));
+  ok('the reveal does not clip the line', t.fits);
+  ok('and it does not overflow the thread', !t.overflowsThread);
+}
+
+/* ------------------------------------------------------------------ */
 group('the action bar on a phone');
 {
   // Two things were wrong and only one of them was the arrangement.
@@ -2107,6 +2212,121 @@ group('nothing is cut off');
   ok('no errors while measuring any of that',
      [small, smallChat, phone, beside].every((r) => r.errs.length === 0),
      [small, smallChat, phone, beside].flatMap((r) => r.errs).join(' | '));
+}
+
+/* ------------------------------------------------------------------ */
+group('pull to refresh');
+{
+  // The browser's own went out with the bounce — they are one feature,
+  // and `overscroll-behavior-y: none` turns off both. Installed to a
+  // home screen there is no address bar and no reload button either,
+  // so there was no way to reload at all. This is ours, and the two
+  // things worth holding are that it arms at the top of the feed and
+  // that it does NOT arm anywhere else.
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 780 }, hasTouch: true });
+  const p = await ctx.newPage();
+  const errs = [];
+  p.on('pageerror', (e) => errs.push(e.message.slice(0, 120)));
+  await p.addInitScript({ path: fileURLToPath(new URL('./stub.js', import.meta.url)) });
+  await p.goto(APP_URL, { waitUntil: 'domcontentloaded' });
+  await p.waitForTimeout(1600);
+
+  const out = await p.evaluate(async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const { state } = await import('/js/state/store.js');
+    const ev = await import('/js/services/eventsService.js');
+    const now = Date.now();
+    window.__authSingleton.currentUser = { uid: 'me' };
+    state.uid = 'me'; state.blockedUids = []; state.privacyChosen = true;
+    const mk = (u) => ({ uid: u, username: u, displayName: u, avatar: 'x',
+                         followers: [], following: [], vouchedBy: [] });
+    state.userCache = Object.fromEntries(['me', 'a'].map((u) => [u, mk(u)]));
+    state.following = []; state.orbitUids = [];
+    state.eventCache = {}; state.eventOrder = [];
+    for (let i = 0; i < 12; i++) {
+      const id = 'p' + i;
+      state.eventCache[id] = { id, title: 'Chai ' + i, place: 'Lawn', tag: '\u2615 Chill',
+        hostUid: 'a', participantUids: ['a'], hypedUids: [], startTime: now - 6e4,
+        expiresAt: now + 72e5, description: '', pendingUids: [], unconfirmedUids: [] };
+      state.eventOrder.push(id);
+    }
+    state.recapOrder = []; state.recapDone = true; state.currentLiveFilter = 'All';
+    document.getElementById('loading-screen').classList.add('hidden');
+    document.querySelector('.app-frame').classList.remove('hidden');
+    window.switchScreen('home'); ev.renderEvents();
+    await wait(400);
+
+    // A pull is three touch events. Dispatched rather than driven,
+    // because what is being tested is the arming logic, not the
+    // browser's own gesture recognition.
+    // On an ELEMENT, not on document. A real touch always lands on one,
+    // and the listeners here are delegated, so dispatching at the
+    // document gives every handler in the app a target with no
+    // closest() — which is a property of the test, not of the app.
+    const onto = () => document.getElementById('events') || document.body;
+    const touch = (type, y) => {
+      const el = onto();
+      const t = new Touch({ identifier: 1, target: el, clientX: 40, clientY: y });
+      el.dispatchEvent(new TouchEvent(type, {
+        touches: type === 'touchend' ? [] : [t],
+        changedTouches: [t], bubbles: true, cancelable: true
+      }));
+    };
+    const pull = async (to) => { touch('touchstart', 20); await wait(20);
+                                 touch('touchmove', to); await wait(40); };
+    const node = () => document.getElementById('pullRefresh');
+
+    // 1. A short pull at the top shows the indicator but does not fire.
+    await pull(80);
+    const shortPull = { exists: !!node(), moved: node() && node().style.transform };
+    touch('touchend', 80); await wait(60);
+    const afterShort = { spinning: !!node() && node().classList.contains('spinning') };
+
+    // 2. Scrolled down, the same gesture must do nothing at all.
+    window.scrollTo(0, 400); await wait(80);
+    const before = node() ? node().style.transform : '';
+    await pull(200);
+    const scrolledDown = { unchanged: (node() ? node().style.transform : '') === before };
+    touch('touchend', 200); await wait(40);
+    window.scrollTo(0, 0); await wait(120);
+
+    // 3. An upward drag at the top is the page scrolling, not a pull.
+    touch('touchstart', 200); await wait(20); touch('touchmove', 150); await wait(40);
+    const up = { unchanged: node().style.transform === '' || !/translateY\((?!-)/.test(node().style.transform) };
+    touch('touchend', 150); await wait(40);
+
+    return { shortPull, afterShort, scrolledDown, up,
+             listeners: typeof Touch === 'function' };
+  });
+
+  // The long pull is last and in its own evaluate, because it really
+  // does reload the page.
+  const fired = await p.evaluate(async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const touch = (type, y) => {
+      const el = document.getElementById('events') || document.body;
+      const t = new Touch({ identifier: 1, target: el, clientX: 40, clientY: y });
+      el.dispatchEvent(new TouchEvent(type, {
+        touches: type === 'touchend' ? [] : [t],
+        changedTouches: [t], bubbles: true, cancelable: true
+      }));
+    };
+    touch('touchstart', 20); await wait(20);
+    touch('touchmove', 260); await wait(40);
+    touch('touchend', 260); await wait(80);      // well inside the 260ms beat
+    const n = document.getElementById('pullRefresh');
+    return { spinning: !!n && n.classList.contains('spinning') };
+  });
+  await ctx.close();
+
+  ok('a pull at the top of the feed moves the indicator',
+     out.shortPull.exists && /translateY\(\d/.test(out.shortPull.moved || ''),
+     JSON.stringify(out.shortPull));
+  ok('letting go short of the trigger does not reload', !out.afterShort.spinning);
+  ok('pulling past it does', fired.spinning, JSON.stringify(fired));
+  ok('a scrolled feed does not arm at all', out.scrolledDown.unchanged);
+  ok('and neither does an upward drag', out.up.unchanged);
+  ok('no errors from any of that', errs.length === 0, errs.join(' | '));
 }
 
 /* ------------------------------------------------------------------ */

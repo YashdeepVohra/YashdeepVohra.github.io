@@ -72,7 +72,9 @@ Each line is the whole rule. The file after it is the argument for it.
   path at a time.
 - The pinned message lives in `events/{id}/pinned/current` and holds a
   COPY of the text, not an id.
-- The receipt folds events already in the cache and queries nothing.
+- The receipt folds events already in the cache and queries nothing. It
+  is READ when Recap opens (`primeReceipt`), and the card paints
+  nothing until it has: "not read yet" is not "nothing to show".
 - How long Recap keeps an event is `recapRules.js`. Change the numbers
   there and in the smoke cases, nowhere else.
 - Blocking is total: filter `isBlocked` everywhere, lists and counts alike.
@@ -112,6 +114,13 @@ Each line is the whole rule. The file after it is the argument for it.
 - A transparent button at the end of a row is pulled out by its own
   padding, so its GLYPH lands on the text column rather than 14px
   inside it. Filled and outlined buttons align by their border.
+- The card actions carry NO button chrome — no hover fill, no focus
+  glow, no box squash. Colour is the only feedback, and on touch
+  `:hover` sticks after a tap, so a fill there stays lit.
+- `overscroll-behavior-y: none` killed the browser's pull-to-refresh
+  along with the bounce, so `interactions/pullRefresh.js` is ours.
+  Passive listeners only; it arms at the top of the feed and nowhere
+  else.
 - Nothing on screen may be sliced or reach past its column. The smoke
   group "nothing is cut off" holds this at 320, 390 and 1280.
 - No `overflow: auto` box may be taller than the window with nothing to
@@ -208,6 +217,23 @@ stamp landed, so skipping it just gets the action refused. The icebreaker
 (one opening message to a stranger until they reply) works the same way:
 the message only commits if the same batch flips `icebreakerUsed` false to
 true, and it can never go back.
+
+## Findable by name
+
+`index.html` carries the title, description, canonical, Open Graph,
+Twitter card and a JSON-LD graph; `robots.txt` and `sitemap.xml` sit at
+the root. The part that is not boilerplate is `alternateName` in the
+structured data: "livesociya" is a coined word, so it gets typed wrong,
+and "live sociya" / "livesocia" have to resolve to the same thing.
+
+`robots.txt` disallows `/*?e=` on purpose. A shared event link points
+at a private feed and is meant for one person; letting it into an index
+would turn a share into a publication.
+
+Worth knowing before expecting much: this is a client-rendered app
+behind a sign-in, so a crawler sees the shell and the metadata and
+nothing else. The tags make the SITE findable by name. They cannot make
+individual events findable, and should not.
 
 ## Testing
 

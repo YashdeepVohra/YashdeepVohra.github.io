@@ -1,0 +1,12 @@
+# livesociya
+#
+# Everything behind the front door needs a sign-in, and the app is one
+# page, so there is exactly one URL worth crawling. A shared event link
+# (/?e=<id>) is deliberately NOT one of them: it resolves to a private
+# feed, it is a link meant for one person, and letting it into an index
+# would make a share into a publication.
+User-agent: *
+Allow: /$
+Disallow: /*?e=
+
+Sitemap: https://livesociya.com/sitemap.xml

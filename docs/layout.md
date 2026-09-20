@@ -218,6 +218,48 @@ Either one alone is enough to break it, so the smoke test under
 the columns stayed at top 0 — rather than either cause. Fixing one
 and leaving the other cannot fool it.
 
+### The card actions carry no button chrome
+
+Hype, Chat and Share are glyphs, not buttons: no fill on hover, no glow
+on focus, no squash of the box on press. The glyph itself still dips,
+which is feedback on the thing you pressed rather than on a box drawn
+around it, and the only other feedback is colour — which is also the
+state, ember once the hype is yours.
+
+Two reasons, and the first only appeared once the row was aligned to
+the text column. A fill behind a button whose box is pulled out by its
+own padding reaches almost to the card's edge, so pressing Hype lit a
+grey slab that looked like it was escaping the card. And on a touch
+screen `:hover` STICKS after a tap — that slab stayed lit under your
+thumb until you happened to tap somewhere else.
+
+A keyboard still needs to see where it is, so `:focus-visible` keeps a
+ring — with `outline-offset: -2px`, drawn INSIDE the box, so even that
+cannot reach past the card. `:focus-visible` never fires for a tap or
+a click, so nobody on a phone ever sees it.
+
+### Pull to refresh is ours now
+
+`overscroll-behavior-y: none` on html turns off the rubber-band jolt
+AND the browser's pull-to-refresh, because they are one feature and
+there is no value that keeps one without the other. Turning off the
+jolt was right; losing the reload was not, and it was worse than it
+looked: installed to a home screen there is no address bar and no
+reload button either, so there was no way to reload at all.
+
+`js/interactions/pullRefresh.js` is the replacement, and its whole
+design is about not costing anything. Every listener is PASSIVE and
+nothing is prevented, because nothing needs to be — at scroll position
+0 with the bounce off, a downward drag already does nothing, so there
+is no default to fight and no way for this to make scrolling janky. It
+arms only at the top of the feed screen with nothing open over it, it
+stands down for the rest of a touch the moment the drag goes up or
+sideways, and it moves one element by transform.
+
+Two things the smoke group holds, and the second matters more: that a
+pull past the trigger reloads, and that a scrolled feed, an upward
+drag and an inner scroller arm nothing at all.
+
 ### An icon-only button must not depend on the icon font
 
 `bx-share-alt` on a button with no label means that if Boxicons fails
