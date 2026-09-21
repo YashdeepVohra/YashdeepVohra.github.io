@@ -24,7 +24,7 @@ import { askConfirm } from '../utils/confirm.js';
 import { inOrbit, vouchersYouKnow } from './orbitService.js';
 import { RECAP_MAX_MS, EVENT_TTL_AFTER_MS, inRecap, recapUntil, wasCalledOff } from './recapRules.js';
 import { harvestReceipt, renderReceipt, primeReceipt } from './receiptService.js';
-import { myCircleId, circleGeo } from './circleService.js';
+import { myCircleId, circleGeo, feedIsScoped } from './circleService.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -333,14 +333,17 @@ export function loadEvents() {
   const liveList = document.getElementById("events");
   if (liveList && !liveList.children.length) liveList.innerHTML = skeletonFeed(3);
 
-  state.eventsUnsubscribe = db
-    .collection("events")
-    /* YOUR CIRCLE, and nothing else. Without this the feed was the
-       sixty events ending furthest away in the entire database — fine
-       while everyone shares one campus, meaningless the moment they do
-       not, because LIVE_LIMIT would be spent on strangers nowhere near
-       you. Needs the circleId + expiresAt index. */
-    .where("circleId", "==", myCircleId())
+  let feedQuery = db.collection("events");
+
+  /* YOUR CIRCLE, when there is more than one of them. While everybody
+     shares one campus this filter removes nothing and costs a
+     composite index the query cannot run without, so it is off — see
+     feedIsScoped() in circleService.js. Events are tagged either way,
+     which is what makes turning it on a one-line change and not a
+     migration. */
+  if (feedIsScoped()) feedQuery = feedQuery.where("circleId", "==", myCircleId());
+
+  state.eventsUnsubscribe = feedQuery
     // ONLY what is still running. Recap is 24 hours of finished events
     // that most people never open — loading it with the feed meant
     // every user paid for it on every launch. It is paged in on demand
@@ -1970,9 +1973,10 @@ export async function loadRecap({ reset = false } = {}) {
 
     for (let pages = 0; pages < RECAP_PAGES_PER_CALL && !added && !state.recapDone; pages++) {
       const now = Date.now();
-      let q = db.collection("events")
-        // Recap is the same feed, afterwards — so the same scope.
-        .where("circleId", "==", myCircleId())
+      let q = db.collection("events");
+      // Recap is the same feed, afterwards — so the same scope.
+      if (feedIsScoped()) q = q.where("circleId", "==", myCircleId());
+      q = q
         .where("expiresAt", "<=", now)
         .where("expiresAt", ">", now - RECAP_MAX_MS)
         .orderBy("expiresAt", "desc")

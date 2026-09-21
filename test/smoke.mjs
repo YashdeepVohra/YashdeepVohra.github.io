@@ -967,14 +967,40 @@ group('circles, and the geography under them');
     state.circleId = 'main';
     state.circleDoc = null;
     const H = 3600e3, t = Date.now();
-    const past = (id, cid) => ({ id, hostUid: 'me', title: id, place: 'Lawn', tag: '☕ Chill',
-      startTime: t - 3 * H, expiresAt: t - H, participantUids: ['me', 'g1', 'g2'], hypedUids: [], circleId: cid });
+    // Hosted by a stranger and attended by strangers, ON PURPOSE: the
+    // receipt folds anything in the event cache that YOU were at, and
+    // this test loads the recap twice. An event with 'me' in it would
+    // quietly inflate somebody else's assertions further down.
+    const past = (id, cid) => ({ id, hostUid: 'zz', title: id, place: 'Lawn', tag: '☕ Chill',
+      startTime: t - 3 * H, expiresAt: t - H, participantUids: ['zz', 'g1'], hypedUids: [], circleId: cid });
+    const loadRecap = async () => {
+      state.recapOrder = []; state.recapCursor = null; state.recapDone = false;
+      await ev.loadRecap({ reset: true });
+      await wait(200);
+      return state.recapOrder.slice();
+    };
     window.__events = [past('mine', 'main'), past('theirs', 'elsewhere')];
-    state.recapOrder = []; state.recapCursor = null; state.recapDone = false;
-    await ev.loadRecap({ reset: true });
-    await wait(200);
-    out.recapMine = state.recapOrder.includes('mine');
-    out.recapNotTheirs = !state.recapOrder.includes('theirs');
+
+    // OFF by default, and that is the point: one college, everybody in
+    // `main`, so the filter removes nothing and costs an index.
+    out.offByDefault = circle.feedIsScoped() === false;
+    const unscoped = await loadRecap();
+    out.seesEverything = unscoped.includes('mine') && unscoped.includes('theirs');
+
+    // And turning it on is one line, with the events already tagged.
+    circle.setFeedScoping(true);
+    const scopedOrder = await loadRecap();
+    out.recapMine = scopedOrder.includes('mine');
+    out.recapNotTheirs = !scopedOrder.includes('theirs');
+    circle.setFeedScoping(false);
+
+    // Leave the cache as it was found.
+    ['mine', 'theirs'].forEach((id) => {
+      delete state.eventCache[id];
+      state.recapOrder = (state.recapOrder || []).filter((x) => x !== id);
+      state.eventOrder = (state.eventOrder || []).filter((x) => x !== id);
+    });
+    window.__events = [];
     return out;
   });
   ok('no circle on the account still means a feed', scoped.defaultsToMain === true);

@@ -112,8 +112,16 @@ point:
 
 ### A circle is who shares a feed with you
 
-`users/{uid}.circleId` and `events/{id}.circleId`, and the live feed
-and the recap both filter on it. Without it the feed was the sixty
+`users/{uid}.circleId` and `events/{id}.circleId`. Every event is
+TAGGED with one; whether the feed FILTERS on it is `feedIsScoped()` in
+circleService.js, and while there is one college it is off — everybody
+is in `main`, so filtering removes nothing and costs a composite index
+the query cannot run without. Tagging without filtering is the whole
+point: turning it on later is one line, because there is nothing to
+backfill. Build the circleId+expiresAt index before flipping it.
+
+Filtering matters as soon as there are two circles. Without it the
+feed is the sixty
 events ending furthest away in the entire database — which is exactly
 right while everyone shares one campus and meaningless the moment they
 do not, because `LIVE_LIMIT` would be spent on strangers nowhere near

@@ -50,6 +50,34 @@ import { geoPoint } from './geoRules.js';
 export const DEFAULT_CIRCLE = "main";
 
 /* ---------------------------------------------------------------------
+   IS THE FEED ACTUALLY PARTITIONED YET?
+   ---------------------------------------------------------------------
+   No, and while there is one college it should not be. Everybody is in
+   `main`, so filtering on it removes nothing and adds a composite index
+   the query cannot run without — a failure mode in exchange for no
+   benefit. Off, the feed is one query on expiresAt and Firestore's
+   automatic index serves it.
+
+   Events still CARRY their circleId, which is the whole point. Turning
+   this on is one line and needs no migration, because every event
+   written from now on is already tagged. What it will need is the
+   circleId + expiresAt index built and enabled first — see
+   firestore.indexes.json, which still carries it.
+
+   Flip it when there is a second circle, not before.
+   ------------------------------------------------------------------- */
+let scopeByCircle = false;
+
+export function feedIsScoped() {
+  return scopeByCircle;
+}
+
+/** Turn partitioning on (or off again). */
+export function setFeedScoping(on) {
+  scopeByCircle = !!on;
+}
+
+/* ---------------------------------------------------------------------
    WHERE TO PUT WHEN NOBODY HAS SAID WHERE
    ---------------------------------------------------------------------
    Nothing asks anybody for their location, and nothing will until the

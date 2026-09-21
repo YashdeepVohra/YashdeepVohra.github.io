@@ -99,8 +99,10 @@ Each line is the whole rule. The file after it is the argument for it.
 - A locked profile fetches nothing and paints nothing — `isProfileLocked`
   is asked in the painter, not applied over the top afterwards.
 - An ended event is not live — check `expiresAt`, not `startTime`.
-- The FEED is scoped to your circle; the social graph is not. An event
-  may only be published into its host's own circle.
+- Events are TAGGED with a circle always; the feed only FILTERS on it
+  when `feedIsScoped()` says so, which is off while there is one
+  college. Turning it on needs the circleId+expiresAt index built
+  first, and no migration. The social graph is never scoped.
 - A circle's point is set on `circles/{id}` (console, no deploy) or in
   `FALLBACK_GEO`. Never from the device — nothing asks for a location
   until the feed is actually geographic.
@@ -226,7 +228,7 @@ Decisions already made, with the reason, so they don't get undone:
 | | why |
 |---|---|
 | Feed capped at `LIVE_LIMIT = 60`, recap paged | the recap used to load with the feed and nobody opened it |
-| Feed and recap filtered by `circleId` | 60 is plenty for one campus and meaningless across many — the limit would be spent on strangers nowhere near you |
+| Events tagged with `circleId`, filtering off for now | 60 is plenty for one campus and meaningless across many — but filtering on one value removes nothing and costs an index, so it waits for the second circle |
 | Messages: 25 live + paged scrollback | full history on every chat open |
 | Profiles cached in localStorage, 6h TTL | ~20 reads per open for data that changes twice a year |
 | Firestore offline persistence on | resume tokens: only changed docs bill |
