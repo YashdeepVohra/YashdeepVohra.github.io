@@ -101,6 +101,9 @@ Each line is the whole rule. The file after it is the argument for it.
 - An ended event is not live — check `expiresAt`, not `startTime`.
 - The FEED is scoped to your circle; the social graph is not. An event
   may only be published into its host's own circle.
+- A circle's point is set on `circles/{id}` (console, no deploy) or in
+  `FALLBACK_GEO`. Never from the device — nothing asks for a location
+  until the feed is actually geographic.
 - A circle carries a point, and every event copies it into `geo`.
   Nothing queries it yet — it is there so the switch to "near me" is a
   query and an index, never a migration. `geoRules.js` says what is

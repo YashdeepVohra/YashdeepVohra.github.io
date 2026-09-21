@@ -309,11 +309,17 @@ export function initializeUserApp(userData) {
 
   loadChatList();
 
-  // The feed is scoped to the circle, so the circle has to be known
-  // before it is asked for. One read, and the app works without the
-  // document existing at all — everything it carries is a display name
-  // or the point that events are stamped with.
-  loadCircle().then(() => { if (state.uid) loadEvents(); });
+  /* The feed does NOT wait for the circle document.
+     It never needed to: which circle you are in is `circleId` on your
+     own profile, and that arrived with the read that got you here —
+     state.circleId is set above. The circle DOCUMENT only carries a
+     display name and the point that events are stamped with, and
+     gating the feed on fetching it put a whole network round trip in
+     front of the first paint, on every launch. On a cold start that is
+     the difference between the feed being there and the feed arriving
+     a beat late, which is exactly what it looked like. */
+  loadEvents();
+  loadCircle();
 
   setLoading(false);
 

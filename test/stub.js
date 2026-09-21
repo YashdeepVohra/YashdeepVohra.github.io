@@ -205,7 +205,14 @@ const eventsColl = () => {
     limit: (n) => { spec.lim = n; return q; }, limitToLast: () => q,
     startAt: () => q, endAt: () => q, startAfter: (d) => { spec.after = d; return q; }, endBefore: () => q,
     get: () => Promise.resolve(snap(run())),
-    onSnapshot: (cb) => {
+    onSnapshot: (cb, onError) => {
+      // window.__eventsFail lets a test make the listener error the way
+      // Firestore does when a query has no index — which is a DEAD
+      // listener, not a slow one, and is worth being able to reproduce.
+      if (window.__eventsFail) {
+        setTimeout(() => { if (onError) onError(window.__eventsFail); }, 0);
+        return noop;
+      }
       window.__eventCbs.push(cb);
       setTimeout(() => cb(snap(eventDocs())), 0);
       return () => { window.__eventCbs = window.__eventCbs.filter((c) => c !== cb); };

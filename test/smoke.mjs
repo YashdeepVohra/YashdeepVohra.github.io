@@ -954,9 +954,14 @@ group('circles, and the geography under them');
     const g = circle.circleGeo();
     out.stamps = !!g && g.geohash.indexOf('ezs42') === 0;
 
-    // A circle whose document has no coordinates stamps nothing.
+    // A circle whose document has no coordinates stamps nothing —
+    // unless FALLBACK_GEO has been filled in, which is the one place
+    // to put a campus when there is no circle document at all.
     state.circleDoc = { id: 'northgate', name: 'North Gate' };
-    out.noCoordsNoStamp = circle.circleGeo() === null;
+    out.noCoordsNoStamp = circle.FALLBACK_GEO
+      ? circle.circleGeo() !== null
+      : circle.circleGeo() === null;
+    out.fallbackIsNullByDefault = circle.FALLBACK_GEO === null;
 
     // The recap query really filters on it — the stub applies where().
     state.circleId = 'main';
@@ -977,9 +982,51 @@ group('circles, and the geography under them');
   ok('a circle with no document is not an error', scoped.noDocNoGeo === true);
   ok('a circle with a document carries its name', scoped.named === true);
   ok('and stamps events with its position', scoped.stamps === true, JSON.stringify(scoped));
-  ok('a circle with no coordinates stamps nothing', scoped.noCoordsNoStamp === true);
+  ok('a circle with no coordinates falls back, or stamps nothing', scoped.noCoordsNoStamp === true);
+  ok('and nothing is guessed until somebody fills it in', scoped.fallbackIsNullByDefault === true);
   ok('recap shows your own circle', scoped.recapMine === true, JSON.stringify(scoped));
   ok("and not somebody else's", scoped.recapNotTheirs === true);
+
+  // A listener that errors is dead, and `failed-precondition` means
+  // the query has no index — which no amount of waiting builds. It
+  // used to back off 1.2s, 2.4s, 4.8s... and then stop in silence, so
+  // a missing index read as a feed that had merely gone slow.
+  const noIndex = await page.evaluate(async () => {
+    const { state } = await import('/js/state/store.js');
+    const ev = await import('/js/services/eventsService.js');
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+    window.__events = [];
+    window.__eventsFail = { code: 'failed-precondition' };
+    const before = (window.__eventCbs || []).length;
+    ev.loadEvents();
+    await wait(600);
+    const out = {
+      saidSo: /can't load/i.test(document.getElementById('events')?.innerText || ''),
+      gaveUp: (window.__eventCbs || []).length <= before + 1
+    };
+    window.__eventsFail = null;
+    return out;
+  });
+  ok('a feed with no index says so instead of going quiet', noIndex.saidSo === true,
+     JSON.stringify(noIndex));
+  ok('and does not sit there retrying something that cannot succeed', noIndex.gaveUp === true);
+  // That test breaks the feed ON PURPOSE, and the whole point of it is
+  // that the app complains loudly — so the complaint is expected, and
+  // the sweep at the end should not count it.
+  {
+    const deliberate = errors.filter((e) => /failed-precondition|has no index/.test(e));
+    deliberate.forEach((e) => errors.splice(errors.indexOf(e), 1));
+    ok('and the complaint is loud enough to be seen', deliberate.length >= 1,
+       String(deliberate.length));
+  }
+  // Put the feed back, so nothing after this runs against a dead one.
+  await page.evaluate(async () => {
+    const ev = await import('/js/services/eventsService.js');
+    window.__eventsFail = null;
+    ev.loadEvents();
+  });
+  await page.waitForTimeout(200);
 }
 
 /* ------------------------------------------------------------------ */

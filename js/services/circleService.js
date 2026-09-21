@@ -49,6 +49,36 @@ import { geoPoint } from './geoRules.js';
  */
 export const DEFAULT_CIRCLE = "main";
 
+/* ---------------------------------------------------------------------
+   WHERE TO PUT WHEN NOBODY HAS SAID WHERE
+   ---------------------------------------------------------------------
+   Nothing asks anybody for their location, and nothing will until the
+   feed actually becomes "near me" — a permission prompt buys nothing
+   today and a denied one is sticky, which is the same mistake the
+   notification prompt made.
+
+   So a point comes from the CIRCLE, not the device, and there are two
+   places to set it. Prefer the first:
+
+     1. circles/main in the Firebase console — { name, lat, lng }.
+        No deploy, no code change, and it is the same field every other
+        circle will use.
+     2. This constant, for when that document does not exist at all.
+
+   Leave it null rather than guessing. An event stamped with a point
+   that is not where it happened is worse than one stamped with
+   nothing: nothing is visibly absent and gets filled in, whereas a
+   wrong point looks like data and survives into the day geography
+   starts being trusted. 0,0 in particular is a real place in the Gulf
+   of Guinea.
+
+   To set it, replace null with your campus's coordinates:
+     export const FALLBACK_GEO = { lat: 28.5450, lng: 77.1926 };
+   (that example is IIT Delhi — use your own; right-click the spot in
+   Google Maps and the first item on the menu is the pair.)
+   ------------------------------------------------------------------- */
+export const FALLBACK_GEO = null;
+
 /** The circle this account belongs to. */
 export function myCircleId() {
   return safeId(state.circleId) || DEFAULT_CIRCLE;
@@ -74,8 +104,14 @@ export function circleName() {
  */
 export function circleGeo() {
   const c = myCircle();
-  if (!c || !Number.isFinite(c.lat) || !Number.isFinite(c.lng)) return null;
-  return geoPoint(c.lat, c.lng);
+  if (c && Number.isFinite(c.lat) && Number.isFinite(c.lng)) {
+    return geoPoint(c.lat, c.lng);
+  }
+  // No document, or one with no coordinates on it.
+  if (FALLBACK_GEO && Number.isFinite(FALLBACK_GEO.lat) && Number.isFinite(FALLBACK_GEO.lng)) {
+    return geoPoint(FALLBACK_GEO.lat, FALLBACK_GEO.lng);
+  }
+  return null;
 }
 
 /**

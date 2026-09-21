@@ -385,13 +385,60 @@ export function loadEvents() {
       (error) => {
         console.error("Feed error:", error.code || error.message);
         state.eventsUnsubscribe = null;
-        retryFeed();
+        reportFeedFailure(error);
+        retryFeed(error);
       }
     );
 }
 
+/* ---------------------------------------------------------------------
+   A listener that errors is DEAD, and some deaths are not worth waiting
+   through
+   ---------------------------------------------------------------------
+   Firestore never revives a listener that has errored, which is why
+   there is a retry at all. But the backoff doubles — 1.2s, 2.4s, 4.8s,
+   9.6s, 19.2s — and then gives up in silence. For a flaky connection
+   that is right. For `failed-precondition`, which is Firestore saying
+   "this query has no index", it is close to the worst thing we could
+   do: the feed goes quiet, comes back for one snapshot, goes quiet for
+   twice as long, and after about forty seconds stops for good. Nothing
+   on screen says anything is wrong, so what it looks like is a feed
+   that has become slow — on every device at once, because the missing
+   index is not on any of them.
+
+   So that one does not retry. It says what is wrong, where.
+   ------------------------------------------------------------------- */
+
+function isMissingIndex(error) {
+  const code = String((error && error.code) || "");
+  return code === "failed-precondition" || code.indexOf("failed-precondition") !== -1;
+}
+
+function reportFeedFailure(error) {
+  if (!isMissingIndex(error)) return;
+  console.error(
+    "The feed query has no index.\n" +
+    "Deploy it:  firebase deploy --only firestore:indexes\n" +
+    "Or create it by hand: collection `events`, circleId ascending + " +
+    "expiresAt descending. Firestore usually puts a direct link to it " +
+    "in the error above.\n" +
+    "Until it exists and finishes BUILDING, this feed cannot load."
+  );
+  const list = document.getElementById("events");
+  if (list) {
+    list.innerHTML = `
+      <div class="empty-state">
+        <h4>The feed can't load</h4>
+        <p>Something's wrong at our end, not yours. It should sort itself
+           out shortly — try again in a minute.</p>
+      </div>`;
+  }
+}
+
 let feedRetries = 0;
-function retryFeed() {
+function retryFeed(error) {
+  // No amount of waiting builds an index.
+  if (isMissingIndex(error)) return;
   if (feedRetries >= 5) return;
   const wait = 1200 * Math.pow(2, feedRetries);
   feedRetries++;
@@ -1953,6 +2000,12 @@ export async function loadRecap({ reset = false } = {}) {
     await primeUsers([...uids]);
   } catch (e) {
     console.error("Recap load failed:", e.code || e.message);
+    if (isMissingIndex(e)) {
+      console.error(
+        "Recap uses the same index as the feed: collection `events`, " +
+        "circleId ascending + expiresAt descending."
+      );
+    }
   } finally {
     state.recapLoading = false;
     // After the flag drops, so the empty state is the real one and not

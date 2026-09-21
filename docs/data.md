@@ -132,6 +132,28 @@ the client. An event may only be published into its host's own circle,
 which the rules check with one document access on a write that is
 already rate-limited.
 
+### A circle's point comes from the circle, never from the device
+
+Nothing asks anybody for their location, and nothing will until the
+feed actually becomes "near me" — a permission prompt buys nothing
+today, and a denied one is sticky, which is the mistake the
+notification prompt already made once.
+
+So the point is set in one of two places, and the first is better:
+
+1. `circles/main` in the Firebase console — `{ name, lat, lng }`.
+   No deploy, no code change, and it is the same field every other
+   circle will use.
+2. `FALLBACK_GEO` in `circleService.js`, for when that document does
+   not exist at all.
+
+Both are empty by default, and an event with no point is stamped with
+nothing. That is deliberate: a point that is not where the event
+happened is worse than no point, because nothing is visibly absent and
+gets filled in, whereas a wrong one looks like data and survives into
+the day geography starts being trusted. `0, 0` is a real place in the
+Gulf of Guinea.
+
 ### Geography is laid down but not switched on
 
 Every event copies its circle's point into `geo` (`lat`, `lng`,
