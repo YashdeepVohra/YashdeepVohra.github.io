@@ -51,6 +51,11 @@ export const state = {
   currentChat: null,       // chatId (direct) or eventId (event chat)
   currentChatType: "direct",
   currentChatStatus: "unlocked",
+  // Has the chat document's listener delivered yet? sendMessage() used
+  // to re-read that document on every single send — a billed read per
+  // message, for data a live listener was already holding. It only
+  // needs the network when this is still false.
+  currentChatLoaded: false,
   currentChatInitiatorUid: "",
   currentChatData: null,
   currentOtherUid: "",
@@ -145,6 +150,7 @@ export function resetState() {
   state.noMoreMessages = false;
   state.currentChat = null;
   state.currentChatData = null;
+  state.currentChatLoaded = false;
   state.currentOtherUid = "";
   state.currentProfileUid = "";
   state.replyingToMessage = null;

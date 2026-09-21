@@ -55,6 +55,18 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const LIVE_WINDOW = 25;
 const OLDER_PAGE = 25;
 
+// The inbox listener used to ask for EVERY conversation you have ever
+// had, with no limit and no order — a live listener over all of them,
+// re-read on every launch and billing a read per change for the rest of
+// time. Nobody scrolls past the last few dozen threads, and the sort
+// this used to do in memory is the one the server can do from an index.
+const INBOX_LIMIT = 40;
+
+// One shared event is all "have we crossed paths" asks for. Without a
+// bound, somebody who joined forty things yesterday made their first
+// message to a stranger cost forty reads.
+const CROSSED_PATHS_SCAN = 20;
+
 /** The right messages subcollection for whatever chat is open. */
 function messagesRef(chatId = state.currentChat, type = state.currentChatType) {
   if (!chatId) return null;
@@ -74,6 +86,7 @@ export async function checkCrossedPaths(uidA, uidB) {
     const snap = await db.collection("events")
       .where("participantUids", "array-contains", uidA)
       .where("expiresAt", ">", cutoff)
+      .limit(CROSSED_PATHS_SCAN)
       .get();
     return snap.docs.some((doc) => (doc.data().participantUids || []).includes(uidB));
   } catch (e) {
@@ -113,6 +126,7 @@ export function openChat(chatId, otherUid) {
   state.currentChat = chatId;
   state.currentOtherUid = otherUid;
   state.currentChatType = "direct";
+  state.currentChatLoaded = false;
   state.replyingToMessage = null;
   state.editingMessage = null;
   state.pinnedMessage = null;
@@ -145,6 +159,7 @@ export function openChat(chatId, otherUid) {
 
   if (state.chatDocUnsubscribe) state.chatDocUnsubscribe();
   state.chatDocUnsubscribe = db.collection("chats").doc(chatId).onSnapshot((doc) => {
+    state.currentChatLoaded = true;
     if (!doc.exists) {
       state.currentChatData = null;
       state.currentChatStatus = "unlocked";
@@ -268,6 +283,7 @@ export function closeChat({ silent = false } = {}) {
 
   state.currentChat = null;
   state.currentChatData = null;
+  state.currentChatLoaded = false;
   state.currentEventData = null;
   state.currentOtherUid = "";
   state.replyingToMessage = null;
@@ -319,14 +335,25 @@ export async function sendMessage() {
     // because the rules read it to authorise the write. ----
     const otherUid = state.currentOtherUid;
     const chatRef = db.collection("chats").doc(state.currentChat);
-    const chatDoc = await chatRef.get();
+
+    // This document already has a live listener on it. Reading it again
+    // here was a billed read on EVERY message sent, for data we were
+    // holding — it roughly doubled what a conversation costs. Only go to
+    // the network while that listener still has not delivered.
+    let chatData = state.currentChatData;
+    let chatExists = !!chatData;
+    if (!state.currentChatLoaded) {
+      const chatDoc = await chatRef.get();
+      chatExists = chatDoc.exists;
+      chatData = chatExists ? (chatDoc.data() || {}) : null;
+    }
 
     let status = state.currentChatStatus;
     let initiatedByUid = state.currentChatInitiatorUid;
 
     let usedIcebreaker = false;
 
-    if (!chatDoc.exists) {
+    if (!chatExists) {
       const crossed = await checkCrossedPaths(state.uid, otherUid);
       status = crossed ? "unlocked" : "icebreaker";
       initiatedByUid = state.uid;
@@ -342,11 +369,10 @@ export async function sendMessage() {
       });
       usedIcebreaker = status === "icebreaker";
     } else {
-      const data = chatDoc.data() || {};
       if (status === "icebreaker" && initiatedByUid === otherUid) status = "unlocked";
       usedIcebreaker = status === "icebreaker"
-        && data.initiatedByUid === state.uid
-        && data.icebreakerUsed !== true;
+        && chatData.initiatedByUid === state.uid
+        && chatData.icebreakerUsed !== true;
       await chatRef.set({
         unreadByUid: otherUid,
         lastUpdated: Date.now(),
@@ -1430,6 +1456,12 @@ export function loadChatList() {
   state.chatListUnsubscribe = db
     .collection("chats")
     .where("userUids", "array-contains", state.uid)
+    // Newest conversation first, bounded. Needs the composite index in
+    // firestore.indexes.json (userUids CONTAINS + lastUpdated DESC) —
+    // without it deployed this listener errors and retryInbox() gives
+    // up after five tries.
+    .orderBy("lastUpdated", "desc")
+    .limit(INBOX_LIMIT)
     .onSnapshot(
       async (snapshot) => {
         inboxRetries = 0;

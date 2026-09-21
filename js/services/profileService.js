@@ -132,6 +132,10 @@ const profileEvents = { uid: "", tab: "hosted", hosted: [], joined: [], joinedLo
 
 const DAY = 24 * 60 * 60 * 1000;
 
+// A profile shows the two tabs, not an archive. Both event queries are
+// capped at this and ordered newest-first; see loadProfileEvents().
+const PROFILE_EVENTS_LIMIT = 30;
+
 function startOfDay(ms) {
   const d = new Date(ms);
   d.setHours(0, 0, 0, 0);
@@ -347,12 +351,28 @@ export async function loadUserEvents(targetUid) {
     return out;
   };
 
+  /* Both of these used to be unbounded and unordered: every event the
+     person had EVER hosted, and every one they had ever joined. Events
+     are never deleted — they only age out of Recap on screen — so this
+     grew for the life of the account, and every VISITOR to the profile
+     paid it. After a few months an active person's profile cost
+     hundreds of reads to open.
+     Newest first, one screenful. Both need a composite index; see
+     firestore.indexes.json. */
   try {
     const [hostedSnap, joinedSnap] = await Promise.all([
-      db.collection("events").where("hostUid", "==", targetUid).get(),
+      db.collection("events")
+        .where("hostUid", "==", targetUid)
+        .orderBy("expiresAt", "desc")
+        .limit(PROFILE_EVENTS_LIMIT)
+        .get(),
       joinedLocked
         ? Promise.resolve(null)
-        : db.collection("events").where("participantUids", "array-contains", targetUid).get(),
+        : db.collection("events")
+            .where("participantUids", "array-contains", targetUid)
+            .orderBy("expiresAt", "desc")
+            .limit(PROFILE_EVENTS_LIMIT)
+            .get(),
     ]);
     if (state.currentProfileUid !== targetUid) return;
 

@@ -91,8 +91,20 @@ export const FieldPath = firebase.firestore.FieldPath;
 auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(() => {});
 
 // Clean up any stale service workers from earlier versions of the app.
+//
+// This used to unregister EVERY registration, including the one app.js
+// registers on `load` to make "add to home screen" possible. Two pieces
+// of code racing over the same thing: whichever promise resolved last
+// won, so the install prompt appeared on some launches and not others.
+// Only foreign scripts go now — ours is left alone.
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.getRegistrations().then((registrations) => {
-    for (const registration of registrations) registration.unregister();
+    for (const registration of registrations) {
+      const url = registration.active?.scriptURL
+        || registration.installing?.scriptURL
+        || registration.waiting?.scriptURL
+        || "";
+      if (!url.endsWith("/sw.js")) registration.unregister();
+    }
   }).catch(() => {});
 }

@@ -19,6 +19,7 @@ import { switchScreen, setLoading, toast } from '../utils/ui.js';
 import { clearOverlays, openOverlay } from '../utils/overlays.js';
 import { renderAvatar } from '../utils/formatters.js';
 import { normalizeUsername, hydrateProfileCache, rememberUser, clearProfileCache } from './userService.js';
+import { stampAsk, msUntilAskAllowed } from './limitsService.js';
 import { loadEvents, renderEvents, showSharedEvent } from './eventsService.js';
 import { consumePendingEvent } from './shareService.js';
 import { loadBlocks } from './blockService.js';
@@ -429,7 +430,21 @@ export async function claimUsername() {
       // Already ours — a previous attempt reserved it but died before
       // step 2. Fall through and finish the job.
     } else {
-      await handleRef.set({ uid, createdAt: Date.now() });
+      // The reservation carries the same rate stamp the follow and orbit
+      // asks use, in the same batch, because the rule checks with
+      // getAfter() that it landed. Without it the create is refused.
+      //
+      // The stamp is there because haveNoHandleYet() stays true for as
+      // long as the profile has no username, and a reservation can never
+      // be deleted — so one account parked in onboarding could otherwise
+      // script-burn every good handle on the site, permanently.
+      const gap = msUntilAskAllowed();
+      if (gap > 0) await new Promise((r) => setTimeout(r, gap));
+
+      const batch = db.batch();
+      stampAsk(batch);
+      batch.set(handleRef, { uid, createdAt: Date.now() });
+      await batch.commit();
     }
 
     // Step 2 — stamp it on the profile. The rules re-read

@@ -185,6 +185,15 @@ export function onUnfollow(fn) {
   if (typeof fn === "function") unfollowHooks.push(fn);
 }
 
+// Mirrors the ceiling in firestore.rules. It is not a product decision
+// — it is what an ARRAY on a document forces: every follow rewrites the
+// whole profile, every read of that profile downloads the whole list,
+// and one document takes about one write a second. The real fix is a
+// followers SUBCOLLECTION with a counter; until that lands, say what is
+// happening instead of letting the write be refused and calling it a
+// network problem.
+const FOLLOWER_CAP = 5000;
+
 const arr = (v) => (Array.isArray(v) ? v : []);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -330,6 +339,13 @@ async function follow(uid, onDone) {
     const fresh = await refreshUser(uid);
     const followers = arr(fresh.followers);
     const requests = arr(fresh.followRequests);
+
+    if (!followers.includes(state.uid) && followers.length >= FOLLOWER_CAP) {
+      setFollowingLocal(uid, false);
+      busy.delete(uid);
+      paint(onDone);
+      return toast(name + " can't take any more followers right now.");
+    }
 
     if (followers.includes(state.uid)) {
       // Already in — an approval this app never heard about.

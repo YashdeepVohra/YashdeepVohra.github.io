@@ -1255,7 +1255,14 @@ export function joinEvent(id) {
   }
   db.collection("events").doc(id)
     .update({ participantUids: FieldValue.arrayUnion(state.uid) })
-    .catch((err) => console.error("Join failed:", err.code || err.message));
+    .catch((err) => {
+      console.error("Join failed:", err.code || err.message);
+      // Silence here meant a tap that did nothing and said nothing —
+      // the commonest real cause is the last spot going while you read.
+      toast(err.code === "permission-denied"
+        ? "Couldn't join — it may have filled up or ended."
+        : "Couldn't join. Check your connection.");
+    });
 }
 
 export function requestJoin(id) {
@@ -1270,7 +1277,10 @@ export function requestJoin(id) {
 export function cancelRequest(id) {
   db.collection("events").doc(id)
     .update({ pendingUids: FieldValue.arrayRemove(state.uid) })
-    .catch((err) => console.error("Cancel failed:", err.code || err.message));
+    .catch((err) => {
+      console.error("Cancel failed:", err.code || err.message);
+      toast("Couldn't cancel that. Try again.");
+    });
 }
 
 /* ---------------------------------------------------------------------
@@ -1383,7 +1393,10 @@ export function declineRequest(uid) {
   db.collection("events").doc(id)
     .update({ pendingUids: FieldValue.arrayRemove(uid) })
     .then(renderPeople)
-    .catch((err) => console.error("Decline failed:", err.code || err.message));
+    .catch((err) => {
+      console.error("Decline failed:", err.code || err.message);
+      toast("Couldn't decline that right now.");
+    });
 }
 
 export function leaveEvent(id) {
@@ -1392,7 +1405,10 @@ export function leaveEvent(id) {
       participantUids: FieldValue.arrayRemove(state.uid),
       unconfirmedUids: FieldValue.arrayRemove(state.uid)
     })
-    .catch((err) => console.error("Leave failed:", err.code || err.message));
+    .catch((err) => {
+      console.error("Leave failed:", err.code || err.message);
+      toast("Couldn't leave right now. Try again.");
+    });
 }
 
 /** "Still in" — clears your unconfirmed flag after a host's change. */
@@ -1551,23 +1567,105 @@ function fadeOutCard(id, remove) {
   setTimeout(() => (remove ? card.remove() : card.classList.add("hidden")), 300);
 }
 
-export function confirmMoveToRecap() {
+/**
+ * End an event now.
+ *
+ * This used to fade the card out FIRST and then fire the write without
+ * looking at what came back. For an event that had not started yet the
+ * rules refused it — the edit branch insists expiresAt > startTime —
+ * so the host watched their event disappear while it stayed live for
+ * everybody else. There is a rule branch for ending now; the card is
+ * not touched until the write has actually landed.
+ */
+export async function confirmMoveToRecap() {
   const id = state.eventIdToManage;
   if (!id) return;
   closeDeleteModal();
-  fadeOutCard(id, false);
-  db.collection("events").doc(id)
-    .update({ expiresAt: Date.now() - 1 })
-    .catch((err) => console.error("Recap move failed:", err.code || err.message));
+
+  const endedAt = Date.now() - 1;
+  try {
+    await db.collection("events").doc(id).update({ expiresAt: endedAt });
+
+    // The feed listener only watches what has not expired, so this
+    // event is about to LEAVE it rather than arrive changed — nothing
+    // is coming to tell us. Move it across ourselves.
+    const e = state.eventCache[id];
+    if (e) e.expiresAt = endedAt;
+    if (!(state.recapOrder || []).includes(id)) {
+      state.recapOrder = (state.recapOrder || []).concat(id);
+    }
+    fadeOutCard(id, false);
+    setTimeout(renderEvents, 320);
+    toast(e && endedAt < (e.startTime || 0) ? "Called off. It's in your Recap." : "Ended. It's in Recap now.");
+  } catch (err) {
+    console.error("Recap move failed:", err.code || err.message);
+    toast("Couldn't end it. Try again.");
+  }
 }
 
-export function confirmDeletePermanently() {
+/* ---------------------------------------------------------------------
+   Deleting an event, and everything under it
+   ---------------------------------------------------------------------
+   Firestore does not cascade. Deleting the event document on its own
+   left its messages, its typing flags and its pinned message behind —
+   and left them UNREACHABLE, because every rule under events/{id}
+   authorises itself by reading the parent. With the parent gone that
+   get() finds nothing, so nobody can read those documents and nobody
+   can delete them either. They sit in the database for good, and one
+   busy event chat is a few hundred of them.
+
+   So the children go first, while the parent is still there to
+   authorise it, and the event document goes last.
+
+   A batch is ONE request, and a rule get() to the same path is cached
+   within a request — so a hundred message deletes cost one document
+   access, not a hundred. If a page is refused anyway, that page falls
+   back to one delete at a time rather than giving up and orphaning
+   everything behind it.
+   ------------------------------------------------------------------- */
+
+const PURGE_PAGE = 100;
+const PURGE_MAX_PAGES = 30;
+
+async function purgeCollection(ref) {
+  for (let page = 0; page < PURGE_MAX_PAGES; page++) {
+    const snap = await ref.limit(PURGE_PAGE).get();
+    if (snap.empty) return true;
+
+    try {
+      const batch = db.batch();
+      snap.docs.forEach((d) => batch.delete(d.ref));
+      await batch.commit();
+    } catch (e) {
+      // One at a time: each is its own request with its own budget.
+      for (const d of snap.docs) await d.ref.delete().catch(() => {});
+    }
+
+    if (snap.size < PURGE_PAGE) return true;
+  }
+  return false;   // more left than we are willing to walk in one go
+}
+
+export async function confirmDeletePermanently() {
   const id = state.eventIdToManage;
   if (!id) return;
   closeDeleteModal();
-  fadeOutCard(id, true);
 
-  db.collection("events").doc(id).delete().catch((error) => {
+  const eventRef = db.collection("events").doc(id);
+  try {
+    // Children first — the parent is what authorises removing them.
+    await purgeCollection(eventRef.collection("messages"));
+    await purgeCollection(eventRef.collection("typing"));
+    await purgeCollection(eventRef.collection("pinned"));
+
+    await eventRef.delete();
+
+    delete state.eventCache[id];
+    state.eventOrder = (state.eventOrder || []).filter((x) => x !== id);
+    state.recapOrder = (state.recapOrder || []).filter((x) => x !== id);
+    fadeOutCard(id, true);
+    toast("Deleted.");
+  } catch (error) {
     console.error("Delete failed:", error.code, error.message);
     toast(
       error.code === "permission-denied"
@@ -1575,7 +1673,7 @@ export function confirmDeletePermanently() {
         : "Could not delete. Check your connection."
     );
     loadEvents();
-  });
+  }
 }
 
 

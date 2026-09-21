@@ -416,12 +416,20 @@ window.addEventListener("unhandledrejection", (event) => {
   }
 });
 
-// Ask for desktop notifications on the first interaction, once.
-document.addEventListener("click", () => {
-  if ("Notification" in window && Notification.permission === "default") {
-    Notification.requestPermission().catch(() => {});
-  }
-}, { once: true });
+/* ---------------------------------------------------------------------
+   No notification permission prompt — on purpose
+   ---------------------------------------------------------------------
+   This used to ask for the Notification permission on the first click.
+   Nothing ever used it: showNotification() in utils/ui.js is an in-app
+   toast, there is no FCM, and sw.js has no push handler. So it spent
+   the one prompt the browser gives us on a feature that does not exist.
+
+   That is worse than doing nothing. A denial is sticky — Chrome will
+   not ask again and the user has to dig through site settings to undo
+   it — so every tester who said no is a person who CANNOT be reached
+   once push actually ships. Ask on the day there is something to send,
+   and ask in context, not on a stray click.
+   ------------------------------------------------------------------- */
 
 // Native back button: close chat, then profile, then trap at home.
 // Back unwinds one layer at a time: overlays (create, settings, search,

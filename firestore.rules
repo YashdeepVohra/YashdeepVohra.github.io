@@ -185,6 +185,23 @@ service cloud.firestore {
       return duration.value(15, 'm');
     }
 
+    /* -----------------------------------------------------------------
+       A client-supplied millisecond stamp that could plausibly be now.
+       `time` used to be checked with `is number` and nothing else. A
+       thread is ordered by it and only the newest 25 carry a listener,
+       so a message dated 2099 pinned itself to the top of everybody's
+       live window for good — it could never be scrolled past, and no
+       window would ever age it out.
+       The past side is deliberately generous: offline persistence means
+       a message written on the bus commits whenever the phone next
+       reaches the network, and that stamp is honestly old.
+       ----------------------------------------------------------------- */
+    function sensibleTime(ms) {
+      return ms is number
+        && timestamp.value(ms) < request.time + duration.value(2, 'm')
+        && timestamp.value(ms) > request.time - duration.value(7, 'd');
+    }
+
     function isMessageSender() {
       return signedIn() && resource.data.senderUid == uid();
     }
@@ -670,10 +687,9 @@ service cloud.firestore {
         // typing — and the ONLY thing they may change is their own.
         (
           signedIn()
-          && changedKeys().hasOnly(['participantUids', 'hypedUids', 'typingUids', 'pendingUids', 'unconfirmedUids'])
+          && changedKeys().hasOnly(['participantUids', 'hypedUids', 'pendingUids', 'unconfirmedUids'])
           && selfToggleOnly(resource.data.participantUids, request.resource.data.participantUids)
           && selfToggleOnly(resource.data.get('hypedUids', []), request.resource.data.get('hypedUids', []))
-          && selfToggleOnly(resource.data.get('typingUids', []), request.resource.data.get('typingUids', []))
           && selfToggleOnly(resource.data.get('pendingUids', []), request.resource.data.get('pendingUids', []))
           && selfToggleOnly(resource.data.get('unconfirmedUids', []), request.resource.data.get('unconfirmedUids', []))
           // Capacity is now enforced by the database, not just the UI.
@@ -684,6 +700,23 @@ service cloud.firestore {
           // On an approval-only event you may leave, but you may not
           // add yourself — that is the host's call, via branch (b).
           && (!needsApproval() || goingAfter().difference(goingBefore()).size() == 0)
+        )
+        ||
+        (
+          /* END IT NOW.
+             The edit branch above insists expiresAt > startTime, which is
+             right for an edit and wrong for ending something: a host
+             calling off an event that had not started yet was writing an
+             expiresAt BELOW startTime, and the rule refused it. The card
+             faded out locally and the event stayed live for everyone else.
+             So ending is its own act: one field, only the host, and only
+             ever earlier than it already was. An expiresAt that lands
+             below startTime is exactly what wasCalledOff() reads in
+             recapRules.js — a state that was unreachable until now. */
+          isHost()
+          && changedKeys().hasOnly(['expiresAt'])
+          && request.resource.data.expiresAt is number
+          && request.resource.data.expiresAt < resource.data.expiresAt
         );
 
       allow delete: if isHost();
@@ -701,6 +734,11 @@ service cloud.firestore {
         }
         allow read: if inEventChat();
         allow write: if inEventChat() && typingUid == uid();
+        // Only yours to write — but the host has to be able to clear
+        // ALL of them when deleting the event. Anything left under a
+        // deleted event is unreachable: every rule in here authorises
+        // itself by reading the parent, and the parent is gone.
+        allow delete: if signedIn() && eventData(eventId).hostUid == uid();
       }
 
       // ---- The pinned message ----
@@ -750,7 +788,7 @@ service cloud.firestore {
         allow create: if inEvent()
           && request.resource.data.senderUid == uid()
           && isString(request.resource.data.text, 2000)
-          && request.resource.data.time is number;
+          && sensibleTime(request.resource.data.time);
 
         // Your own message, and only as an edit or a retraction — or
         // anybody in the event moving their own reaction. See the
@@ -867,7 +905,7 @@ service cloud.firestore {
           && !exists(/databases/$(database)/documents/blocks/$(chatId))
           && request.resource.data.senderUid == uid()
           && isString(request.resource.data.text, 2000)
-          && request.resource.data.time is number
+          && sensibleTime(request.resource.data.time)
           && icebreakerAllowed();
 
         // Same shapes as the event chat. Note there is no block check

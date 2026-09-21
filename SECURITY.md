@@ -138,14 +138,28 @@ domain and the `CNAME` domain are both listed.
 
 ## 7. Known gaps — decide before launch
 
-**Icebreaker limit is UI-only.** The "one message until they reply"
-rule is enforced in `chatService.js`, but a rule cannot count documents,
-so someone using the console could send more. Closing this needs a
-message counter on the chat doc or a Cloud Function.
+**The icebreaker is enforced by the rules now.** It was UI-only when
+this was first written. The opening message only commits if the same
+batch flips `icebreakerUsed` from false to true on the chat document,
+and the rule makes that flag one-way — so there is exactly one such
+message, ever, console or not. `docs/data.md` has the shape.
 
-**No rate limiting.** Nothing stops a script creating a thousand events.
-Firestore rules can't do time-window limits. If this becomes a problem,
-a Cloud Function with a per-user counter is the usual fix.
+**Rate limiting exists now.** It was absent when this was first
+written. Limits live in `users/{uid}/private/limits`, whose own rule
+pins every field to `request.time`, so the ledger can only ever say
+"now" and cannot be backdated. The action and the stamp go in ONE
+batch and the action's rule uses `getAfter()` to require the stamp
+landed — skipping it just gets the action refused. Currently covers
+starting an event (90s apart, 25 a day), follow and orbit asks (3s
+apart) and reserving a handle (3s apart). See `js/services/limitsService.js`.
+
+**Messages are not rate limited.** Nothing stops a script filling a
+thread. The same ledger could carry a `messageAt` stamp, at the cost of
+a couple of document accesses on the hottest write path in the app —
+which is why it has not been done yet.
+
+**Still no content moderation, and reports are read by hand.** See
+below.
 
 **Blocking and reporting now exist.** A block is one document per pair
 at `blocks/{uidA_uidB}`, uids sorted — not a row per direction, so the
