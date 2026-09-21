@@ -66,8 +66,31 @@ export function renderAvatar(avatarCode) {
 }
 
 // ---------- TIME ----------
-export function formatTime(ms) {
-  const messageDate = new Date(ms);
+
+/**
+ * Milliseconds out of whatever a stamp happens to be.
+ *
+ * A message now carries two: `time`, the client's own number, which is
+ * what the thread is ordered by and what survives being written
+ * offline; and `sentAt`, a real server Timestamp, which is what
+ * anything that must not be gameable is measured against. Firestore
+ * hands the second one back as a Timestamp object, and while the write
+ * is still in flight the local copy is a plain number — so everything
+ * that reads a stamp goes through here rather than assuming.
+ */
+export function msOf(value) {
+  if (value === null || value === undefined) return 0;
+  if (typeof value === "number") return value;
+  if (typeof value.toMillis === "function") return value.toMillis();
+  if (typeof value.seconds === "number") {
+    return value.seconds * 1000 + Math.floor((value.nanoseconds || 0) / 1e6);
+  }
+  if (value instanceof Date) return value.getTime();
+  return 0;
+}
+
+export function formatTime(value) {
+  const messageDate = new Date(msOf(value));
   const today = new Date();
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);

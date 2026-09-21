@@ -32,6 +32,36 @@
 
 export const EDIT_WINDOW_MS = 15 * 60 * 1000;
 
+/**
+ * Milliseconds out of a stamp, without importing anything — this file
+ * stays a leaf on purpose. Same job as msOf() in utils/formatters.js.
+ */
+function ms(value) {
+  if (value === null || value === undefined) return 0;
+  if (typeof value === "number") return value;
+  if (typeof value.toMillis === "function") return value.toMillis();
+  if (typeof value.seconds === "number") {
+    return value.seconds * 1000 + Math.floor((value.nanoseconds || 0) / 1e6);
+  }
+  return 0;
+}
+
+/**
+ * When a message was really sent.
+ *
+ * `sentAt` is the server's own clock — firestore.rules requires it to
+ * equal request.time, so it cannot be argued with. `time` is the
+ * client's number, kept because the thread is ordered by it and
+ * because a message written offline has to carry SOME stamp until it
+ * commits. The window is measured against the server's whenever there
+ * is one: otherwise a phone could buy itself an unlimited edit window
+ * by lying about `time`, and `time` is the field a person controls.
+ */
+export function sentMs(msg) {
+  if (!msg) return 0;
+  return ms(msg.sentAt) || ms(msg.time);
+}
+
 export function isDeleted(msg) {
   return !!(msg && msg.deleted === true);
 }
@@ -46,8 +76,9 @@ export function isMine(msg, uid) {
 
 /** Milliseconds left on the edit window. 0 once it has closed. */
 export function editTimeLeft(msg, now = Date.now()) {
-  if (!msg || typeof msg.time !== "number") return 0;
-  return Math.max(0, msg.time + EDIT_WINDOW_MS - now);
+  const sent = sentMs(msg);
+  if (!sent) return 0;
+  return Math.max(0, sent + EDIT_WINDOW_MS - now);
 }
 
 export function canEdit(msg, uid, now = Date.now()) {

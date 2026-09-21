@@ -25,7 +25,7 @@
 // sixty events.
 // ==========================================
 
-import { db } from '../config/firebase.js';
+import { db, FieldValue } from '../config/firebase.js';
 import { state } from '../state/store.js';
 import { toast } from '../utils/ui.js';
 import { escapeHtml, safeId } from '../utils/formatters.js';
@@ -232,13 +232,17 @@ async function sendToChat(otherUid) {
       });
       const batch = db.batch();
       batch.set(chatRef, { icebreakerUsed: true }, { merge: true });
-      batch.set(chatRef.collection("messages").doc(),
-        { senderUid: state.uid, text: link, time: Date.now(), replyTo: null });
+      batch.set(chatRef.collection("messages").doc(), {
+        senderUid: state.uid, text: link,
+        time: Date.now(), sentAt: FieldValue.serverTimestamp(), replyTo: null
+      });
       await batch.commit();
     } else {
       await chatRef.set({ unreadByUid: otherUid, lastUpdated: Date.now(), typingUid: "" }, { merge: true });
-      await chatRef.collection("messages").doc()
-        .set({ senderUid: state.uid, text: link, time: Date.now(), replyTo: null });
+      await chatRef.collection("messages").doc().set({
+        senderUid: state.uid, text: link,
+        time: Date.now(), sentAt: FieldValue.serverTimestamp(), replyTo: null
+      });
     }
     toast("Sent to " + displayNameFor(otherUid) + ".");
   } catch (err) {

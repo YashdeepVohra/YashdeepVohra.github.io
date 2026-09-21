@@ -5,6 +5,14 @@ window.__writes = 0;
 window.__reads = 0;
 window.__docs = [];
 const noop = () => {};
+// serverTimestamp() resolves at WRITE time, into something shaped like
+// a real Firestore Timestamp — the app reads stamps through msOf(), so
+// a bare number here would not exercise that path at all.
+const stamp = (ms = Date.now()) => ({
+  seconds: Math.floor(ms / 1000),
+  nanoseconds: (ms % 1000) * 1e6,
+  toMillis: () => ms,
+});
 // A batch checks its rules ONCE, up front, then applies. Without this
 // flag the apply ran every op through window.__rules a second time —
 // and a model that records state as it goes (an ask stamping the clock,
@@ -41,7 +49,11 @@ const docRef = (path) => ({
     // meant nothing under a SUBCOLLECTION was ever stored — and the
     // follow graph lives in users/{uid}/followers/{uid} now.
     if (data && typeof data === 'object' && path) {
-      const clean = Object.fromEntries(Object.entries(data).filter(([, v]) => !(v && v.__op)));
+      const clean = Object.fromEntries(
+        Object.entries(data)
+          .map(([k, v]) => [k, v && v.__op === 'now' ? stamp() : v])
+          .filter(([, v]) => !(v && v.__op))
+      );
       window.__stubDocs[path] = (opts && opts.merge) ? Object.assign(window.__stubDocs[path] || {}, clean) : clean;
     }
     return Promise.resolve();
@@ -59,6 +71,7 @@ const docRef = (path) => ({
       if (v && v.__op === 'union') cur[k] = (cur[k] || []).concat([v.v]).filter((x, i, a) => a.indexOf(x) === i);
       else if (v && v.__op === 'remove') cur[k] = (cur[k] || []).filter((x) => x !== v.v);
       else if (v && v.__op === 'inc') cur[k] = (typeof cur[k] === 'number' ? cur[k] : 0) + v.v;
+      else if (v && v.__op === 'now') cur[k] = stamp();
       else cur[k] = v;
     });
     return Promise.resolve();

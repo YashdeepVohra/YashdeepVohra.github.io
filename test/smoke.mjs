@@ -730,6 +730,38 @@ group('editing and taking back a message');
   ok('the sheet says how long is left', r.label === '12 min left', r.label);
   ok('"edited" shows on an edit, never on a tombstone', r.edited === true && r.editedGone === false);
 
+  // The fifteen minutes run off the SERVER's stamp, not the client's
+  // `time` — otherwise dating a message in the future buys an
+  // unlimited edit window, and `time` is the field a sender controls.
+  const clock = await page.evaluate(async () => {
+    const mr = await import('/js/services/messageRules.js');
+    const now = 1700000000000;
+    const ts = (ms) => ({ seconds: Math.floor(ms / 1000), nanoseconds: 0, toMillis: () => ms });
+    const honest = { id: 'h', senderUid: 'me', text: 'hi', time: now, sentAt: ts(now) };
+    // Claims to have been sent in the year 2099; the server says now.
+    const lying  = { id: 'l', senderUid: 'me', text: 'hi', time: 4070908800000, sentAt: ts(now - 20 * 60 * 1000) };
+    // Written offline hours ago, committed a moment ago: the server
+    // stamp is what counts, and it says the window is open.
+    const offline = { id: 'o', senderUid: 'me', text: 'hi', time: now - 5 * 60 * 60 * 1000, sentAt: ts(now) };
+    const legacy = { id: 'g', senderUid: 'me', text: 'hi', time: now };
+    return {
+      honestOpen:  mr.canEdit(honest, 'me', now + 60 * 1000),
+      honestShut:  mr.canEdit(honest, 'me', now + 16 * 60 * 1000),
+      lyingShut:   mr.canEdit(lying, 'me', now),
+      offlineOpen: mr.canEdit(offline, 'me', now + 60 * 1000),
+      retractLying: mr.canRetract(lying, 'me'),
+      legacyFalls: mr.sentMs(legacy) === now,
+      readsTimestamp: mr.sentMs(honest) === now
+    };
+  });
+  ok('the edit window reads a server Timestamp', clock.readsTimestamp === true);
+  ok('and still falls back to `time` when there is no server stamp', clock.legacyFalls === true);
+  ok('an honest message can be edited inside fifteen minutes', clock.honestOpen === true);
+  ok('and not outside them', clock.honestShut === false);
+  ok('a message dated in the future buys no extra window', clock.lyingShut === false);
+  ok('but can still be taken back, which has no clock', clock.retractLying === true);
+  ok('a message written offline is judged from when it landed', clock.offlineOpen === true);
+
   // And the whole thing end to end, against the stub.
   const dom = await page.evaluate(async () => {
     const { state } = await import('/js/state/store.js');
@@ -800,7 +832,8 @@ group('editing and taking back a message');
     const edit = (window.__updates || []).slice(-1)[0] || {};
     out.editKeys = (edit.keys || []).sort().join(',');
     out.editText = edit.patch?.text;
-    out.editStamped = typeof edit.patch?.editedAt === 'number';
+    // A server sentinel, not a number the sender chose.
+    out.editStamped = !!edit.patch?.editedAt && edit.patch.editedAt.__op === 'now';
     out.boxCleared = input.value === '';
     out.noteGone = !document.querySelector('.compose-note');
     out.editedOnScreen = box.querySelectorAll('.msg-edited').length;
@@ -840,7 +873,7 @@ group('editing and taking back a message');
   ok('the composer says it is editing', dom.noteIsEditing === true && dom.sendBecameTick === true,
      JSON.stringify({ n: dom.noteIsEditing, s: dom.sendBecameTick }));
   ok('saving writes only text and editedAt', dom.editKeys === 'editedAt,text', dom.editKeys);
-  ok('saving writes the new text, stamped', dom.editText === 'typo here' && dom.editStamped,
+  ok('saving writes the new text, stamped by the server', dom.editText === 'typo here' && dom.editStamped,
      JSON.stringify({ t: dom.editText, s: dom.editStamped }));
   ok('the composer goes back to normal after saving', dom.boxCleared && dom.noteGone);
   ok('the edited message is marked edited on screen', dom.editedOnScreen === 2, String(dom.editedOnScreen));

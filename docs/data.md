@@ -48,6 +48,47 @@ that count lie. The host's delete on an event message is still a real
 delete: moderation is not the same act as taking back your own words,
 and a tombstone over a slur is a worse outcome than a gap.
 
+### A message carries two stamps, and they do different jobs
+
+`time` is the client's own `Date.now()`. The thread is ordered by it,
+it paints the instant you hit send, and a message written with no
+signal still carries one — which is why it cannot simply become a
+server stamp: an unresolved `serverTimestamp()` reads as null until it
+commits, so your own message would jump to the top of the thread, or
+out of the 25-message window entirely, for the length of a round trip.
+
+`sentAt` is `serverTimestamp()`, and `firestore.rules` requires it to
+equal `request.time` on create. Anything that must not be gameable is
+measured against that one. The edit window used to run off `time` —
+the field the sender controls — so dating a message in the future
+bought an unlimited window to rewrite it. `editedAt` and `deletedAt`
+are server stamps too: "edited at" is shown to the other person, so it
+is not the sender's to choose either.
+
+`time` is still bounded (`sensibleTime` in the rules: no more than two
+minutes ahead, no more than seven days behind, the second being the
+allowance for a message written offline). That is what stops a message
+dated 2099 pinning itself to the top of everyone's live window.
+
+`chats.lastUpdated` is the same shape and for the same reason — the
+inbox is ordered by it and has to reorder the moment you send — so it
+stays a client number, bounded by `sensibleTime`. Before that bound,
+one write of a number far in the future pinned a conversation to the
+top of the other person's inbox permanently.
+
+Read a stamp with `msOf()` (`js/utils/formatters.js`) or `sentMs()`
+(`messageRules.js`, which stays import-free and has its own copy).
+Never `new Date(x)` on a stored stamp: it is a number while the write
+is in flight and a Firestore `Timestamp` afterwards.
+
+### A bubble is identified by its document id
+
+Not by `time`. Two messages written in the same millisecond used to
+share a DOM id (`msg-${m.time}`), and `replyTo` stored the quoted
+message's timestamp — so a reply to the second scrolled to the first.
+Everything is keyed on the Firestore document id, which is already on
+every bubble as `data-msg-id`.
+
 ### Reactions are a map keyed by uid
 
 , `{ uid: emoji }`, on the

@@ -68,6 +68,11 @@ Each line is the whole rule. The file after it is the argument for it.
 - What you may still do to a message you sent is `messageRules.js`: an
   EDIT (15 minutes, always leaves "edited") or a RETRACTION (a tombstone,
   never a real delete). The 15 minutes is mirrored in `firestore.rules`.
+- A message carries TWO stamps: `time`, the client's number, which the
+  thread is ordered by; and `sentAt`, the server's, which anything that
+  must not be gameable is measured against. Stamps are read through
+  `msOf()` / `sentMs()`, never `new Date(x)`.
+- A bubble is identified by its document id, never by when it was sent.
 - Reactions are a map keyed by uid, from a fixed list, written one dotted
   path at a time.
 - The pinned message lives in `events/{id}/pinned/current` and holds a

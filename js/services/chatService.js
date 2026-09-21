@@ -17,7 +17,7 @@
 
 import { auth, db, FieldValue } from '../config/firebase.js';
 import { state } from '../state/store.js';
-import { renderAvatar, formatTime, formatMessage, escapeHtml, safeId } from '../utils/formatters.js';
+import { renderAvatar, formatTime, formatMessage, escapeHtml, safeId, msOf } from '../utils/formatters.js';
 import { switchScreen, showTab, showNotification, toggleTime, toast } from '../utils/ui.js';
 import { askConfirm } from '../utils/confirm.js';
 import { openOverlay, closeOverlay, isOverlayOpen } from '../utils/overlays.js';
@@ -333,7 +333,14 @@ export async function sendMessage() {
       await messagesRef().add({
         senderUid: state.uid,
         text,
+        // TWO STAMPS, on purpose. `time` is the client's own number:
+        // the thread is ordered by it, it paints the instant you hit
+        // send, and a message written with no signal still carries
+        // one. `sentAt` is the server's, and the rules require it to
+        // equal request.time — so anything that must not be gameable
+        // (the fifteen minutes to edit) is measured against that one.
         time: Date.now(),
+        sentAt: FieldValue.serverTimestamp(),
         replyTo: replyData
       });
       stopTyping();
@@ -397,7 +404,13 @@ export async function sendMessage() {
     // exactly one such message, ever. Everything after it is an
     // ordinary send, once they have written back.
     const msgRef = messagesRef().doc();
-    const body = { senderUid: state.uid, text, time: Date.now(), replyTo: replyData };
+    const body = {
+      senderUid: state.uid,
+      text,
+      time: Date.now(),
+      sentAt: FieldValue.serverTimestamp(),
+      replyTo: replyData
+    };
 
     if (usedIcebreaker) {
       const batch = db.batch();
@@ -863,15 +876,18 @@ async function commitEdit() {
   const chatId = state.currentChat;
   const type = state.currentChatType;
   const before = { text: current.text, editedAt: current.editedAt };
-  const after = { text, editedAt: Date.now() };
+  // The copy on screen gets a number so it paints now; the write gets
+  // the server's clock, which is what the rules check.
+  const shown = { text, editedAt: Date.now() };
+  const written = { text, editedAt: FieldValue.serverTimestamp() };
 
   input.value = "";
   state.editingMessage = null;
   updateChatFooterUI();
-  patchLocalMessage(target.id, after);
+  patchLocalMessage(target.id, shown);
 
   try {
-    await messagesRef(chatId, type).doc(target.id).update(after);
+    await messagesRef(chatId, type).doc(target.id).update(written);
   } catch (e) {
     console.error("Edit failed:", e.code || e.message);
     patchLocalMessage(target.id, before);
@@ -899,12 +915,13 @@ async function confirmRetractMessage(messageId) {
   const before = { text: msg.text, replyTo: msg.replyTo || null, deleted: false, deletedAt: null };
   // The quoted reply goes too: a tombstone that still quotes somebody
   // is half a message, and it is the half you didn't mean to keep.
-  const tomb = { text: "", replyTo: null, deleted: true, deletedAt: Date.now() };
+  const shown = { text: "", replyTo: null, deleted: true, deletedAt: Date.now() };
+  const written = { text: "", replyTo: null, deleted: true, deletedAt: FieldValue.serverTimestamp() };
 
-  patchLocalMessage(messageId, tomb);
+  patchLocalMessage(messageId, shown);
 
   try {
-    await messagesRef(chatId, type).doc(messageId).update(tomb);
+    await messagesRef(chatId, type).doc(messageId).update(written);
   } catch (e) {
     console.error("Delete failed:", e.code || e.message);
     patchLocalMessage(messageId, before);
@@ -1299,7 +1316,7 @@ function renderMessages(msgs, { keepScroll = null } = {}) {
     else theirMessageCount++;
 
     // ---- Date separator ----
-    const msgDate = new Date(m.time).toLocaleDateString();
+    const msgDate = new Date(msOf(m.time)).toLocaleDateString();
     if (msgDate !== lastDateString) {
       const today = new Date().toLocaleDateString();
       const y = new Date();
@@ -1310,7 +1327,7 @@ function renderMessages(msgs, { keepScroll = null } = {}) {
         ? "Today"
         : msgDate === yesterday
           ? "Yesterday"
-          : new Date(m.time).toLocaleDateString([], { month: "short", day: "numeric" });
+          : new Date(msOf(m.time)).toLocaleDateString([], { month: "short", day: "numeric" });
 
       html += `<div class="date-wrapper"><div class="date-separator">${escapeHtml(displayDate)}</div></div>`;
       lastDateString = msgDate;
@@ -1385,10 +1402,10 @@ function renderMessages(msgs, { keepScroll = null } = {}) {
     // edit that crosses midnight it falls back to the full form,
     // because then the day genuinely is new information.
     const sameDay = edited &&
-      new Date(m.time).toDateString() === new Date(m.editedAt).toDateString();
+      new Date(msOf(m.time)).toDateString() === new Date(msOf(m.editedAt)).toDateString();
     const editStamp = edited
       ? (sameDay
-          ? new Date(m.editedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+          ? new Date(msOf(m.editedAt)).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
           : formatTime(m.editedAt))
       : "";
     const timeLine = edited
@@ -1409,7 +1426,7 @@ function renderMessages(msgs, { keepScroll = null } = {}) {
     html += `
       <div id="msg-${safeId(m.id)}" class="msg-wrapper" style="animation-delay:${enterDelay}s;"
            data-sender-uid="${escapeHtml(m.senderUid)}"
-           data-time="${escapeHtml(m.time)}"
+           data-time="${escapeHtml(msOf(m.time))}"
            data-msg-id="${safeId(m.id)}"
            data-text="${escapeHtml(encodedText)}"
            data-deleted="${gone ? "1" : ""}"

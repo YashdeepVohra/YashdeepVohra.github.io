@@ -213,10 +213,10 @@ service cloud.firestore {
     function isTextEdit() {
       return changedKeys().hasOnly(['text', 'editedAt'])
         && isString(request.resource.data.text, 2000)
-        && request.resource.data.editedAt is number
-        // A stamp that isn't roughly now is no use as a receipt.
-        && request.resource.data.editedAt >= resource.data.time
-        && timestamp.value(request.resource.data.editedAt) < request.time + duration.value(2, 'm')
+        // The server's clock. "Edited at" is shown to the other person,
+        // so it is not the sender's to choose either — and a stamp that
+        // can be typed is no use as a receipt.
+        && request.resource.data.editedAt == request.time
         && messageLives()
         && insideEditWindow();
     }
@@ -225,7 +225,7 @@ service cloud.firestore {
       return changedKeys().hasOnly(['text', 'replyTo', 'editedAt', 'deleted', 'deletedAt'])
         && request.resource.data.deleted == true
         && request.resource.data.text == ''
-        && request.resource.data.deletedAt is number
+        && request.resource.data.deletedAt == request.time
         // One way. A tombstone never comes back to life.
         && messageLives();
     }
@@ -898,7 +898,8 @@ service cloud.firestore {
         && chatId == request.resource.data.userUids[0] + '_' + request.resource.data.userUids[1]
         && request.resource.data.initiatedByUid == uid()
         && request.resource.data.status in ['unlocked', 'icebreaker']
-        && request.resource.data.get('icebreakerUsed', false) is bool;
+        && request.resource.data.get('icebreakerUsed', false) is bool
+        && sensibleTime(request.resource.data.lastUpdated);
 
       allow update: if inThisChat()
         && changedKeys().hasOnly(['unreadByUid', 'typingUid', 'status', 'lastUpdated', 'icebreakerUsed'])
@@ -916,7 +917,18 @@ service cloud.firestore {
             || request.resource.data.typingUid == uid()
             || request.resource.data.typingUid == '')
         && (!(changedKeys().hasAny(['status']))
-            || request.resource.data.status in ['unlocked', 'icebreaker']);
+            || request.resource.data.status in ['unlocked', 'icebreaker'])
+        /* The inbox is ordered by lastUpdated, newest first, and
+           nothing used to bound it. One write of a number far in the
+           future pinned a conversation to the top of the other
+           person's inbox for good — the same trick as a message dated
+           2099 pinning itself to the top of a thread. It stays a
+           CLIENT number rather than becoming request.time, because the
+           inbox has to reorder the instant you send rather than after
+           a round trip, and a server stamp reads as null until it
+           lands. Bounded is enough: it only has to be roughly now. */
+        && (!(changedKeys().hasAny(['lastUpdated']))
+            || sensibleTime(request.resource.data.lastUpdated));
 
       // Keeping the thread means the icebreaker state can't be reset by
       // deleting and recreating the chat.
