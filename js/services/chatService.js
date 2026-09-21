@@ -1449,9 +1449,15 @@ function renderMessages(msgs, { keepScroll = null } = {}) {
         : `<div style="font-size: 11px; font-weight: 700; color: var(--text-muted); margin-left: 14px; margin-bottom: 2px;">${label}</div>`;
     }
 
-    const enterDelay = Math.min(i, 12) * 0.022;
+    /* No animation-delay in the markup, and no animation class either.
+       Both used to live here, and both were wrong in the same way: the
+       delay is a function of the message's INDEX, so prepending a page
+       of history shifted every index and rewrote markup that had not
+       changed, and the class meant any rebuilt bubble replayed an
+       arrival it was not having. The diff decides what is new; the
+       stagger is set on the node afterwards, where it cannot churn. */
     html += `
-      <div id="msg-${safeId(m.id)}" class="msg-wrapper" style="animation-delay:${enterDelay}s;"
+      <div id="msg-${safeId(m.id)}" class="msg-wrapper"
            data-sender-uid="${escapeHtml(m.senderUid)}"
            data-time="${escapeHtml(msOf(m.time))}"
            data-msg-id="${safeId(m.id)}"
@@ -1501,11 +1507,20 @@ function renderMessages(msgs, { keepScroll = null } = {}) {
   const keep = new Set();
   let prev = null;
 
-  blocks.forEach((b) => {
+  // A thread opening for the first time may rise in as a whole; after
+  // that, only a message nobody has seen before animates.
+  const firstPaint = !paintedMsgs.size;
+
+  blocks.forEach((b, i) => {
     const was = paintedNodes.get(b.key);
     const reusable = paintedMsgs.get(b.key) === b.html
       && Array.isArray(was) && was.length
       && was.every((n) => n.isConnected && n.parentNode === box);
+
+    // Never painted under this key before — as opposed to painted and
+    // then rebuilt, which is what sending a message does to the bubble
+    // above it when a lone message becomes the top of a pair.
+    const arriving = !paintedMsgs.has(b.key);
 
     let nodes;
     if (reusable) {
@@ -1514,6 +1529,15 @@ function renderMessages(msgs, { keepScroll = null } = {}) {
       if (Array.isArray(was)) was.forEach((n) => { if (n.parentNode === box) n.remove(); });
       holder.innerHTML = b.html.trim();
       nodes = Array.from(holder.children);
+      if (arriving) {
+        nodes.forEach((node) => {
+          if (!node.classList || !node.classList.contains("msg-wrapper")) return;
+          node.classList.add("msg-in");
+          // The stagger is only ever an opening flourish. A single
+          // message arriving into an open thread appears at once.
+          if (firstPaint) node.style.animationDelay = (Math.min(i, 12) * 0.022) + "s";
+        });
+      }
     }
 
     nodes.forEach((node) => {

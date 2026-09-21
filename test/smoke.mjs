@@ -1442,6 +1442,69 @@ group('a thread that stays put');
     await wait(120);
     return out;
   });
+  // Sending a message CHANGES the one above it — a lone bubble becomes
+  // the top of a pair, which is a different shape and so different
+  // markup, so the diff rebuilds it. That is correct. What was not is
+  // that a rebuilt bubble replayed the arrival animation, so your own
+  // send made the message above it drop out and rise back in.
+  const regroup = await page.evaluate(async () => {
+    const { state } = await import('/js/state/store.js');
+    const chat = await import('/js/services/chatService.js');
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const t = Date.now() - 60000;
+    const BASE = 'chats/r_me/messages';
+
+    state.currentChat = 'r_me';
+    state.currentChatType = 'direct';
+    state.currentChatStatus = 'unlocked';
+    state.currentChatInitiatorUid = '';
+    state.currentChatMutual = false;
+    state.currentChatData = { unreadByUid: '', typingUid: '' };
+    state.currentOtherUid = 'r';
+    window.switchScreen('chatScreen');
+    document.getElementById('messages').innerHTML = '';
+
+    const mine = (id, at) => ({ id, data: () => ({ senderUid: 'me', text: id, time: at }) });
+    window.__docs = [mine('one', t)];
+    chat.loadMessages();
+    await wait(250);
+
+    const first = document.getElementById('msg-one');
+    const out = { painted: !!first };
+    out.shapeBefore = first ? first.querySelector('.msg-bubble').className : '';
+    // It animated on the way in, which is right — it had just arrived.
+    out.firstArrived = !!first && getComputedStyle(first).animationName === 'rise';
+
+    // Now send a second from the same person.
+    window.__docs = [mine('one', t), mine('two', t + 1000)];
+    window.__fireColl(BASE);
+    await wait(250);
+
+    const after = document.getElementById('msg-one');
+    const fresh = document.getElementById('msg-two');
+    out.bothThere = !!after && !!fresh;
+    out.shapeAfter = after ? after.querySelector('.msg-bubble').className : '';
+    out.regrouped = out.shapeBefore !== out.shapeAfter;
+    /* The COMPUTED animation, not a class — the bug was that `rise`
+       sat on .msg-wrapper itself, so there was no class to be missing.
+       A node that is merely rebuilt must come back with no animation at
+       all; one that genuinely arrived must have it. */
+    out.oldOneStayedPut = !!after && getComputedStyle(after).animationName === 'none';
+    out.newOneArrived = !!fresh && getComputedStyle(fresh).animationName === 'rise';
+
+    chat.closeChat({ silent: true });
+    await wait(120);
+    return out;
+  });
+  ok('the first message paints, and rises in', regroup.painted === true && regroup.firstArrived === true,
+     JSON.stringify(regroup));
+  ok('sending regroups the bubble above it', regroup.regrouped === true,
+     regroup.shapeBefore + ' -> ' + regroup.shapeAfter);
+  ok('and both messages are on screen', regroup.bothThere === true);
+  ok('but the one above does NOT replay its arrival', regroup.oldOneStayedPut === true,
+     JSON.stringify(regroup));
+  ok('while the message that really arrived does', regroup.newOneArrived === true);
+
   ok('two messages sent in the same millisecond are still two bubbles',
      sameMs.bothBubbles === true && sameMs.wrappers === 3, JSON.stringify(sameMs));
   ok('a quote points at the message, not at a moment in time', sameMs.quotePointsAtFirst === true);

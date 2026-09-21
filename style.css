@@ -1524,11 +1524,22 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 .msg-wrapper {
   display: flex; flex-direction: column; width: 100%; position: relative;
   cursor: pointer; touch-action: pan-y; outline: none !important;
-  animation: rise 0.3s var(--ease) backwards;
   -webkit-touch-callout: none;
   -webkit-user-select: none;
   user-select: none;
 }
+
+/* ARRIVING IS AN ANIMATION; CHANGING IS NOT.
+   This used to be on .msg-wrapper itself, so it played whenever a
+   bubble was put into the document — including when the diff rebuilt
+   one that had merely CHANGED. And sending a message changes the one
+   above it: a lone bubble becomes the top of a pair, which is a
+   different shape and so different markup. So your own send made the
+   message above it drop out and rise back in, which is not what
+   happened to it at all.
+   chatService adds this class only to a message id it has never
+   painted before. */
+.msg-wrapper.msg-in { animation: rise 0.3s var(--ease) backwards; }
 .msg-bubble {
   max-width: 76%;
   padding: 10px 15px;
