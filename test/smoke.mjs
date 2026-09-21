@@ -1550,6 +1550,70 @@ group('a thread that stays put');
     await wait(120);
     return out;
   });
+  // The floating date answers "which day am I looking at" — a question
+  // you ask by scrolling. The thread scrolls ITSELF to the bottom on
+  // every new message, and that fires a real scroll event, so sending
+  // one used to flash a date chip over the thread.
+  const chip = await page.evaluate(async () => {
+    const { state } = await import('/js/state/store.js');
+    const chat = await import('/js/services/chatService.js');
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const t = Date.now() - 60000;
+    const BASE = 'chats/d_me/messages';
+
+    state.currentChat = 'd_me';
+    state.currentChatType = 'direct';
+    state.currentChatStatus = 'unlocked';
+    state.currentChatInitiatorUid = '';
+    state.currentChatMutual = false;
+    state.currentChatData = { unreadByUid: '', typingUid: '' };
+    state.currentOtherUid = 'd';
+    window.switchScreen('chatScreen');
+    document.getElementById('messages').innerHTML = '';
+
+    // Long enough to actually scroll — a thread that fits on screen
+    // never fires a scroll event and would prove nothing either way.
+    const body = 'a message with enough words in it to take up a line or two of the thread';
+    const msg = (n) => ({ id: 'd' + n, data: () => ({ senderUid: 'me', text: body + ' ' + n, time: t + n * 1000 }) });
+    const upTo = (n) => { const out = []; for (let i = 1; i <= n; i++) out.push(msg(i)); return out; };
+
+    window.__docs = upTo(24);
+    chat.loadMessages();
+    await wait(400);
+
+    const box = document.getElementById('messages');
+    const out = { scrollable: box.scrollHeight > box.clientHeight + 50 };
+
+    const seen = () => {
+      const el = document.getElementById('floatingDate');
+      return !!el && el.classList.contains('visible');
+    };
+    document.getElementById('floatingDate')?.classList.remove('visible');
+
+    // A message arrives; the thread scrolls itself to the bottom, and
+    // setting scrollTop fires a real scroll event.
+    window.__docs = upTo(25);
+    window.__fireColl(BASE);
+    await wait(300);
+    out.quietOnSend = !seen();
+
+    // But a thumb still gets an answer.
+    await wait(250);          // past the window our own scroll claims
+    chat.handleChatScroll();
+    await wait(60);
+    out.answersAScroll = seen();
+
+    chat.closeChat({ silent: true });
+    await wait(120);
+    return out;
+  });
+  ok('the thread is tall enough for this to mean anything', chip.scrollable === true,
+     JSON.stringify(chip));
+  ok('sending a message does not flash the date over the thread', chip.quietOnSend === true,
+     JSON.stringify(chip));
+  ok('but scrolling still says which day you are on', chip.answersAScroll === true,
+     JSON.stringify(chip));
+
   ok('the first message paints, and rises in', regroup.painted === true && regroup.firstArrived === true,
      JSON.stringify(regroup));
   ok('sending regroups the bubble above it', regroup.regrouped === true,

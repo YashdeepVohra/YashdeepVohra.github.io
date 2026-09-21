@@ -1003,12 +1003,44 @@ export function handleMessageTap(event, element) {
 }
 
 // ---------- Chrome ----------
+/* ---------------------------------------------------------------------
+   Us scrolling the thread is not the reader scrolling it
+   ---------------------------------------------------------------------
+   Setting scrollTop fires a real `scroll` event, and the thread scrolls
+   itself constantly: to the bottom on every new message, back to where
+   you were when a page of history is prepended, and again when somebody
+   starts typing. Every one of those was arriving at handleChatScroll
+   indistinguishable from a thumb.
+
+   The floating date answers "which day am I looking at", which is a
+   question you ask by scrolling and nobody asks by sending a message —
+   so sending one made a date chip flash over the thread for a second
+   and a bit, every time. Same for the typing indicator appearing.
+
+   The load-more check stays on either kind of scroll: being near the
+   top means history is wanted however you got there.
+   ------------------------------------------------------------------- */
+let selfScrolledAt = 0;
+
+function scrollThread(box, top) {
+  if (!box) return;
+  selfScrolledAt = Date.now();
+  box.scrollTop = top;
+}
+
+// Long enough to cover the scroll event our own assignment queues,
+// short enough that a thumb moving straight afterwards is still heard.
+const SELF_SCROLL_MS = 200;
+
 export function handleChatScroll() {
   const box = document.getElementById("messages");
   if (!box) return;
 
   // Near the top? Pull in the previous page of history.
   if (box.scrollTop < 120) loadOlderMessages();
+
+  // Ours, not theirs. Nothing to say about where they are.
+  if (Date.now() - selfScrolledAt < SELF_SCROLL_MS) return;
 
   let floatingDate = document.getElementById("floatingDate");
   if (!floatingDate) {
@@ -1112,7 +1144,7 @@ export function updateTypingIndicator() {
 
   const show = () => {
     bubble.classList.remove("hidden");
-    box.scrollTop = box.scrollHeight;
+    scrollThread(box, box.scrollHeight);
   };
 
   if (state.currentChatType === "event") {
@@ -1572,9 +1604,9 @@ function renderMessages(msgs, { keepScroll = null } = {}) {
 
   if (keepScroll) {
     // Stay anchored to the message you were looking at.
-    box.scrollTop = box.scrollHeight - keepScroll.heightBefore + keepScroll.topBefore;
+    scrollThread(box, box.scrollHeight - keepScroll.heightBefore + keepScroll.topBefore);
   } else if (atBottom) {
-    box.scrollTop = box.scrollHeight;
+    scrollThread(box, box.scrollHeight);
   }
 
   // The icebreaker unlocks as soon as the other side replies.
