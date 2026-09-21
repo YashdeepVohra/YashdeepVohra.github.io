@@ -853,6 +853,167 @@ group('editing and taking back a message');
 }
 
 /* ------------------------------------------------------------------ */
+group('a thread that stays put');
+{
+  const thread = await page.evaluate(async () => {
+    const { state } = await import('/js/state/store.js');
+    const chat = await import('/js/services/chatService.js');
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const t0 = Date.now() - 60 * 60 * 1000;
+    const msg = (n) => ({ id: 'n' + n, data: () => ({ senderUid: n % 2 ? 'a' : 'me', text: 'm' + n, time: t0 + n * 1000 }) });
+    const range = (from, to) => { const out = []; for (let i = from; i <= to; i++) out.push(msg(i)); return out; };
+    const BASE = 'chats/a_me/messages';
+    const out = {};
+
+    state.currentChat = 'a_me';
+    state.currentChatType = 'direct';
+    state.currentChatStatus = 'unlocked';
+    state.currentChatInitiatorUid = '';
+    state.currentChatData = { unreadByUid: '', typingUid: '' };
+    state.currentOtherUid = 'a';
+    window.switchScreen('chatScreen');
+    const box = document.getElementById('messages');
+    box.innerHTML = '';
+
+    // ---- The live window is the newest 25: n2..n26 of a 26-message thread.
+    window.__docs = range(2, 26);
+    chat.loadMessages();
+    await wait(200);
+    out.windowPainted = box.querySelectorAll('.msg-wrapper').length;
+
+    // Scroll back one page: n1, fetched with endBefore(n2).
+    window.__docs = [msg(1)];
+    await chat.loadOlderMessages();
+    await wait(200);
+    out.afterHistory = box.querySelectorAll('.msg-wrapper').length;
+
+    // ---- A new message arrives. The window slides to n3..n27, so n2
+    // falls off the FRONT of it — and history stopped before n2, so
+    // nothing would ever fetch it again. It used to vanish out of the
+    // middle of the thread you were reading.
+    window.__docs = range(3, 27);
+    window.__fireColl(BASE);
+    await wait(200);
+    out.afterNewMessage = box.querySelectorAll('.msg-wrapper').length;
+    out.n2StillThere = !!document.getElementById('msg-n2');
+    out.noGap = ['n1', 'n2', 'n3', 'n4'].every((id) => !!document.getElementById('msg-' + id));
+
+    // ---- And the thread is patched, not rebuilt. Mark a node and open
+    // its timestamp; both have to survive the next message arriving.
+    // Guarded: if the bubbles are not identified by their document id
+    // this is null, and a crash here would hide the assertion below.
+    const marked = document.getElementById('msg-n10');
+    if (marked) {
+      marked.dataset.marker = 'kept';
+      marked.classList.add('show-time');
+    }
+    out.markable = !!marked;
+    window.__docs = range(3, 28);
+    window.__fireColl(BASE);
+    await wait(200);
+    const after = document.getElementById('msg-n10');
+    out.sameNode = !!after && after.dataset.marker === 'kept';
+    out.timeStayedOpen = !!after && after.classList.contains('show-time');
+    out.grew = box.querySelectorAll('.msg-wrapper').length === out.afterNewMessage + 1;
+
+    chat.closeChat({ silent: true });
+    await wait(120);
+    return out;
+  });
+  ok('the live window paints 25 of 26', thread.windowPainted === 25, String(thread.windowPainted));
+  ok('a page of history prepends the 26th', thread.afterHistory === 26, String(thread.afterHistory));
+  ok('a message leaving the live window is kept, not dropped',
+     thread.n2StillThere === true && thread.afterNewMessage === 27,
+     JSON.stringify({ n2: thread.n2StillThere, count: thread.afterNewMessage }));
+  ok('so the thread has no hole in the middle of it', thread.noGap === true);
+  ok('a bubble is identified by its document id', thread.markable === true);
+  ok('an incoming message does not rebuild the bubbles already on screen', thread.sameNode === true);
+  ok('and does not close a timestamp the reader had opened', thread.timeStayedOpen === true);
+  ok('while the new message itself still arrives', thread.grew === true);
+
+  // ---- Two messages in the same millisecond -------------------------
+  const sameMs = await page.evaluate(async () => {
+    const { state } = await import('/js/state/store.js');
+    const chat = await import('/js/services/chatService.js');
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const t = Date.now() - 5000;
+
+    state.currentChat = 'b_me';
+    state.currentChatType = 'direct';
+    state.currentChatStatus = 'unlocked';
+    state.currentChatInitiatorUid = '';
+    state.currentChatData = { unreadByUid: '', typingUid: '' };
+    state.currentOtherUid = 'b';
+    window.switchScreen('chatScreen');
+    document.getElementById('messages').innerHTML = '';
+
+    // Identical timestamps, which is all it takes: a bubble used to be
+    // identified in the DOM by WHEN it was sent.
+    window.__docs = [
+      { id: 'sa', data: () => ({ senderUid: 'b', text: 'first', time: t }) },
+      { id: 'sb', data: () => ({ senderUid: 'b', text: 'second', time: t }) },
+      { id: 'sc', data: () => ({ senderUid: 'me', text: 'answering the first',
+          time: t, replyTo: { senderUid: 'b', text: 'first', id: 'sa' } }) }
+    ];
+    chat.loadMessages();
+    await wait(200);
+
+    const out = {};
+    out.bothBubbles = !!document.getElementById('msg-sa') && !!document.getElementById('msg-sb');
+    out.wrappers = document.querySelectorAll('.msg-wrapper').length;
+    out.quotePointsAtFirst =
+      document.querySelector('.msg-replied-to')?.getAttribute('data-target-id') === 'sa';
+
+    chat.initiateReply('b', 'second', 'sb');
+    out.replyCarriesId = state.replyingToMessage && state.replyingToMessage.id === 'sb';
+    chat.cancelReply();
+
+    chat.closeChat({ silent: true });
+    await wait(120);
+    return out;
+  });
+  ok('two messages sent in the same millisecond are still two bubbles',
+     sameMs.bothBubbles === true && sameMs.wrappers === 3, JSON.stringify(sameMs));
+  ok('a quote points at the message, not at a moment in time', sameMs.quotePointsAtFirst === true);
+  ok('and replying carries the message id', sameMs.replyCarriesId === true);
+
+  // ---- Leaving one conversation for another --------------------------
+  const carried = await page.evaluate(async () => {
+    const { state } = await import('/js/state/store.js');
+    const chat = await import('/js/services/chatService.js');
+    const wrapper = document.getElementById('inputWrapper');
+    const out = {};
+
+    // An icebreaker you opened and have already used: composer locked.
+    state.currentChat = 'c_me';
+    state.currentChatType = 'direct';
+    state.currentOtherUid = 'c';
+    state.currentChatStatus = 'icebreaker';
+    state.currentChatInitiatorUid = 'me';
+    state.myMessageCount = 1;
+    window.switchScreen('chatScreen');
+    chat.updateChatFooterUI();
+    out.lockedThere = wrapper.classList.contains('hidden');
+
+    // Now open somebody else. Anything that repaints before that chat's
+    // document arrives used to read the PREVIOUS conversation's state
+    // and hide the composer at the wrong person.
+    chat.openChat('d_me', 'd');
+    out.statusCleared = state.currentChatStatus === 'unlocked'
+      && state.currentChatInitiatorUid === ''
+      && state.myMessageCount === 0;
+    chat.updateChatFooterUI();
+    out.openHere = !wrapper.classList.contains('hidden');
+
+    chat.closeChat({ silent: true });
+    return out;
+  });
+  ok('a used icebreaker locks its own composer', carried.lockedThere === true);
+  ok('and opening another conversation clears it', carried.statusCleared === true);
+  ok('so the next composer is not locked by the last one', carried.openHere === true);
+}
+
+/* ------------------------------------------------------------------ */
 group('the poster band');
 {
   // The halftone has slid under the band's type twice now — first

@@ -127,6 +127,15 @@ export function openChat(chatId, otherUid) {
   state.currentOtherUid = otherUid;
   state.currentChatType = "direct";
   state.currentChatLoaded = false;
+  // Back to a blank slate BEFORE the listener answers. Without this the
+  // previous conversation's icebreaker state carried over: leave a
+  // thread where you had used your one opening message, open another,
+  // and until that chat's document arrived the composer was hidden and
+  // the bar read "Icebreaker sent — waiting for a reply" at the wrong
+  // person. openEventChat has always cleared these; openChat did not.
+  state.currentChatStatus = "unlocked";
+  state.currentChatInitiatorUid = "";
+  state.myMessageCount = 0;
   state.replyingToMessage = null;
   state.editingMessage = null;
   state.pinnedMessage = null;
@@ -311,7 +320,7 @@ export async function sendMessage() {
     ? {
         senderUid: state.replyingToMessage.senderUid,
         text: state.replyingToMessage.text.slice(0, 200),
-        time: state.replyingToMessage.time
+        id: state.replyingToMessage.id || ""
       }
     : null;
 
@@ -463,10 +472,19 @@ export function stopTyping() {
 }
 
 // ---------- Replies ----------
-export function initiateReply(senderUid, text, time) {
+/**
+ * Quote a message.
+ *
+ * Identified by its DOCUMENT ID, not by when it was sent. Two messages
+ * written in the same millisecond used to collide: they shared a DOM
+ * id, and a reply to the second one scrolled to the first. The id is
+ * Firestore's, it is already on every bubble as `data-msg-id`, and it
+ * does not change when the clock does.
+ */
+export function initiateReply(senderUid, text, messageId) {
   if (!text) return;            // a retracted message has nothing to quote
   state.editingMessage = null;  // the two composer modes are exclusive
-  state.replyingToMessage = { senderUid, text, time };
+  state.replyingToMessage = { senderUid, text, id: messageId || "" };
   updateChatFooterUI();
   setTimeout(() => {
     const input = document.getElementById("msgInput");
@@ -640,7 +658,7 @@ function runMessageAction(key) {
   closeMessageActions();
   if (!msg || key === "cancel") return;
 
-  if (key === "reply") return initiateReply(msg.senderUid, String(msg.text || ""), msg.time);
+  if (key === "reply") return initiateReply(msg.senderUid, String(msg.text || ""), msg.id);
   if (key === "copy") return copyMessageText(msg);
   if (key === "pin") return pinMessage(id);
   if (key === "unpin") return unpinMessage();
@@ -709,7 +727,7 @@ export function jumpToPinned() {
   if (!pin) return;
   const msg = findMessage(pin.messageId);
   if (!msg) return toast("That message is further back in the chat.");
-  scrollToMessage(msg.time);
+  scrollToMessage(msg.id);
 }
 
 export function renderPinnedBar() {
@@ -894,8 +912,8 @@ async function confirmRetractMessage(messageId) {
   }
 }
 
-export function scrollToMessage(time) {
-  const targetMsg = document.getElementById(`msg-${time}`);
+export function scrollToMessage(messageId) {
+  const targetMsg = document.getElementById(`msg-${messageId}`);
   const bubble = targetMsg?.querySelector(".msg-bubble");
   if (!bubble) return;
 
@@ -921,8 +939,8 @@ export function handleMessageTap(event, element) {
 
   const replyBox = event.target.closest(".msg-replied-to");
   if (replyBox) {
-    const targetTime = replyBox.getAttribute("data-target-time");
-    if (targetTime) scrollToMessage(targetTime);
+    const targetId = replyBox.getAttribute("data-target-id");
+    if (targetId) scrollToMessage(targetId);
     return;
   }
 
@@ -936,7 +954,7 @@ export function handleMessageTap(event, element) {
     initiateReply(
       element.getAttribute("data-sender-uid"),
       decodeURIComponent(element.getAttribute("data-text") || ""),
-      parseInt(element.getAttribute("data-time"), 10)
+      element.getAttribute("data-msg-id")
     );
     if (navigator.vibrate) navigator.vibrate(50);
   } else {
@@ -1169,8 +1187,38 @@ export function loadMessages() {
     async (snapshot) => {
       if (state.currentChat !== openedChat) return;
 
+      const wasLive = state.liveMessages;
       state.liveMessages = [];
       snapshot.forEach((doc) => state.liveMessages.push({ id: doc.id, ...doc.data() }));
+
+      // ---- A MESSAGE USED TO VANISH OUT OF THE MIDDLE OF A THREAD ----
+      //
+      // The live window is the newest 25; history is fetched with
+      // endBefore(the oldest message on screen). Both were right on
+      // their own and wrong together: when a new message arrived the
+      // window slid forward, and the message that fell off the FRONT of
+      // it belonged to neither list — history stopped strictly before
+      // where the window used to start, so nothing ever fetched it
+      // again. Scroll up in a long thread, receive one message, and a
+      // message disappeared from the middle of what you were reading.
+      //
+      // So anything that leaves the window is carried into history. The
+      // test is its TIME, not merely its absence: a message deleted
+      // from inside the window is absent too, but the window refills
+      // from below, so the new first message is EARLIER than it and it
+      // is correctly left to go. Only a message older than the new
+      // start of the window actually fell off the front.
+      if (state.olderMessages.length && wasLive.length) {
+        const nowLive = new Set(state.liveMessages.map((m) => m.id));
+        const edge = state.liveMessages.length ? state.liveMessages[0].time : Infinity;
+        const fellOff = wasLive.filter((m) => !nowLive.has(m.id) && m.time < edge);
+        if (fellOff.length) {
+          const seen = new Set(state.olderMessages.map((m) => m.id));
+          state.olderMessages = state.olderMessages
+            .concat(fellOff.filter((m) => !seen.has(m.id)))
+            .sort((a, b) => a.time - b.time);
+        }
+      }
 
       // Nothing older than the window can exist if the window isn't full.
       if (state.liveMessages.length < LIVE_WINDOW && !state.olderMessages.length) {
@@ -1195,6 +1243,42 @@ export function loadMessages() {
  * the view would jump to the bottom and throw you out of the history
  * you were reading.
  */
+/* ---------------------------------------------------------------------
+   Painting a thread without throwing it away
+   ---------------------------------------------------------------------
+   This used to be one `box.innerHTML = html` per snapshot, and every
+   snapshot is every incoming message. `.msg-wrapper` carries
+   `animation: rise`, so one message arriving replayed the entry
+   animation on the whole visible thread — the same flicker the feed was
+   diffed to remove, still here. It also threw away anything the reader
+   had done to the nodes: a tapped-open timestamp (`.show-time`) closed
+   itself, and a text selection vanished mid-copy.
+
+   fillEventEmbeds' comment already claimed "the message diffing
+   compares markup". It does now. Each message's block is remembered by
+   its document id, and a re-render only touches the blocks whose markup
+   genuinely differs. A quiet repaint writes nothing.
+   ------------------------------------------------------------------- */
+
+// A block is everything one message owns: its date separator when it
+// starts a new day, its bubble, and the read receipt when it is the
+// last thing you sent. Keyed by the message's document id, remembered
+// as BOTH the markup and the nodes it produced — the nodes, because a
+// block is more than one element and reusing only the bubble would
+// leave its separator behind.
+let paintedMsgs = new Map();    // key -> html
+let paintedNodes = new Map();   // key -> Node[]
+let paintedChat = "";
+
+function forgetPaintedMessages() {
+  paintedMsgs = new Map();
+  paintedNodes = new Map();
+  paintedChat = "";
+}
+
+// The chat whose icebreaker unlock is already on its way.
+let unlockingChat = "";
+
 function renderMessages(msgs, { keepScroll = null } = {}) {
   const box = document.getElementById("messages");
   if (!box) return;
@@ -1203,8 +1287,13 @@ function renderMessages(msgs, { keepScroll = null } = {}) {
   let theirMessageCount = 0;
   let lastDateString = "";
   let html = "";
+  // [{ key, html }] — one entry per message, carrying its date
+  // separator so a separator can never be orphaned by the diff.
+  const blocks = [];
+  let blockStart = 0;
 
   msgs.forEach((m, i) => {
+    blockStart = html.length;
     const isMe = m.senderUid === state.uid;
     if (isMe) state.myMessageCount++;
     else theirMessageCount++;
@@ -1251,7 +1340,8 @@ function renderMessages(msgs, { keepScroll = null } = {}) {
     let replyBlock = "";
     if (m.replyTo && !gone) {
       const replyName = m.replyTo.senderUid === state.uid ? "You" : displayNameFor(m.replyTo.senderUid);
-      const timeAttr = m.replyTo.time ? `data-target-time="${escapeHtml(m.replyTo.time)}"` : "";
+      const target = safeId(m.replyTo.id);
+      const timeAttr = target ? `data-target-id="${target}"` : "";
       replyBlock = `<div class="msg-replied-to" ${timeAttr}><b>${escapeHtml(replyName)}:</b> ${escapeHtml(m.replyTo.text)}</div>`;
     }
 
@@ -1317,7 +1407,7 @@ function renderMessages(msgs, { keepScroll = null } = {}) {
 
     const enterDelay = Math.min(i, 12) * 0.022;
     html += `
-      <div id="msg-${escapeHtml(m.time)}" class="msg-wrapper" style="animation-delay:${enterDelay}s;"
+      <div id="msg-${safeId(m.id)}" class="msg-wrapper" style="animation-delay:${enterDelay}s;"
            data-sender-uid="${escapeHtml(m.senderUid)}"
            data-time="${escapeHtml(m.time)}"
            data-msg-id="${safeId(m.id)}"
@@ -1344,34 +1434,100 @@ function renderMessages(msgs, { keepScroll = null } = {}) {
         : `Sent <i class='bx bx-check'></i>`;
       html += `<div class="msg-status" id="readReceipt">${statusHtml}</div>`;
     }
+
+    blocks.push({ key: safeId(m.id) || ("t" + i), html: html.slice(blockStart) });
   });
 
-  html += `
+  const typingHTML = `
     <div id="typingBubble" class="typing-indicator hidden" style="align-items: center; margin-top: 8px;">
       <span id="typingName" style="font-size: 12px; font-weight: 700; color: var(--primary); margin-right: 8px;"></span>
       <div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>
     </div>`;
 
-  box.innerHTML = html;
+  // A different conversation is not a re-render; it is a fresh page.
+  if (paintedChat !== state.currentChat) forgetPaintedMessages();
+  paintedChat = state.currentChat;
+
+  // Chase the bottom only if that is where the reader already was.
+  // Yanking somebody who had scrolled up back down to the newest
+  // message is the other half of the rudeness this diff removes.
+  const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+
+  const holder = document.createElement("div");
+  const keep = new Set();
+  let prev = null;
+
+  blocks.forEach((b) => {
+    const was = paintedNodes.get(b.key);
+    const reusable = paintedMsgs.get(b.key) === b.html
+      && Array.isArray(was) && was.length
+      && was.every((n) => n.isConnected && n.parentNode === box);
+
+    let nodes;
+    if (reusable) {
+      nodes = was;
+    } else {
+      if (Array.isArray(was)) was.forEach((n) => { if (n.parentNode === box) n.remove(); });
+      holder.innerHTML = b.html.trim();
+      nodes = Array.from(holder.children);
+    }
+
+    nodes.forEach((node) => {
+      const slot = prev ? prev.nextElementSibling : box.firstElementChild;
+      if (node !== slot) box.insertBefore(node, slot);
+      prev = node;
+      keep.add(node);
+    });
+
+    paintedMsgs.set(b.key, b.html);
+    paintedNodes.set(b.key, nodes);
+  });
+
+  // Whatever the blocks no longer claim: messages that went, and the
+  // leftovers of any block that was rebuilt.
+  Array.from(box.children).forEach((el) => {
+    if (el.id === "typingBubble" || keep.has(el)) return;
+    el.remove();
+  });
+  [...paintedMsgs.keys()].forEach((key) => {
+    if (blocks.some((b) => b.key === key)) return;
+    paintedMsgs.delete(key);
+    paintedNodes.delete(key);
+  });
+
+  // The typing bubble always sits last.
+  let typing = document.getElementById("typingBubble");
+  if (!typing) box.insertAdjacentHTML("beforeend", typingHTML);
+  else if (typing !== box.lastElementChild) box.appendChild(typing);
+
   fillEventEmbeds(box);
 
   if (keepScroll) {
     // Stay anchored to the message you were looking at.
     box.scrollTop = box.scrollHeight - keepScroll.heightBefore + keepScroll.topBefore;
-  } else {
+  } else if (atBottom) {
     box.scrollTop = box.scrollHeight;
   }
 
   // The icebreaker unlocks as soon as the other side replies.
+  //
+  // Guarded, because this is a WRITE inside a render: renderMessages
+  // runs on every snapshot, on every local patch and on every page of
+  // history, and the condition stays true until the chat document's own
+  // listener echoes the new status back. That was one redundant write
+  // per repaint in the gap.
   if (
     state.currentChatType === "direct" &&
     state.currentChatStatus === "icebreaker" &&
     theirMessageCount > 0 &&
-    state.currentChatInitiatorUid === state.uid
+    state.currentChatInitiatorUid === state.uid &&
+    unlockingChat !== state.currentChat
   ) {
-    db.collection("chats").doc(state.currentChat)
+    const chatId = state.currentChat;
+    unlockingChat = chatId;
+    db.collection("chats").doc(chatId)
       .set({ status: "unlocked" }, { merge: true })
-      .catch(() => {});
+      .catch(() => { if (unlockingChat === chatId) unlockingChat = ""; });
   }
 
   updateChatFooterUI();

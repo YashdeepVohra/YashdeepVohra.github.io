@@ -78,6 +78,14 @@ const docRef = (path) => ({
   // create.
   collection: (n) => collRef(n, path),
 });
+// Fire a generic collection's listeners again, so a test can deliver a
+// SECOND snapshot — a new message arriving on a thread already open.
+// Load window.__docs with what the query should now return first.
+window.__collCbs = {};
+window.__fireColl = (base) => {
+  (window.__collCbs[base] || []).slice().forEach((f) => f());
+};
+
 window.__orbit = [];
 window.__orbitCbs = [];
 const orbitDocs = () => window.__orbit.map((d) => ({ id: d.id, data: () => d }));
@@ -227,7 +235,6 @@ const collRef = (name, parent) => {
     onSnapshot: (cb) => {
       const fire = () => cb(snap(run()));
       setTimeout(fire, 0);
-      window.__collCbs = window.__collCbs || {};
       (window.__collCbs[base] = window.__collCbs[base] || []).push(fire);
       return () => {
         window.__collCbs[base] = (window.__collCbs[base] || []).filter((f) => f !== fire);

@@ -104,9 +104,11 @@ function handleDragEnd() {
   if (currentSwipeItem.classList.contains("ready-to-reply")) {
     const senderUid = currentSwipeItem.getAttribute("data-sender-uid");
     const text = decodeURIComponent(currentSwipeItem.getAttribute("data-text"));
-    const time = parseInt(currentSwipeItem.getAttribute("data-time"));
+    // The message's document id, not when it was sent — two messages
+    // written in the same millisecond used to quote each other.
+    const messageId = currentSwipeItem.getAttribute("data-msg-id");
 
-    initiateReply(senderUid, text, time);
+    initiateReply(senderUid, text, messageId);
     if (navigator.vibrate) navigator.vibrate(50);
   }
 
