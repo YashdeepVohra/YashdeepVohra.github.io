@@ -7,30 +7,49 @@
 // one way — and it exists mainly so a profile carries a number that
 // means something to a stranger.
 //
-// WHY THE COUNTS LIVE IN ARRAYS ON THE PROFILE
-// -------------------------------------------
-// A follow writes the follower's uid into the TARGET's `followers`
-// array, and the rules let a non-owner write that one field and only
-// with their own uid. The owner of a profile cannot touch it at all.
-// So `followers.length` is a number that could only have been earned
-// one real account at a time — you cannot inflate your own.
+// ONE DOCUMENT PER FOLLOWER, AND A COUNT
+// --------------------------------------
+// `followers` was an array on the profile, capped at 5000. Nobody
+// decided 5000 people was enough to follow somebody — that was the
+// shape showing through the product. An array of uids runs at the
+// 1 MiB a document gets, every follow rewrote the whole document
+// (and one document takes about one write a second), every read of
+// that profile dragged the entire list down the wire, and any signed
+// in account could read a private account's whole follower list
+// straight out of it.
 //
-// It is also free to read. It arrives with the profile document the
-// app already fetches and caches, so showing a follower count costs
-// zero extra reads, where a `followers` subcollection would have cost
-// one read per follower every time somebody opened a profile.
+// So a follower is a document now: users/{uid}/followers/{followerUid},
+// holding nothing but the time. The id IS the follower's uid, so two
+// people following at the same moment write two different documents
+// instead of racing over one array, and there is no ceiling.
 //
-// The honest caveat: `following` is your own list on your own
-// document, so a determined person could add uids they do not really
-// follow. That is why the FOLLOWER count is the one used as a signal
-// anywhere it matters, and the following count is just context.
+// The number on the profile is `followerCount`, and it still cannot be
+// inflated by its owner. The rules only let it move in the same write
+// that provably creates or deletes the matching follower document, and
+// `followerEdge` names whose — so a count has to be earned one real
+// account at a time, same as before.
+//
+// `following` deliberately did NOT move. Only you write your own list,
+// so there is no contention on it, and one read gives the app the whole
+// thing — which is what answers "am I following them?" on every card in
+// the feed, for nothing. A subcollection there would have cost a read
+// per person you follow on every cold start, to answer a question the
+// array already answers for free.
+//
+// The honest caveat is unchanged: `following` is your own list on your
+// own document, so a determined person could add uids they do not
+// really follow. That is why the FOLLOWER count is the one used as a
+// signal anywhere it matters, and the following count is just context.
 //
 // PRIVATE ACCOUNTS
 // ----------------
 // With `private: true`, a follow does not land in `followers` at all —
-// the rules forbid it — it lands in `followRequests`, and only the
-// owner can move a name from that queue into their followers. One name
-// at a time, and only a name that actually asked.
+// the rules forbid it — it lands in users/{uid}/followRequests/{asker},
+// and only the owner can move a name from that queue into their
+// followers. The rule on the follower document checks the request
+// really existed, so approving cannot smuggle in somebody who never
+// asked. The queue is also readable only by its owner now; the asker
+// can read their own row and nothing else.
 //
 // What that does and does not mean is worth being straight about. It
 // decides who is in your follower list, and it is enforced by the
@@ -45,21 +64,33 @@ import { state } from '../state/store.js';
 import { safeId, escapeHtml, renderAvatar } from '../utils/formatters.js';
 import { isBlocked } from './blockService.js';
 import {
-  fetchUser, refreshUser, onUserFetched, primeUsers, displayNameFor, usernameFor, avatarFor
+  fetchUser, refreshUser, primeUsers, displayNameFor, usernameFor, avatarFor
 } from './userService.js';
 import { toast, refreshSocialUI } from '../utils/ui.js';
 import { openOverlay, closeOverlay } from '../utils/overlays.js';
 import { askConfirm } from '../utils/confirm.js';
 import { stampAsk, limitMessage, msUntilAskAllowed, ASK_GAP_MS } from './limitsService.js';
 
+/* ---------------------------------------------------------------------
+   Where each edge lives
+   ------------------------------------------------------------------- */
+
+/** users/{uid}/followers/{followerUid} — one document per follower. */
+export function followerRef(uid, followerUid) {
+  return db.collection("users").doc(uid).collection("followers").doc(followerUid);
+}
+
+/** users/{uid}/followRequests/{askerUid} — the queue on a private account. */
+export function askRef(uid, askerUid) {
+  return db.collection("users").doc(uid).collection("followRequests").doc(askerUid);
+}
+
 /**
  * A live view of your own profile document.
  *
- * Follow requests land in YOUR document, written by somebody else, so
- * without a listener the first you would know of one is the next time
- * the app was opened from cold. This is one read to start and one per
- * change after that, and it keeps the follower count, the following
- * list and the private switch honest across two devices at once.
+ * Your own `following`, the private switch and your follower count live
+ * here. One read to start and one per change after that, which is also
+ * what keeps two devices signed in at once from disagreeing.
  */
 export function loadMyProfile(onChange) {
   if (state.myProfileUnsubscribe) state.myProfileUnsubscribe();
@@ -68,7 +99,6 @@ export function loadMyProfile(onChange) {
     (doc) => {
       const d = doc.data() || {};
       state.following = Array.isArray(d.following) ? d.following : [];
-      state.followRequests = Array.isArray(d.followRequests) ? d.followRequests : [];
       state.isPrivate = d.private === true;
       state.privacyChosen = typeof d.private === "boolean";
       if (state.userCache[state.uid]) Object.assign(state.userCache[state.uid], d);
@@ -78,6 +108,47 @@ export function loadMyProfile(onChange) {
     },
     (error) => console.error("Own profile listener:", error.code || error.message)
   );
+
+  loadMyFollowRequests(onChange);
+}
+
+/**
+ * The queue of people waiting on you.
+ *
+ * It used to be an array on your own profile, so the listener above
+ * carried it for free. It is a subcollection now — written by the
+ * asker, readable only by you — which means it needs a listener of its
+ * own. That costs one read per person actually waiting, which for
+ * almost everybody is nought, and it is the write that a request has to
+ * make anyway.
+ *
+ * Attached whatever the account setting is, not just while private: an
+ * account that goes public still has to let the people already waiting
+ * in, and a queue nobody is listening to is a queue nobody answers. An
+ * empty one costs a single read.
+ */
+export function loadMyFollowRequests(onChange) {
+  if (state.followRequestsUnsubscribe) state.followRequestsUnsubscribe();
+  state.followRequestsUnsubscribe = null;
+
+  if (!state.uid) return;
+
+  state.followRequestsUnsubscribe = db.collection("users").doc(state.uid)
+    .collection("followRequests")
+    .orderBy("at", "desc")
+    .limit(200)
+    .onSnapshot(
+      (snap) => {
+        state.followRequests = snap.docs.map((d) => d.id);
+        // Names for the queue, so the list paints without a second pass.
+        primeUsers(state.followRequests).then(() => {
+          if (typeof onChange === "function") onChange();
+          if (isFollowListOpen()) renderFollowList();
+        });
+        if (typeof onChange === "function") onChange();
+      },
+      (error) => console.error("Follow requests listener:", error.code || error.message)
+    );
 }
 
 /** Am I following them? Read from my own list, never the network. */
@@ -92,10 +163,17 @@ export function isPrivateAccount(uid) {
   return !!(u && u.private === true);
 }
 
-/** Have I already asked to follow them? */
+/**
+ * Have I already asked to follow them?
+ *
+ * Their request queue is theirs to read, not mine — so this cannot be
+ * answered from their profile any more. It is answered from the asks
+ * this device remembers, which is what the localStorage record below
+ * was already for, and confirmed against the server whenever a profile
+ * is actually opened (syncFollowState).
+ */
 export function hasAskedToFollow(uid) {
-  const u = state.userCache[uid];
-  return !!(u && Array.isArray(u.followRequests) && u.followRequests.includes(state.uid));
+  return !!uid && askedSet().has(uid);
 }
 
 /** People waiting on ME to let them follow. */
@@ -110,9 +188,11 @@ export function myFollowRequests() {
  * following somebody and then blocking them left a count that did not
  * match the list underneath it.
  *
- * Only the array can be filtered. The stored number is a fallback for a
- * profile whose full document has not been read this session, and by
- * the time anybody is looking at a count the profile has been read.
+ * A list in hand can be filtered exactly. `followerCount` is a stored
+ * number now and cannot be, so a follower you have blocked is still
+ * inside it — the honest trade for a count that no longer has a
+ * ceiling. The list under it, which IS filtered, is the one that has
+ * to be right, and the numbers only disagree for people you blocked.
  */
 function countOf(list, fallback) {
   if (Array.isArray(list)) return list.filter((u) => !isBlocked(u)).length;
@@ -122,7 +202,12 @@ function countOf(list, fallback) {
 export function followerCount(uid) {
   const u = state.userCache[uid];
   if (!u) return 0;
-  return countOf(u.followers, u.followerCount);
+  // A loaded page of followers beats the stored number, because it can
+  // be filtered; the number is what answers before anyone opens it.
+  if (uid === listUid && listKind === "followers" && Array.isArray(loadedFollowers)) {
+    return countOf(loadedFollowers, u.followerCount);
+  }
+  return typeof u.followerCount === "number" ? Math.max(0, u.followerCount) : 0;
 }
 
 export function followingCount(uid) {
@@ -141,13 +226,11 @@ export function followingCount(uid) {
 function nudgeFollowers(uid, delta) {
   const u = state.userCache[uid];
   if (!u) return;
-  if (Array.isArray(u.followers)) {
-    u.followers = delta > 0
-      ? u.followers.concat([state.uid])
-      : u.followers.filter((x) => x !== state.uid);
-  }
-  if (typeof u.followerCount === "number") {
-    u.followerCount = Math.max(0, u.followerCount + delta);
+  u.followerCount = Math.max(0, (u.followerCount || 0) + delta);
+  if (Array.isArray(loadedFollowers) && uid === listUid) {
+    loadedFollowers = delta > 0
+      ? loadedFollowers.concat([state.uid])
+      : loadedFollowers.filter((x) => x !== state.uid);
   }
 }
 
@@ -185,24 +268,17 @@ export function onUnfollow(fn) {
   if (typeof fn === "function") unfollowHooks.push(fn);
 }
 
-// Mirrors the ceiling in firestore.rules. It is not a product decision
-// — it is what an ARRAY on a document forces: every follow rewrites the
-// whole profile, every read of that profile downloads the whole list,
-// and one document takes about one write a second. The real fix is a
-// followers SUBCOLLECTION with a counter; until that lands, say what is
-// happening instead of letting the write be refused and calling it a
-// network problem.
-const FOLLOWER_CAP = 5000;
-
-const arr = (v) => (Array.isArray(v) ? v : []);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
-/** Move my own uid in or out of somebody's request queue. */
+/**
+ * Remember that I am (or am no longer) in somebody's request queue.
+ *
+ * Their queue is theirs to read, so there is nothing to nudge on a
+ * cached profile any more — the record this device keeps IS the answer
+ * the button reads.
+ */
 function nudgeRequests(uid, joining) {
-  const u = state.userCache[uid];
-  if (!u) return;
-  const list = arr(u.followRequests).filter((x) => x !== state.uid);
-  u.followRequests = joining ? list.concat([state.uid]) : list;
+  rememberAsk(uid, joining);
 }
 
 function paint(onDone) {
@@ -218,14 +294,29 @@ function setFollowingLocal(uid, on) {
 }
 
 /* ---- Requests you have sent, remembered on this device -------------
-   Approving a request writes the owner's `followers`; only YOU can
-   write your own `following`, and nothing told your app it had
-   happened. So an approved request left you following someone whose
-   profile still offered "Ask to follow", and a following count one
-   short. The asks you're waiting on are kept here and checked on the
-   next launch, and any fresh read of a profile heals it too.        */
+   Approving a request writes the owner's followers; only YOU can write
+   your own `following`, and nothing tells your app it happened. So an
+   approved request would leave you following someone whose profile
+   still offered "Ask to follow", and a following count one short.
+
+   This record now does double duty. A private account's request queue
+   is readable only by its owner, so "have I asked them?" cannot be
+   answered from their profile at all — this is the answer, confirmed
+   against the server by syncFollowState() whenever a profile is
+   actually opened, and swept once per launch by resolvePendingAsks.  */
 
 const ASKS_KEY = () => "livesociya.asks." + state.uid;
+
+// The same list as a Set, rebuilt when it changes rather than parsed
+// out of localStorage on every button repaint.
+let askedCache = null;
+let askedCacheFor = "";
+function askedSet() {
+  if (askedCache && askedCacheFor === state.uid) return askedCache;
+  askedCacheFor = state.uid;
+  askedCache = new Set(readAsks());
+  return askedCache;
+}
 
 function readAsks() {
   try {
@@ -239,6 +330,59 @@ function writeAsks(list) {
 function rememberAsk(uid, on) {
   const list = readAsks().filter((u) => u !== uid);
   writeAsks(on ? list.concat([uid]) : list);
+  const set = askedSet();
+  if (on) set.add(uid); else set.delete(uid);
+}
+
+/* ---- Keeping the two halves of an edge in step ---------------------
+   A follow is two writes: their follower document, and your own
+   `following`. Approving is the same two, made by two different people
+   — they create your follower document, and nothing tells your app. So
+   the halves can disagree, and the button is what shows it.
+
+   This used to ride on every fresh profile read, because the answer was
+   sitting in the array that came with it. It is a document of its own
+   now, so asking costs a read — which means it is asked deliberately:
+   once per launch over the asks still outstanding, and once whenever a
+   profile is actually opened, where a read is being spent anyway.   */
+
+const healing = new Set();
+
+/**
+ * Settle where you really stand with one person, from the server.
+ * Two reads at worst, and usually the second is skipped.
+ */
+export async function syncFollowState(uid) {
+  if (!state.uid || !safeId(uid) || uid === state.uid) return;
+  if (busy.has(uid) || healing.has(uid)) return;
+
+  healing.add(uid);
+  try {
+    const edge = await followerRef(uid, state.uid).get();
+    const inTheirs = edge.exists;
+    const inMine = state.following.includes(uid);
+
+    // In their followers means the ask, if there was one, is answered.
+    if (inTheirs) rememberAsk(uid, false);
+    else if (askedSet().has(uid)) {
+      // Still remembered as asked — is the request actually still out?
+      const still = await askRef(uid, state.uid).get().catch(() => null);
+      if (still && !still.exists) rememberAsk(uid, false);
+    }
+
+    if (inTheirs === inMine || isBlocked(uid)) return;
+
+    setFollowingLocal(uid, inTheirs);
+    refreshSocialUI();
+    await db.collection("users").doc(state.uid)
+      .update({ following: inTheirs ? FieldValue.arrayUnion(uid) : FieldValue.arrayRemove(uid) })
+      .catch((e) => console.warn("Follow repair failed:", e.code || e.message));
+  } catch (e) {
+    // Offline. The next profile open or the next launch will settle it.
+  } finally {
+    healing.delete(uid);
+    refreshSocialUI();
+  }
 }
 
 /** Once per launch: find out what happened to the asks still out. */
@@ -246,33 +390,10 @@ let asksResolvedFor = "";
 export async function resolvePendingAsks() {
   if (!state.uid || asksResolvedFor === state.uid) return;
   asksResolvedFor = state.uid;
-  const pending = readAsks().slice(-15);
-  for (const uid of pending) {
-    try { await refreshUser(uid); } catch (e) { /* offline: try next launch */ }
+  for (const uid of readAsks().slice(-15)) {
+    await syncFollowState(uid);
   }
 }
-
-// Every fresh profile read passes through here. If it shows you in
-// their followers but not in your own following, a request was
-// approved — finish it. If it shows the reverse, a follow only half
-// landed once — undo your half, so the button tells the truth.
-const healing = new Set();
-onUserFetched((uid, data, { fromCache }) => {
-  if (fromCache || !state.uid || uid === state.uid || busy.has(uid) || healing.has(uid)) return;
-
-  const inTheirs = arr(data.followers).includes(state.uid);
-  const inMine = state.following.includes(uid);
-  if (!arr(data.followRequests).includes(state.uid)) rememberAsk(uid, false);
-  if (inTheirs === inMine || isBlocked(uid)) return;
-
-  healing.add(uid);
-  setFollowingLocal(uid, inTheirs);
-  refreshSocialUI();
-  db.collection("users").doc(state.uid)
-    .update({ following: inTheirs ? FieldValue.arrayUnion(uid) : FieldValue.arrayRemove(uid) })
-    .catch((e) => console.warn("Follow repair failed:", e.code || e.message))
-    .finally(() => healing.delete(uid));
-});
 
 /* ---- Rate limit, the polite way -------------------------------------
    The rules allow one ask every few seconds (follow requests and orbit
@@ -287,9 +408,7 @@ async function sendAsk(uid) {
   const attempt = async () => {
     const batch = db.batch();
     stampAsk(batch);
-    batch.update(db.collection("users").doc(uid), {
-      followRequests: FieldValue.arrayUnion(state.uid)
-    });
+    batch.set(askRef(uid, state.uid), { at: Date.now() });
     await batch.commit();
   };
 
@@ -335,19 +454,15 @@ async function follow(uid, onDone) {
   paint(onDone);
 
   try {
-    // The truth. This replaces the cached profile, nudges and all.
-    const fresh = await refreshUser(uid);
-    const followers = arr(fresh.followers);
-    const requests = arr(fresh.followRequests);
+    // The truth: their profile, and whether an edge between us already
+    // exists. Two reads, on an action people take a handful of times a
+    // day — and getting it wrong is worse than paying for them.
+    const [fresh, edge] = await Promise.all([
+      refreshUser(uid),
+      followerRef(uid, state.uid).get()
+    ]);
 
-    if (!followers.includes(state.uid) && followers.length >= FOLLOWER_CAP) {
-      setFollowingLocal(uid, false);
-      busy.delete(uid);
-      paint(onDone);
-      return toast(name + " can't take any more followers right now.");
-    }
-
-    if (followers.includes(state.uid)) {
+    if (edge.exists) {
       // Already in — an approval this app never heard about.
       if (!state.following.includes(uid)) {
         setFollowingLocal(uid, true);
@@ -355,26 +470,37 @@ async function follow(uid, onDone) {
       }
       rememberAsk(uid, false);
       toast("You follow " + name);
-    } else if (requests.includes(state.uid)) {
-      setFollowingLocal(uid, false);
-      rememberAsk(uid, true);
-      toast("You've already asked " + name);
     } else if (fresh.private === true) {
       // Private — including one that went private since we last looked.
+      // Their queue is theirs to read, so whether we already asked is
+      // answered by the row we would be writing.
       setFollowingLocal(uid, false);
-      nudgeRequests(uid, true);
-      paint(onDone);
-      await sendAsk(uid);
-      toast("Asked to follow " + name);
+      const mine = await askRef(uid, state.uid).get().catch(() => null);
+      if (mine && mine.exists) {
+        rememberAsk(uid, true);
+        paint(onDone);
+        toast("You've already asked " + name);
+      } else {
+        nudgeRequests(uid, true);
+        paint(onDone);
+        await sendAsk(uid);
+        toast("Asked to follow " + name);
+      }
     } else {
       setFollowingLocal(uid, true);
       nudgeFollowers(uid, 1);
       paint(onDone);
-      // Both halves in one batch: their followers and your following
-      // can no longer end up disagreeing because the connection dropped
-      // between two separate writes.
+      // Three writes, one batch: the follower document, the count that
+      // goes with it, and your own following. They can no longer end up
+      // disagreeing because the connection dropped between two of them.
+      // `followerEdge` is what lets the rule check the count moved with
+      // a real document — see firestore.rules.
       const batch = db.batch();
-      batch.update(db.collection("users").doc(uid), { followers: FieldValue.arrayUnion(state.uid) });
+      batch.set(followerRef(uid, state.uid), { at: Date.now() });
+      batch.update(db.collection("users").doc(uid), {
+        followerCount: FieldValue.increment(1),
+        followerEdge: state.uid
+      });
       batch.update(db.collection("users").doc(state.uid), { following: FieldValue.arrayUnion(uid) });
       await batch.commit();
       toast("Following " + name);
@@ -416,7 +542,11 @@ async function unfollow(uid, onDone) {
 
   try {
     const batch = db.batch();
-    batch.update(db.collection("users").doc(uid), { followers: FieldValue.arrayRemove(state.uid) });
+    batch.delete(followerRef(uid, state.uid));
+    batch.update(db.collection("users").doc(uid), {
+      followerCount: FieldValue.increment(-1),
+      followerEdge: state.uid
+    });
     batch.update(db.collection("users").doc(state.uid), { following: FieldValue.arrayRemove(uid) });
     try {
       await batch.commit();
@@ -453,9 +583,7 @@ async function withdrawAsk(uid, onDone) {
   paint(onDone);
 
   try {
-    await db.collection("users").doc(uid).update({
-      followRequests: FieldValue.arrayRemove(state.uid)
-    });
+    await askRef(uid, state.uid).delete();
     rememberAsk(uid, false);
     toast("Request withdrawn");
   } catch (e) {
@@ -465,14 +593,18 @@ async function withdrawAsk(uid, onDone) {
   }
   busy.delete(uid);
   // They may have answered in the meantime; show whatever is true now.
-  await refreshUser(uid).catch(() => {});
+  await syncFollowState(uid);
   paint(onDone);
 }
 
 /**
- * Let somebody in, or turn them away. Both are one write on your own
- * profile, and the rules only accept it when exactly one name leaves
- * the queue and nothing but that same name joins the followers.
+ * Let somebody in, or turn them away.
+ *
+ * Declining is one delete. Approving is a batch: the request row goes,
+ * the follower document arrives, and the count moves with it. The rule
+ * on the follower document checks — with exists(), which sees the state
+ * BEFORE this batch — that a request really was there, so approving
+ * cannot smuggle in somebody who never asked.
  */
 export async function answerFollowRequest(requesterUid, accept, { quiet = false } = {}) {
   const uid = safeId(requesterUid);
@@ -480,28 +612,37 @@ export async function answerFollowRequest(requesterUid, accept, { quiet = false 
   if (!(state.followRequests || []).includes(uid)) return false;
 
   const me = state.userCache[state.uid] || (state.userCache[state.uid] = { uid: state.uid });
-  const before = arr(me.followers);
+  const beforeCount = me.followerCount || 0;
 
   // Somebody you've blocked since they asked is only ever declined.
   if (accept && isBlocked(uid)) accept = false;
 
-  const patch = { followRequests: FieldValue.arrayRemove(uid) };
-  if (accept) patch.followers = FieldValue.arrayUnion(uid);
-
+  const before = state.followRequests.slice();
   state.followRequests = state.followRequests.filter((u) => u !== uid);
-  if (accept && !before.includes(uid)) me.followers = before.concat([uid]);
+  if (accept) me.followerCount = beforeCount + 1;
   refreshSocialUI();
   if (isFollowListOpen()) renderFollowList();
 
   let ok = true;
   try {
-    await db.collection("users").doc(state.uid).update(patch);
+    if (accept) {
+      const batch = db.batch();
+      batch.delete(askRef(state.uid, uid));
+      batch.set(followerRef(state.uid, uid), { at: Date.now() });
+      batch.update(db.collection("users").doc(state.uid), {
+        followerCount: FieldValue.increment(1),
+        followerEdge: uid
+      });
+      await batch.commit();
+    } else {
+      await askRef(state.uid, uid).delete();
+    }
     if (!quiet) toast(accept ? displayNameFor(uid) + " follows you now" : "Request declined");
   } catch (e) {
     ok = false;
     console.error("Follow request answer failed:", e.code || e.message);
-    if (!state.followRequests.includes(uid)) state.followRequests = state.followRequests.concat([uid]);
-    me.followers = before;
+    state.followRequests = before;
+    me.followerCount = beforeCount;
     if (!quiet) toast("Couldn't do that right now.");
   }
   refreshSocialUI();
@@ -614,6 +755,16 @@ export function syncPrivacyUI() {
 let listUid = "";
 let listKind = "followers";
 
+// The page of followers fetched for whoever's list is open. Followers
+// are a subcollection now, so unlike `following` and `vouchedBy` they
+// do not arrive with the profile — they are queried when the list is
+// opened, and only then. Kept here so followerCount() can filter
+// blocked people out of a count once the list behind it is in hand.
+let loadedFollowers = null;
+
+// Rules cap nothing now. This is what a person will actually scroll.
+const FOLLOWER_PAGE = 300;
+
 const LIST_TITLES = {
   followers: "Followers",
   following: "Following",
@@ -628,9 +779,12 @@ function isFollowListOpen() {
 
 /**
  * A private account's followers and following are for its followers.
- * (The rules still let any signed-in student read a profile document,
- * so this is a courtesy the app keeps, not a wall — said plainly in
- * SECURITY.md rather than pretended otherwise.)
+ *
+ * The followers half is a real wall now, not a courtesy: the read rule
+ * on users/{uid}/followers refuses the query outright unless you are
+ * the owner, the account is public, or you already follow it. `following`
+ * and `vouchedBy` are still arrays on a profile any signed-in person
+ * can read, so those two remain app-level — see SECURITY.md.
  */
 export function listIsLocked(uid, kind) {
   return (kind === "followers" || kind === "following" || kind === "vouches")
@@ -639,38 +793,62 @@ export function listIsLocked(uid, kind) {
     && !isFollowing(uid);
 }
 
-/** Which uids belong in this list, straight out of what we already hold. */
+/** Which uids belong in this list, out of what we hold for it. */
 function listMembers() {
   const u = state.userCache[listUid] || {};
   let uids;
   if (listKind === "requests") uids = state.followRequests;
-  else if (listKind === "followers") uids = u.followers;
+  else if (listKind === "followers") uids = loadedFollowers;
   else if (listKind === "vouches") uids = u.vouchedBy;
   else uids = listUid === state.uid ? state.following : u.following;
   return (Array.isArray(uids) ? uids : []).filter((x) => x && !isBlocked(x));
 }
 
+/** Newest followers first — one page, only when somebody opens it. */
+async function fetchFollowers(uid) {
+  const snap = await db.collection("users").doc(uid).collection("followers")
+    .orderBy("at", "desc")
+    .limit(FOLLOWER_PAGE)
+    .get();
+  return snap.docs.map((d) => d.id);
+}
+
 export async function openFollowList(targetUid, kind) {
   const uid = safeId(targetUid);
   if (!uid) return;
+  const switching = uid !== listUid || kind !== listKind;
   listUid = uid;
   listKind = LIST_TITLES[kind] ? kind : "followers";
+  if (switching && listKind === "followers") loadedFollowers = null;
 
   openOverlay("followListScreen");
   renderFollowList();
 
-  // The arrays normally arrive with the profile that was just opened.
-  // If this list was reached some other way, fetch them first.
+  // `following` and `vouchedBy` ride along with the profile document.
+  // `followers` is a query of its own, and the only one that costs
+  // anything — which is exactly why it waits until somebody asks.
   const u = state.userCache[uid] || {};
-  const needsDoc = listKind === "requests"
-    ? false
-    : listKind === "followers"
-      ? !Array.isArray(u.followers)
-      : listKind === "vouches"
-        ? !Array.isArray(u.vouchedBy)
-        : uid !== state.uid && !Array.isArray(u.following);
+  const needsDoc = listKind === "vouches"
+    ? !Array.isArray(u.vouchedBy)
+    : listKind === "following"
+      ? uid !== state.uid && !Array.isArray(u.following)
+      : false;
   if (needsDoc) await fetchUser(uid, { force: true });
   if (listIsLocked(uid, listKind)) { if (isFollowListOpen()) renderFollowList(); return; }
+
+  if (listKind === "followers" && !Array.isArray(loadedFollowers)) {
+    try {
+      loadedFollowers = await fetchFollowers(uid);
+    } catch (e) {
+      // A refused query means the rules say this list is not ours to
+      // read — the same answer listIsLocked gives, arrived at the hard
+      // way (a private account we do not follow).
+      console.error("Followers load failed:", e.code || e.message);
+      loadedFollowers = [];
+    }
+    if (listUid !== uid) return;
+    if (isFollowListOpen()) renderFollowList();
+  }
 
   // Every row carries a Follow button, and that button needs to know
   // whether the person is private and whether you've already asked.
@@ -774,12 +952,20 @@ export function renderFollowList() {
  * do it at all — so going private did nothing about the people already
  * in, and blocking someone left them counted as a follower.
  */
-export async function removeFollower(targetUid, { ask = true } = {}) {
+export async function removeFollower(targetUid, { ask = true, known = null } = {}) {
   const uid = safeId(targetUid);
   if (!uid) return false;
   const me = state.userCache[state.uid] || (state.userCache[state.uid] = { uid: state.uid });
-  const before = arr(me.followers);
-  if (!before.includes(uid)) return true;
+
+  // Is there anything to remove? The list on screen knows when it is
+  // loaded; otherwise ask, so severFollow does not spend a write on an
+  // edge that was never there.
+  let present = known;
+  if (present === null) {
+    if (Array.isArray(loadedFollowers) && listUid === state.uid) present = loadedFollowers.includes(uid);
+    else present = await followerRef(state.uid, uid).get().then((d) => d.exists).catch(() => false);
+  }
+  if (!present) return true;
 
   if (ask) {
     const ok = await askConfirm({
@@ -793,16 +979,27 @@ export async function removeFollower(targetUid, { ask = true } = {}) {
     if (!ok) return false;
   }
 
-  me.followers = before.filter((u) => u !== uid);
+  const beforeCount = me.followerCount || 0;
+  const beforeList = Array.isArray(loadedFollowers) ? loadedFollowers.slice() : null;
+  me.followerCount = Math.max(0, beforeCount - 1);
+  if (Array.isArray(loadedFollowers)) loadedFollowers = loadedFollowers.filter((u) => u !== uid);
   refreshSocialUI();
   if (isFollowListOpen()) renderFollowList();
+
   try {
-    await db.collection("users").doc(state.uid).update({ followers: FieldValue.arrayRemove(uid) });
+    const batch = db.batch();
+    batch.delete(followerRef(state.uid, uid));
+    batch.update(db.collection("users").doc(state.uid), {
+      followerCount: FieldValue.increment(-1),
+      followerEdge: uid
+    });
+    await batch.commit();
     if (ask) toast("Removed");
     return true;
   } catch (e) {
     console.error("Remove follower failed:", e.code || e.message);
-    me.followers = before;
+    me.followerCount = beforeCount;
+    loadedFollowers = beforeList;
     if (ask) toast("Couldn't do that right now.");
     refreshSocialUI();
     if (isFollowListOpen()) renderFollowList();
@@ -820,29 +1017,41 @@ export async function severFollow(targetUid) {
   const uid = safeId(targetUid);
   if (!uid || uid === state.uid) return;
   const mine = db.collection("users").doc(state.uid);
-  const theirs = db.collection("users").doc(uid);
   const quietly = (p) => p.catch(() => {});
 
-  let fresh = state.userCache[uid] || {};
-  try { fresh = await refreshUser(uid); } catch (e) {}
+  // What actually exists between us. Two reads rather than a profile
+  // fetch, because the edges are documents now and the arrays that used
+  // to answer this are gone.
+  const [iFollowThem, iAsked] = await Promise.all([
+    followerRef(uid, state.uid).get().then((d) => d.exists).catch(() => false),
+    askRef(uid, state.uid).get().then((d) => d.exists).catch(() => false)
+  ]);
 
   const jobs = [];
   if (state.following.includes(uid)) {
     setFollowingLocal(uid, false);
     jobs.push(quietly(mine.update({ following: FieldValue.arrayRemove(uid) })));
   }
-  if (arr(fresh.followers).includes(state.uid)) {
-    jobs.push(quietly(theirs.update({ followers: FieldValue.arrayRemove(state.uid) })));
+  if (iFollowThem) {
+    // Leaving works block or no block — that is what the delete rule on
+    // the follower document says, and why it is not gated on anything.
+    const batch = db.batch();
+    batch.delete(followerRef(uid, state.uid));
+    batch.update(db.collection("users").doc(uid), {
+      followerCount: FieldValue.increment(-1),
+      followerEdge: state.uid
+    });
+    jobs.push(quietly(batch.commit()));
   }
-  if (arr(fresh.followRequests).includes(state.uid)) {
+  if (iAsked) {
     rememberAsk(uid, false);
-    jobs.push(quietly(theirs.update({ followRequests: FieldValue.arrayRemove(state.uid) })));
+    jobs.push(quietly(askRef(uid, state.uid).delete()));
   }
   if ((state.followRequests || []).includes(uid)) {
     jobs.push(answerFollowRequest(uid, false, { quiet: true }));
   }
   await Promise.all(jobs);
-  // Owner-side writes to one document go one at a time.
+  // Owner-side, and it checks for itself whether there is anything there.
   await removeFollower(uid, { ask: false });
   refreshSocialUI();
 }

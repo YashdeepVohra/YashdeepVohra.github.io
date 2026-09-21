@@ -187,17 +187,23 @@ private to the blocker — would mean the blocked person still sees your
 events and therefore your location, which is the worse risk of the two.
 Every major platform lets a blocked user work it out.
 
-**Private accounts hide lists in the app, not in the database.** A
-private account decides who may follow it, and that IS enforced by the
-rules. But any signed-in student can still read any profile document,
-which includes `followers`, `following` and `followRequests`. The app
-shows a lock instead of those lists (and the Joined tab) to anyone who
-doesn't follow a private account, but someone using the console could
-read them. The same goes for a locked profile's hosted events, which
-are hidden on the profile but were always public in the feed. Closing
-that properly means moving the lists into a
-subcollection with a follower-only read rule, at one read per name.
-Events stay public whatever the account type — that is the product.
+**The follower list is hidden in the database now; `following` still
+is not.** This used to say all three lists were app-level only. Two of
+them have moved: `followers` and `followRequests` are subcollections
+under the profile, and the read rule on `users/{uid}/followers` refuses
+the query outright unless you are the owner, the account is public, or
+you already follow it. A private account's request queue is readable
+only by its owner — an asker can read their own row and nothing else.
+
+What is still app-level: `following` and `vouchedBy` are arrays on a
+profile document any signed-in person can read, so the lock the app
+shows over those two is a courtesy, not a wall. Closing that means
+moving them as well, and `following` in particular is the one list it
+is genuinely worth keeping as an array — see `docs/data.md`.
+
+The same goes for a locked profile's hosted events, which are hidden on
+the profile but were always public in the feed. Events stay public
+whatever the account type — that is the product.
 
 **Banning is still manual.** `banned` exists on the profile but nothing
 enforces it; the quickest real ban is Firebase console → Authentication

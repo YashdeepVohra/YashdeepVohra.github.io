@@ -102,6 +102,10 @@ export const state = {
   blocksUnsubscribe: null,
   orbitUnsubscribe: null,
   myProfileUnsubscribe: null,
+  // The queue of people waiting to follow you moved off your profile
+  // document into users/{uid}/followRequests, so it needs a listener of
+  // its own rather than riding along with myProfileUnsubscribe.
+  followRequestsUnsubscribe: null,
   eventsUnsubscribe: null,
   profileEventsUnsubscribe: null,
   typingTimer: null,
@@ -121,6 +125,7 @@ export function resetState() {
     state.blocksUnsubscribe,
     state.orbitUnsubscribe,
     state.myProfileUnsubscribe,
+    state.followRequestsUnsubscribe,
     state.eventsUnsubscribe,
     state.profileEventsUnsubscribe
   ].forEach((unsub) => { if (typeof unsub === "function") unsub(); });
@@ -167,6 +172,7 @@ export function resetState() {
   state.blocksUnsubscribe = null;
   state.orbitUnsubscribe = null;
   state.myProfileUnsubscribe = null;
+  state.followRequestsUnsubscribe = null;
   state.eventsUnsubscribe = null;
   state.profileEventsUnsubscribe = null;
 }

@@ -81,6 +81,9 @@ Each line is the whole rule. The file after it is the argument for it.
 - An ended event is not live — check `expiresAt`, not `startTime`.
 - Follow first, orbit later; a private profile you don't follow shows
   counts and a way in, nothing else.
+- A follower is a DOCUMENT (`users/{uid}/followers/{uid}`), `following`
+  is still an array on your own profile, and `followerCount` may only
+  move in the same write as the document it counts.
 
 **The look** → `docs/design.md`
 
@@ -198,7 +201,8 @@ Decisions already made, with the reason, so they don't get undone:
 | Profiles cached in localStorage, 6h TTL | ~20 reads per open for data that changes twice a year |
 | Firestore offline persistence on | resume tokens: only changed docs bill |
 | Hype writes debounced 900ms | a misclick costs nothing; a burst is one write |
-| Counts live as arrays on the profile | `followers.length` is free; a subcollection is a read per follower |
+| `following` stays an array on your own profile | one read gives your whole list, which is what answers "am I following them?" on every card |
+| `followers` is a subcollection + a `followerCount` field | the array was capped at 5000, rewrote a whole document per follow, and shipped a private account's follower list to anyone signed in. The count costs nothing to read; the list is queried only when somebody opens it |
 | Recap query spans 48h, filtered client-side, max 3 pages per load | retention is computed from three fields; no server to store it |
 | Profile Hosted/Joined: two `get()`s, counts from the same docs | was a listener + two duplicate count queries |
 | Pinned message in a subcollection, holding a copy of the text | a field on the event bills the whole campus a read |

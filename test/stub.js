@@ -5,6 +5,13 @@ window.__writes = 0;
 window.__reads = 0;
 window.__docs = [];
 const noop = () => {};
+// A batch checks its rules ONCE, up front, then applies. Without this
+// flag the apply ran every op through window.__rules a second time —
+// and a model that records state as it goes (an ask stamping the clock,
+// say) then refuses the very write it had just allowed.
+let applying = false;
+const rules = (path, data, kind) =>
+  (!applying && window.__rules) ? window.__rules(path, data, kind) : null;
 const snap = (docs = []) => ({
   _c: (window.__reads += docs.length),
   forEach: (f) => docs.forEach(f),
@@ -22,9 +29,18 @@ const docRef = (path) => ({
     return Promise.resolve({ exists: !!fixture, data: () => fixture || {} });
   },
   set: (data, opts) => {
+    // The stand-in for firestore.rules is consulted on creates and
+    // deletes too now, not just updates — the follow graph is documents
+    // being made and unmade, so a model that only saw field patches
+    // could not refuse anything that matters.
+    const no = rules(path, data, 'set');
+    if (no) return Promise.reject(no);
     window.__writes++;
-    // Plain values land for real, so a saved profile can be checked.
-    if (data && typeof data === 'object' && path && path.startsWith('users/') && path.split('/').length === 2) {
+    // Plain values land for real, so a saved document can be checked.
+    // This used to be restricted to two-segment users/{uid} paths, which
+    // meant nothing under a SUBCOLLECTION was ever stored — and the
+    // follow graph lives in users/{uid}/followers/{uid} now.
+    if (data && typeof data === 'object' && path) {
       const clean = Object.fromEntries(Object.entries(data).filter(([, v]) => !(v && v.__op)));
       window.__stubDocs[path] = (opts && opts.merge) ? Object.assign(window.__stubDocs[path] || {}, clean) : clean;
     }
@@ -32,7 +48,7 @@ const docRef = (path) => ({
   },
   update: (patch) => {
     // Optional stand-in for firestore.rules: return an error to refuse.
-    const refused = window.__rules && window.__rules(path, patch);
+    const refused = rules(path, patch, 'update');
     if (refused) return Promise.reject(refused);
     window.__writes++;
     window.__updates = window.__updates || [];
@@ -42,11 +58,18 @@ const docRef = (path) => ({
       const v = patch[k];
       if (v && v.__op === 'union') cur[k] = (cur[k] || []).concat([v.v]).filter((x, i, a) => a.indexOf(x) === i);
       else if (v && v.__op === 'remove') cur[k] = (cur[k] || []).filter((x) => x !== v.v);
+      else if (v && v.__op === 'inc') cur[k] = (typeof cur[k] === 'number' ? cur[k] : 0) + v.v;
       else cur[k] = v;
     });
     return Promise.resolve();
   },
-  delete: () => { window.__writes++; return Promise.resolve(); },
+  delete: () => {
+    const no = rules(path, null, 'delete');
+    if (no) return Promise.reject(no);
+    window.__writes++;
+    if (path) delete window.__stubDocs[path];
+    return Promise.resolve();
+  },
   onSnapshot: (cb) => { setTimeout(() => cb({ exists: false, data: () => ({}) }), 0); return noop; },
   // A subcollection keeps its parent's path. It used to drop it, so
   // `users/me/private/receipt` arrived here as `/receipt` and a
@@ -172,11 +195,44 @@ const collRef = (name, parent) => {
       doc: (id) => docRef(base + '/' + id), add: () => Promise.resolve({ id: 'x' }) };
     return q2;
   }
+  /* The generic collection.
+     `window.__docs` is the explicit queue a test can load to answer the
+     next query, and it still wins. When it is empty this falls back to
+     whatever is actually sitting in __stubDocs directly under this
+     path — which is what makes a SUBCOLLECTION behave like one, and
+     the follow graph is subcollections now. */
+  const spec = { order: null, lim: 0 };
+  const fromStore = () => {
+    const prefix = base + '/';
+    return Object.keys(window.__stubDocs)
+      .filter((k) => k.startsWith(prefix) && k.slice(prefix.length).indexOf('/') === -1)
+      .map((k) => ({ id: k.slice(prefix.length), __d: window.__stubDocs[k] }));
+  };
+  const run = () => {
+    if (window.__docs.length) return window.__docs.splice(0, window.__docs.length);
+    let rows = fromStore();
+    if (spec.order) {
+      const [f, dir] = spec.order;
+      rows.sort((a, b) => (dir === 'desc' ? -1 : 1) * (((a.__d || {})[f] || 0) - ((b.__d || {})[f] || 0)));
+    }
+    if (spec.lim) rows = rows.slice(0, spec.lim);
+    return rows.map((r) => ({ id: r.id, data: () => r.__d }));
+  };
   const q = {
-    where: () => q, orderBy: () => q, limitToLast: () => q, limit: () => q,
+    where: () => q, limitToLast: () => q,
+    orderBy: (f, dir = 'asc') => { spec.order = [f, dir]; return q; },
+    limit: (n) => { spec.lim = n; return q; },
     endBefore: () => q, startAfter: () => q, startAt: () => q, endAt: () => q,
-    get: () => Promise.resolve(snap(window.__docs.splice(0, window.__docs.length))),
-    onSnapshot: (cb) => { setTimeout(() => cb(snap(window.__docs.splice(0, window.__docs.length))), 0); return noop; },
+    get: () => Promise.resolve(snap(run())),
+    onSnapshot: (cb) => {
+      const fire = () => cb(snap(run()));
+      setTimeout(fire, 0);
+      window.__collCbs = window.__collCbs || {};
+      (window.__collCbs[base] = window.__collCbs[base] || []).push(fire);
+      return () => {
+        window.__collCbs[base] = (window.__collCbs[base] || []).filter((f) => f !== fire);
+      };
+    },
     doc: (id) => docRef(base + '/' + id), add: () => Promise.resolve({ id: 'x' }),
   };
   return q;
@@ -199,16 +255,24 @@ window.firebase = {
         set: rec('set'), update: rec('update'), delete: rec('delete'),
         commit: () => {
           // All or nothing, like the real thing.
-          const refused = window.__rules && ops.map((o) => o.kind === 'update' && window.__rules(o.path, o.data)).find(Boolean);
+          const refused = window.__rules
+            && ops.map((o) => window.__rules(o.path, o.data, o.kind)).find(Boolean);
           if (refused) return Promise.reject(refused);
           window.__batches = window.__batches || [];
           window.__batches.push(ops.map(o => o.kind + ' ' + o.path));
-          // Apply for real, so a batched write is observable like any other.
-          ops.forEach((o) => { if (o.ref && typeof o.ref[o.kind] === 'function') o.ref[o.kind](o.data); });
+          // Apply for real, so a batched write is observable like any
+          // other — but without re-running the rules, which have just
+          // passed on exactly these ops.
+          applying = true;
+          try {
+            ops.forEach((o) => { if (o.ref && typeof o.ref[o.kind] === 'function') o.ref[o.kind](o.data); });
+          } finally {
+            applying = false;
+          }
           window.__lastBatch = ops;
           return Promise.resolve();
         }
       };
     } }),
-    { FieldPath: { documentId: () => '__name__' }, FieldValue: { arrayUnion: (v) => ({ __op: 'union', v }), arrayRemove: (v) => ({ __op: 'remove', v }), serverTimestamp: () => ({ __op: 'now' }), delete: () => ({ __op: 'delete' }) } }),
+    { FieldPath: { documentId: () => '__name__' }, FieldValue: { arrayUnion: (v) => ({ __op: 'union', v }), arrayRemove: (v) => ({ __op: 'remove', v }), increment: (v) => ({ __op: 'inc', v }), serverTimestamp: () => ({ __op: 'now' }), delete: () => ({ __op: 'delete' }) } }),
 };

@@ -246,7 +246,9 @@ export function initializeUserApp(userData) {
   state.userAvatar = userData.avatar || "\u{1F464}";
   state.googlePfp = userData.googlePfp || "";
   state.following = Array.isArray(userData.following) ? userData.following : [];
-  state.followRequests = Array.isArray(userData.followRequests) ? userData.followRequests : [];
+  // Filled by the listener on users/{uid}/followRequests, not by the
+  // profile document — the queue moved out of it.
+  state.followRequests = [];
   state.isPrivate = userData.private === true;
   state.privacyChosen = typeof userData.private === "boolean";
 

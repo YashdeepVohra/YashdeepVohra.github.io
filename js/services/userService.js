@@ -87,21 +87,21 @@ export function rememberUser(uid, data) {
       // only ever used to find the vouchers you already know.
       vouchedBy: Array.isArray(data.vouchedBy) ? data.vouchedBy.slice(0, 50) : [],
       vouchCount: Array.isArray(data.vouchedBy) ? data.vouchedBy.length : 0,
-      // Follower lists can run to thousands of uids. Only the numbers
-      // are kept here — nothing on screen needs the list itself, since
-      // whether YOU follow someone is answered by your own list.
-      followerCount: Array.isArray(data.followers) ? data.followers.length : 0,
+      // followerCount is a stored integer on the profile now. The list
+      // it counts is users/{uid}/followers, one document per follower,
+      // queried only when somebody actually opens it.
+      followerCount: typeof data.followerCount === "number" ? data.followerCount : 0,
       followingCount: Array.isArray(data.following) ? data.following.length : 0,
-      // THESE TWO WERE MISSING, and it was the root of most follow bugs.
-      // A profile painted from this cache had no `private` flag and no
-      // request queue, so after a reload every private account looked
-      // open — the button said Follow, not Ask — and every request you
-      // had sent looked as if it had been cancelled. Only whether YOU
-      // are in the queue is kept, not the queue itself.
-      private: data.private === true,
-      followRequests: Array.isArray(data.followRequests) && state.uid && data.followRequests.includes(state.uid)
-        ? [state.uid]
-        : []
+      // `private` was MISSING here once, and it was the root of most of
+      // the follow bugs: a profile painted from this cache had no
+      // private flag, so after a reload every private account looked
+      // open and its button said Follow instead of Ask.
+      //
+      // Whether you have ASKED someone is no longer answerable from
+      // their document at all — a private account's queue is readable
+      // only by its owner — so followService keeps that record on this
+      // device and confirms it against the server on a profile open.
+      private: data.private === true
     }
   };
   writeStore(store);

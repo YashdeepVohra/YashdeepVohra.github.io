@@ -130,26 +130,71 @@ exists to avoid.
 `now >= startTime` is also true after
 it ends; that put a Live chip on every Recap card. Check `expiresAt`.
 
+### A follower is a document; `following` is still an array
+
+`users/{uid}/followers/{followerUid}` and
+`users/{uid}/followRequests/{askerUid}`, each holding nothing but `at`.
+They were arrays on the profile, capped at 5000 — a number nobody chose,
+just where an array of uids starts threatening the 1 MiB a document
+gets. The cap was the least of it: every follow rewrote the whole
+document (and one document takes about one write a second), every read
+of that profile dragged the entire list down the wire, and any signed-in
+account could read a private account's whole follower list straight out
+of it whatever the UI showed.
+
+`following` deliberately did NOT move. Only you write your own, so
+there is no contention, and one read gives the app the whole list —
+which is what answers "am I following them?" on every card in the feed
+for free. A subcollection there would cost a read per person you follow
+on every cold start to answer something the array already answers.
+
+`vouchedBy` stays an array too, capped at 500. It is only writable by
+people already linked to you in orbit, so it has neither the contention
+nor the open-ended growth.
+
+### The follower count is a number that still cannot be forged
+
+`followerCount` on the profile, and the rules only let it move in the
+same write that provably creates or deletes the matching follower
+document — `followerEdge` names whose, and `existsAfter()` checks it
+landed. So it is still earned one real account at a time. Approving
+works the same way: the create rule on the follower document checks with
+`exists()` that a request was really there, so an owner cannot smuggle
+in somebody who never asked.
+
+The honest trade: a count cannot be filtered, so a follower you have
+blocked is still inside it. The list under it is filtered and is the one
+that has to be right.
+
+### Whether you asked someone is kept on the device
+
+A private account's request queue is readable only by its owner now, so
+"have I asked them?" cannot be answered from their profile at all. The
+localStorage record in `followService.js` is the answer, confirmed
+against the server by `syncFollowState()` whenever a profile is actually
+opened, and swept once per launch by `resolvePendingAsks()`.
+
+That function replaced the `onUserFetched` hook. The hook was free when
+the answer arrived inside the profile document; it is a read of its own
+now, so it is spent deliberately — on a profile open, where a read is
+being spent anyway — rather than on every cached glance at a name.
+
 ### The localStorage profile cache is partial
 
-It keeps names, counts,
-`private`, and whether YOU are in their request queue — nothing else.
-Leaving `private` and `followRequests` out made every private account
-look open after a reload and every sent request look cancelled.
-
-### A new follow decides from a fresh read, never the cache
-
-(`refreshUser`), and every fresh read runs `onUserFetched` hooks —
-that's how an approved request becomes `following` on the asker's
-side, since only the asker can write their own list.
+It keeps names, `followerCount`, `private` and a capped `vouchedBy` —
+nothing else. Leaving `private` out made every private account look open
+after a reload, and the button say Follow instead of Ask.
 
 ### Follow first, orbit later
 
-`pullIn` needs you to be in their
-`followers` (client and rules). A private profile you don't follow is
-"locked" (`isProfileLocked`): counts, Follow, Message/Report/Block, and
-nothing else — no lists, vouches, events, or orbit. Public profiles
-show everything except the orbit button until you follow.
+`pullIn` needs a follower document at `users/{them}/followers/{you}`
+(client and rules). A private profile you don't follow is "locked"
+(`isProfileLocked`): counts, Follow, Message/Report/Block, and nothing
+else — no lists, vouches, events, or orbit. The followers half of that
+is a real wall now, enforced by the read rule on the subcollection;
+`following` and `vouchedBy` are still arrays on a readable document, so
+those two remain app-level. Public profiles show everything except the
+orbit button until you follow.
 
 ### Bio and interests
 

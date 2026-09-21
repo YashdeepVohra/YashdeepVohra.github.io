@@ -343,57 +343,89 @@ ok('profile has no horizontal scroll', prof.noScroll);
 /* ------------------------------------------------------------------ */
 group('private accounts and following');
 
-// A small model of the users rules that matter here, so the client is
-// tested against refusals and not just against a database that says yes.
+// A small model of the rules that matter here, so the client is tested
+// against refusals and not just a database that says yes.
+//
+// The follow graph is DOCUMENTS now — users/{uid}/followers/{uid} and
+// users/{uid}/followRequests/{uid} — so this models the rules on those
+// rather than the array branches that used to live on the profile.
 await page.evaluate(() => {
-  window.__rules = (path, patch) => {
-    const m = /^users\/(.+)$/.exec(path);
-    if (!m || !patch) return null;
-    const target = m[1];
-    const doc = window.__stubDocs[path] || {};
+  window.__lastAskAt = 0;
+  window.__rules = (path, data, kind) => {
     const me = window.__authSingleton.currentUser?.uid;
     const deny = { code: 'permission-denied' };
-    const f = patch.followers, r = patch.followRequests;
-    if (target !== me && f && f.__op === 'union' && doc.private === true) return deny;
-    if (target !== me && r && r.__op === 'union') {
-      if (doc.private !== true) return deny;
-      if ((doc.followers || []).includes(me)) return deny;
-      const last = (window.__updates || []).filter((u) => u.patch?.followRequests?.__op === 'union').pop();
-      if (last && Date.now() - last.at < 3000) return deny;
+    const docs = window.__stubDocs;
+    const profile = (u) => docs['users/' + u] || {};
+
+    let m = /^users\/([^/]+)\/followers\/([^/]+)$/.exec(path);
+    if (m) {
+      const target = m[1], who = m[2];
+      // Leaving always works, block or no block.
+      if (kind === 'delete') return null;
+      // Following yourself in: only your own row, only a public account.
+      if (who === me) return profile(target).private === true ? deny : null;
+      // Or the owner approving — and only somebody who really asked.
+      if (target === me && docs['users/' + target + '/followRequests/' + who]) return null;
+      return deny;
+    }
+
+    m = /^users\/([^/]+)\/followRequests\/([^/]+)$/.exec(path);
+    if (m) {
+      const target = m[1], who = m[2];
+      if (kind === 'delete') return null;                  // withdraw, or answer
+      if (who !== me) return deny;
+      if (profile(target).private !== true) return deny;   // nobody asks a public account
+      if (docs['users/' + target + '/followers/' + who]) return deny;
+      if (Date.now() - window.__lastAskAt < 3000) return deny;
+      window.__lastAskAt = Date.now();
+      return null;
+    }
+
+    // The count on the profile may only be moved by the person named in
+    // followerEdge, or by the owner.
+    m = /^users\/([^/]+)$/.exec(path);
+    if (m && data && ('followerCount' in data)) {
+      return (data.followerEdge === me || m[1] === me) ? null : deny;
     }
     return null;
   };
 });
 
 const priv = await page.evaluate(async () => {
-  const { state, follow, prof } = window.__m;
+  const { state, follow } = window.__m;
   const users = await import('/js/services/userService.js');
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const docs = window.__stubDocs;
-  const person = (u, extra = {}) => Object.assign({ uid: u, username: u, displayName: u.toUpperCase(), avatar: '\u{1F98A}',
-    banned: false, followers: [], following: [], followRequests: [] }, extra);
+  const person = (u, extra = {}) => Object.assign({ uid: u, username: u, displayName: u.toUpperCase(),
+    avatar: '\u{1F98A}', banned: false, following: [], followerCount: 0 }, extra);
+
+  Object.keys(docs).forEach((k) => { if (k.indexOf('users/') === 0) delete docs[k]; });
+  try { window.localStorage.removeItem('livesociya.asks.me'); } catch (e) {}
   docs['users/me'] = person('me');
   docs['users/p1'] = person('p1', { private: true });
   docs['users/p2'] = person('p2', { private: true });
   docs['users/pub'] = person('pub');
   state.following = []; state.followRequests = [];
-  window.__updates = [];
+  window.__updates = []; window.__lastAskAt = 0;
   const out = {};
+  const asked = (target) => !!docs['users/' + target + '/followRequests/me'];
+  const follows = (target) => !!docs['users/' + target + '/followers/me'];
 
   // 1. A stale copy says "open"; the account went private since.
   state.userCache.p1 = { uid: 'p1', username: 'p1', displayName: 'P1', avatar: '', private: false };
   await follow.toggleFollow('p1');
-  out.wentPrivateBecameAsk = docs['users/p1'].followRequests.includes('me')
-    && !docs['users/p1'].followers.includes('me') && !state.following.includes('p1');
+  out.wentPrivateBecameAsk = asked('p1') && !follows('p1') && !state.following.includes('p1');
 
   // 2. Straight away, ask a second private account. Both must stand.
   const t0 = Date.now();
   await follow.toggleFollow('p2');
-  out.secondAsk = docs['users/p2'].followRequests.includes('me');
-  out.firstStillThere = docs['users/p1'].followRequests.includes('me');
+  out.secondAsk = asked('p2');
+  out.firstStillThere = asked('p1');
   out.waitedItsTurn = Date.now() - t0 >= 2500;
 
-  // 3. Reload: cache comes back from localStorage only.
+  // 3. Reload: the profile cache comes back from localStorage only, and
+  //    a private account's request queue is not readable from it at all
+  //    any more — the record this device keeps is what answers.
   users.rememberUser('p1', docs['users/p1']);
   state.userCache = { me: state.userCache.me };
   users.hydrateProfileCache();
@@ -403,25 +435,30 @@ const priv = await page.evaluate(async () => {
   const p = follow.toggleFollow('p1'); await wait(150);
   out.withdrawAsks = !document.getElementById('confirmSheet').classList.contains('hidden');
   window.confirmNo(); await p;
-  out.noKeepsRequest = docs['users/p1'].followRequests.includes('me');
+  out.noKeepsRequest = asked('p1');
 
-  // 5. p2 approves me. My app notices the next time it reads p2.
-  docs['users/p2'].followRequests = []; docs['users/p2'].followers = ['me'];
-  await users.fetchUser('p2', { force: true }); await wait(50);
+  // 5. p2 approves me. My app notices when it next settles up with p2.
+  delete docs['users/p2/followRequests/me'];
+  docs['users/p2/followers/me'] = { at: Date.now() };
+  await follow.syncFollowState('p2'); await wait(50);
   out.approvalHealed = state.following.includes('p2') && docs['users/me'].following.includes('p2');
 
   // 6. Unfollowing a private account asks first.
   const q = follow.toggleFollow('p2'); await wait(150);
   out.unfollowPrivateAsks = !document.getElementById('confirmSheet').classList.contains('hidden');
   window.confirmYes(); await q;
-  out.unfollowed = !state.following.includes('p2') && !docs['users/p2'].followers.includes('me');
+  out.unfollowed = !state.following.includes('p2') && !follows('p2');
 
-  // 7. A public account: one tap, one atomic batch, a double tap is ignored.
+  // 7. A public account: one tap, one atomic batch, a double tap ignored.
   window.__batches = [];
   const a1 = follow.toggleFollow('pub'); const a2 = follow.toggleFollow('pub');
   await a1; await a2;
-  out.publicFollow = state.following.includes('pub') && docs['users/pub'].followers.includes('me');
+  out.publicFollow = state.following.includes('pub') && follows('pub');
   out.oneBatch = window.__batches.filter((b) => b.join().includes('users/pub')).length === 1;
+  // The count moves with the document, and in the same batch.
+  out.countMoved = docs['users/pub'].followerCount === 1;
+  out.countRodeAlong = window.__batches.some((b) =>
+    b.join().includes('users/pub/followers/me') && b.join().includes('set users/pub'));
 
   // 8. Private lists are locked to non-followers.
   state.currentProfileUid = 'p1';
@@ -439,14 +476,55 @@ ok('withdrawing asks first, and No keeps the request', priv.withdrawAsks && priv
 ok('an approved request turns into following on your side', priv.approvalHealed);
 ok('unfollowing a private account asks first', priv.unfollowPrivateAsks && priv.unfollowed);
 ok('following a public account is one batch, and a double tap is one write', priv.publicFollow && priv.oneBatch);
+ok('a follow writes a document, not a row in an array', priv.countRodeAlong, JSON.stringify(priv.countRodeAlong));
+ok('and the count moves in that same batch', priv.countMoved);
 ok('a private account\'s followers are locked to non-followers', priv.listLocked);
+
+// The point of the whole shape: a follower list with no ceiling. The
+// array it replaced was capped at 5000 by the rules, because that is
+// roughly where an array of uids starts threatening the 1 MiB a
+// document gets.
+const noCeiling = await page.evaluate(async () => {
+  const { state, follow } = window.__m;
+  const docs = window.__stubDocs;
+  docs['users/big'] = { uid: 'big', username: 'big', displayName: 'Big', avatar: '\u{1F98A}',
+    banned: false, following: [], followerCount: 7400 };
+  state.userCache.big = { uid: 'big', username: 'big', displayName: 'Big', avatar: '', private: false, followerCount: 7400 };
+  state.following = state.following.filter((u) => u !== 'big');
+
+  await follow.toggleFollow('big');
+  return {
+    followed: state.following.includes('big') && !!docs['users/big/followers/me'],
+    counted: docs['users/big'].followerCount === 7401
+  };
+});
+ok('somebody well past the old 5000 cap can still be followed', noCeiling.followed);
+ok('and their count keeps going up', noCeiling.counted, JSON.stringify(noCeiling));
+
+// A count is only allowed to move with the document it counts, so it
+// cannot be typed up on its own.
+const forge = await page.evaluate(async () => {
+  const docs = window.__stubDocs;
+  const fb = await import('/js/config/firebase.js');
+  docs['users/pub'].followerCount = 1;
+  let refused = false;
+  try {
+    await fb.db.collection('users').doc('pub').update({ followerCount: 999, followerEdge: 'someone_else' });
+  } catch (e) { refused = e.code === 'permission-denied'; }
+  return { refused, still: docs['users/pub'].followerCount };
+});
+ok('a follower count cannot be written for somebody else', forge.refused && forge.still === 1,
+   JSON.stringify(forge));
 
 const owner = await page.evaluate(async () => {
   const { state, follow } = window.__m;
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const docs = window.__stubDocs;
-  docs['users/me'] = { uid: 'me', banned: false, private: true, followRequests: ['a', 'b'], following: [] };
-  state.userCache.me = Object.assign(state.userCache.me || {}, { followers: [] });
+  Object.keys(docs).forEach((k) => { if (k.indexOf('users/me') === 0) delete docs[k]; });
+  docs['users/me'] = { uid: 'me', banned: false, private: true, following: [], followerCount: 0 };
+  docs['users/me/followRequests/a'] = { at: Date.now() };
+  docs['users/me/followRequests/b'] = { at: Date.now() };
+  state.userCache.me = Object.assign(state.userCache.me || {}, { followerCount: 0 });
   state.isPrivate = true; state.privacyChosen = true; state.followRequests = ['a', 'b'];
   const out = {};
 
@@ -455,18 +533,21 @@ const owner = await page.evaluate(async () => {
   out.asked = !document.getElementById('confirmSheet').classList.contains('hidden');
   window.confirmYes(); await p;
   out.letIn = docs['users/me'].private === false
-    && (docs['users/me'].followers || []).join() === 'a,b'
-    && docs['users/me'].followRequests.length === 0;
+    && !!docs['users/me/followers/a'] && !!docs['users/me/followers/b']
+    && !docs['users/me/followRequests/a'] && !docs['users/me/followRequests/b'];
+  out.counted = docs['users/me'].followerCount === 2;
 
   // Removing a follower.
-  state.userCache.me.followers = ['a', 'b'];
   const r = follow.removeFollower('a'); await wait(150);
   window.confirmYes(); await r;
-  out.removed = docs['users/me'].followers.join() === 'b';
+  out.removed = !docs['users/me/followers/a'] && !!docs['users/me/followers/b'];
+  out.countDropped = docs['users/me'].followerCount === 1;
   return out;
 });
 ok('going public asks, then lets everyone waiting in', owner.asked && owner.letIn, JSON.stringify(owner));
+ok('approving moves the count with it', owner.counted, JSON.stringify(owner));
 ok('you can remove a follower', owner.removed);
+ok('and removing one takes the count back down', owner.countDropped, JSON.stringify(owner));
 
 const onboarding = await page.evaluate(async () => {
   const auth = await import('/js/services/authService.js');
@@ -496,10 +577,15 @@ const gate = await page.evaluate(async () => {
   const { state, follow, prof, orbit, search } = window.__m;
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const docs = window.__stubDocs;
+  // followerCount is the stored number; the followers themselves are
+  // documents under the profile, which is what the two rows below seed.
   const person = (u, extra = {}) => Object.assign({ uid: u, username: u, displayName: u.toUpperCase(), avatar: '\u{1F98A}',
-    banned: false, followers: [], following: [], followRequests: [], vouchedBy: [] }, extra);
-  docs['users/lock'] = person('lock', { private: true, followers: ['x', 'y'], following: ['z'], vouchedBy: ['x'] });
-  docs['users/open'] = person('open', { followers: ['x'] });
+    banned: false, following: [], followerCount: 0, vouchedBy: [] }, extra);
+  docs['users/lock'] = person('lock', { private: true, followerCount: 2, following: ['z'], vouchedBy: ['x'] });
+  docs['users/lock/followers/x'] = { at: Date.now() };
+  docs['users/lock/followers/y'] = { at: Date.now() };
+  docs['users/open'] = person('open', { followerCount: 1 });
+  docs['users/open/followers/x'] = { at: Date.now() };
   state.following = []; state.orbitUids = []; state.orbitOutgoing = []; state.orbitIncoming = [];
   window.__events = [Object.assign({}, { id: 'le1', hostUid: 'lock', title: 'Secret', place: 'Lawn', tag: '',
     startTime: Date.now() - 6e5, expiresAt: Date.now() + 6e5, participantUids: ['lock'], hypedUids: [] })];

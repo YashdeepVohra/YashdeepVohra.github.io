@@ -23,7 +23,8 @@ import {
 } from './orbitService.js';
 import {
   isFollowing, followerCount, followingCount,
-  isPrivateAccount, hasAskedToFollow, myFollowRequests, syncPrivacyUI, severFollow
+  isPrivateAccount, hasAskedToFollow, myFollowRequests, syncPrivacyUI, severFollow,
+  syncFollowState
 } from './followService.js';
 import { isBlocked, withoutBlocked, blockUser, unblockUser, submitReport, myBlockList } from './blockService.js';
 
@@ -89,6 +90,16 @@ export function openProfileScreen(targetUid = null) {
   document.querySelector(".topbar")?.classList.remove("hidden");
   history.pushState({ screen: "profile" }, "", window.location.href);
   loadProfileUI(uid);
+
+  // Where you really stand with them, from the server.
+  //
+  // This used to be free: `followers` and `followRequests` were arrays
+  // on the profile document, so the read that drew this screen also
+  // answered "do I follow them" and "have I asked". Both are documents
+  // of their own now, so it is a deliberate call — made here, where a
+  // read is being spent anyway, rather than on every cached glance at
+  // a name in the feed. It repaints the button if the answer differs.
+  if (uid !== state.uid) syncFollowState(uid);
 }
 
 /**
