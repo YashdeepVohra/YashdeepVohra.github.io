@@ -151,6 +151,36 @@ export function loadMyFollowRequests(onChange) {
     );
 }
 
+/**
+ * Do the two of you follow each other?
+ *
+ * Half of it is free — your own `following` list is on your own
+ * document. The other half is one read of users/{me}/followers/{them},
+ * because your followers are a subcollection and listening to all of
+ * them on a popular account would cost a read per follower on every
+ * launch. So this is asked at the moments it decides something, and
+ * the answer is cached for the session.
+ */
+const mutualCache = new Map();
+
+export async function isMutualFollow(uid) {
+  if (!uid || uid === state.uid || !state.following.includes(uid)) return false;
+  if (mutualCache.has(uid)) return mutualCache.get(uid);
+  try {
+    const doc = await followerRef(state.uid, uid).get();
+    mutualCache.set(uid, doc.exists);
+    return doc.exists;
+  } catch (e) {
+    return false;
+  }
+}
+
+/** Forget what we knew — a block, an unfollow, or signing out. */
+export function forgetMutual(uid) {
+  if (uid) mutualCache.delete(uid);
+  else mutualCache.clear();
+}
+
 /** Am I following them? Read from my own list, never the network. */
 export function isFollowing(uid) {
   return !!uid && state.following.includes(uid);
@@ -385,6 +415,49 @@ export async function syncFollowState(uid) {
   }
 }
 
+/**
+ * Watch where you stand with ONE person, for as long as their profile
+ * is open.
+ *
+ * syncFollowState() answers the question once, when the screen opens.
+ * That left the other half of it stale: they approve you while you are
+ * sitting on their profile, and the button goes on saying "Requested"
+ * until you back out and come in again — because approving writes a
+ * document under THEIR profile, and nothing on your side was watching
+ * it. One document listener, only while that screen is up, torn down
+ * with it. It answers being removed as a follower too.
+ */
+export function watchFollowState(uid, onChange) {
+  unwatchFollowState();
+  if (!state.uid || !safeId(uid) || uid === state.uid) return;
+
+  state.profileFollowUnsubscribe = followerRef(uid, state.uid).onSnapshot(
+    (doc) => {
+      const inTheirs = doc.exists;
+      if (inTheirs) rememberAsk(uid, false);
+
+      // Only act on a real change, and never while a tap of our own is
+      // still in flight — that would fight the optimistic paint.
+      if (busy.has(uid) || healing.has(uid)) return;
+      if (inTheirs === state.following.includes(uid)) return;
+      if (isBlocked(uid)) return;
+
+      setFollowingLocal(uid, inTheirs);
+      db.collection("users").doc(state.uid)
+        .update({ following: inTheirs ? FieldValue.arrayUnion(uid) : FieldValue.arrayRemove(uid) })
+        .catch((e) => console.warn("Follow repair failed:", e.code || e.message));
+      refreshSocialUI();
+      if (typeof onChange === "function") onChange();
+    },
+    (error) => console.error("Follow state listener:", error.code || error.message)
+  );
+}
+
+export function unwatchFollowState() {
+  if (state.profileFollowUnsubscribe) state.profileFollowUnsubscribe();
+  state.profileFollowUnsubscribe = null;
+}
+
 /** Once per launch: find out what happened to the asks still out. */
 let asksResolvedFor = "";
 export async function resolvePendingAsks() {
@@ -538,6 +611,7 @@ async function unfollow(uid, onDone) {
 
   setFollowingLocal(uid, false);
   nudgeFollowers(uid, -1);
+  forgetMutual(uid);
   paint(onDone);
 
   try {
@@ -1018,6 +1092,7 @@ export async function severFollow(targetUid) {
   if (!uid || uid === state.uid) return;
   const mine = db.collection("users").doc(state.uid);
   const quietly = (p) => p.catch(() => {});
+  forgetMutual(uid);
 
   // What actually exists between us. Two reads rather than a profile
   // fetch, because the edges are documents now and the arrays that used

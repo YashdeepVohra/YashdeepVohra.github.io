@@ -1873,7 +1873,20 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   padding: var(--s-20) var(--s-16) var(--s-64);
 }
 .time-stack > div { min-width: 0; }
-.onboarding-screen { align-items: center; justify-content: center; text-align: center; padding: var(--s-24); }
+.onboarding-screen {
+  align-items: center;
+  text-align: center;
+  padding: var(--s-24);
+  /* `.full-screen-view` sets `overflow: hidden`, and this layer has no
+     inner scroller of its own — so on a short window (a landscape
+     phone, a half-height laptop) the account-type cards and the Join
+     button sat below the fold with nothing to reach them.
+     `safe center` rather than plain `center`: a centred flex column
+     that overflows pushes its content off BOTH ends, and the top one
+     cannot be scrolled back to. */
+  overflow-y: auto;
+  justify-content: safe center;
+}
 .onboarding-screen input { text-align: left; }
 .settings-label {
   display: block; margin: var(--s-20) 0 var(--s-8);
@@ -1992,7 +2005,24 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   .rail-tags .filter-pill { font-size: 13px; padding: 7px 13px; }
 
   .profile-screen-wrapper { position: relative; inset: auto; z-index: 1; min-height: 100dvh; border-right: 1px solid var(--ash); }
-  .profile-scroll-body { padding: var(--s-32) var(--s-24); max-width: var(--feed-max); }
+
+  /* A DEAD SCROLL CONTAINER IS WORSE THAN NO SCROLLER AT ALL.
+     On a phone this box is the scroller, because the profile is a
+     fixed full-screen layer. Here the wrapper joins the grid with
+     `min-height: 100dvh`, so the box grows to its own content:
+     scrollHeight === clientHeight, 1086px of profile inside an 860px
+     window, still an `overflow-y: auto` container and still carrying
+     `overscroll-behavior: contain` from the base sheet. It could never
+     move a pixel while telling the browser not to pass the wheel on —
+     so a wheel with the cursor over the profile did nothing at all,
+     and the bottom of the page was unreachable.
+     The page scrolls the column here, exactly as it does the feed. */
+  .profile-scroll-body {
+    padding: var(--s-32) var(--s-24);
+    max-width: var(--feed-max);
+    overflow: visible;
+    overscroll-behavior: auto;
+  }
   .profile-screen-wrapper .back-btn { display: none; }
 
   /* A conversation is a screen like any other: it takes the main column

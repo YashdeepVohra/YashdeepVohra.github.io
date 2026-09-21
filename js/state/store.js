@@ -56,6 +56,10 @@ export const state = {
   // message, for data a live listener was already holding. It only
   // needs the network when this is still false.
   currentChatLoaded: false,
+  // Do the two of you follow each other? The icebreaker is for
+  // strangers, and people who have both chosen each other are not
+  // strangers — so it does not apply to them.
+  currentChatMutual: false,
   currentChatInitiatorUid: "",
   currentChatData: null,
   currentOtherUid: "",
@@ -106,6 +110,10 @@ export const state = {
   // document into users/{uid}/followRequests, so it needs a listener of
   // its own rather than riding along with myProfileUnsubscribe.
   followRequestsUnsubscribe: null,
+  // Watches users/{openProfile}/followers/{me} while a profile is open,
+  // so being approved (or removed) flips the button where you are
+  // standing rather than on the next time you open that profile.
+  profileFollowUnsubscribe: null,
   eventsUnsubscribe: null,
   profileEventsUnsubscribe: null,
   typingTimer: null,
@@ -126,6 +134,7 @@ export function resetState() {
     state.orbitUnsubscribe,
     state.myProfileUnsubscribe,
     state.followRequestsUnsubscribe,
+    state.profileFollowUnsubscribe,
     state.eventsUnsubscribe,
     state.profileEventsUnsubscribe
   ].forEach((unsub) => { if (typeof unsub === "function") unsub(); });
@@ -156,6 +165,7 @@ export function resetState() {
   state.currentChat = null;
   state.currentChatData = null;
   state.currentChatLoaded = false;
+  state.currentChatMutual = false;
   state.currentOtherUid = "";
   state.currentProfileUid = "";
   state.replyingToMessage = null;
@@ -173,6 +183,7 @@ export function resetState() {
   state.orbitUnsubscribe = null;
   state.myProfileUnsubscribe = null;
   state.followRequestsUnsubscribe = null;
+  state.profileFollowUnsubscribe = null;
   state.eventsUnsubscribe = null;
   state.profileEventsUnsubscribe = null;
 }

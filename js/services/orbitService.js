@@ -331,6 +331,17 @@ export async function toggleVouch(targetUid) {
    The Orbit screen
    ------------------------------------------------------------------- */
 
+/**
+ * The Orbit screen carries "Want to follow you", which is read out of
+ * state.followRequests — but it only ever repainted when the ORBIT
+ * listener fired. So a follow request arriving, or one being answered,
+ * left the screen showing the old list while it was open. It is a
+ * social repaint like any other now; see onSocialChange in app.js.
+ */
+export function refreshOrbitScreen() {
+  if (isOrbitOpen()) renderOrbit();
+}
+
 function isOrbitOpen() {
   const el = document.getElementById("orbitScreen");
   return !!el && !el.classList.contains("hidden");

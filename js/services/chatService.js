@@ -30,6 +30,7 @@ import { eventIdFromUrl } from './shareRules.js';
 import { primeEvent } from './shareService.js';
 import { openProfileScreen } from './profileService.js';
 import { isBlocked } from './blockService.js';
+import { isMutualFollow } from './followService.js';
 import { vibeColor } from './eventsService.js';
 import { inRecap } from './recapRules.js';
 import { searchPeople } from './searchService.js';
@@ -127,6 +128,7 @@ export function openChat(chatId, otherUid) {
   state.currentOtherUid = otherUid;
   state.currentChatType = "direct";
   state.currentChatLoaded = false;
+  state.currentChatMutual = false;
   // Back to a blank slate BEFORE the listener answers. Without this the
   // previous conversation's icebreaker state carried over: leave a
   // thread where you had used your one opening message, open another,
@@ -165,6 +167,15 @@ export function openChat(chatId, otherUid) {
   document.querySelector(".topbar")?.classList.add("hidden");
   switchScreen("chatScreen");
   history.pushState({ modalOpen: true }, "", window.location.href);
+
+  // The icebreaker is a wall between strangers. Two people who follow
+  // each other have both chosen this, so it does not apply — one read,
+  // and only the half that is not already in memory.
+  isMutualFollow(otherUid).then((yes) => {
+    if (state.currentOtherUid !== otherUid) return;
+    state.currentChatMutual = yes;
+    updateChatFooterUI();
+  });
 
   if (state.chatDocUnsubscribe) state.chatDocUnsubscribe();
   state.chatDocUnsubscribe = db.collection("chats").doc(chatId).onSnapshot((doc) => {
@@ -373,7 +384,11 @@ export async function sendMessage() {
     let usedIcebreaker = false;
 
     if (!chatExists) {
-      const crossed = await checkCrossedPaths(state.uid, otherUid);
+      // Following each other is the cheaper question (one read against
+      // a query), and it answers the same thing, so it goes first.
+      const mutual = state.currentChatMutual || await isMutualFollow(otherUid);
+      state.currentChatMutual = mutual;
+      const crossed = mutual || await checkCrossedPaths(state.uid, otherUid);
       status = crossed ? "unlocked" : "icebreaker";
       initiatedByUid = state.uid;
       await chatRef.set({
@@ -388,7 +403,12 @@ export async function sendMessage() {
       });
       usedIcebreaker = status === "icebreaker";
     } else {
-      if (status === "icebreaker" && initiatedByUid === otherUid) status = "unlocked";
+      // Their opening message unlocks it, and so does the two of you
+      // having followed each other since — the thread stops being
+      // between strangers the moment that is true.
+      if (status === "icebreaker" && (initiatedByUid === otherUid || state.currentChatMutual)) {
+        status = "unlocked";
+      }
       usedIcebreaker = status === "icebreaker"
         && chatData.initiatedByUid === state.uid
         && chatData.icebreakerUsed !== true;
@@ -1132,6 +1152,10 @@ export function updateChatFooterUI() {
     state.currentChatType === "direct" &&
     state.currentChatStatus === "icebreaker" &&
     state.currentChatInitiatorUid === state.uid &&
+    // Mutual followers are not strangers, so the one-message wall is
+    // not for them — including on a thread that started before either
+    // of you followed the other.
+    !state.currentChatMutual &&
     state.myMessageCount >= 1;
 
   icebreakerMsg.classList.toggle("hidden", !lockedOut);

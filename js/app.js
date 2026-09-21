@@ -102,6 +102,7 @@ import {
 
 import {
   updateOrbitBadge,
+  refreshOrbitScreen,
   openOrbitScreen,
   closeOrbitScreen,
   pullIn,
@@ -329,6 +330,7 @@ function boot() {
   // that already imports all of them.
   onSocialChange(renderEvents);
   onSocialChange(updateOrbitBadge);
+  onSocialChange(refreshOrbitScreen);
   onSocialChange(refreshSearchResults);
   onSocialChange(() => refreshProfileSocial(state.currentProfileUid));
 

@@ -24,7 +24,7 @@ import {
 import {
   isFollowing, followerCount, followingCount,
   isPrivateAccount, hasAskedToFollow, myFollowRequests, syncPrivacyUI, severFollow,
-  syncFollowState
+  syncFollowState, watchFollowState, unwatchFollowState
 } from './followService.js';
 import { isBlocked, withoutBlocked, blockUser, unblockUser, submitReport, myBlockList } from './blockService.js';
 
@@ -90,16 +90,6 @@ export function openProfileScreen(targetUid = null) {
   document.querySelector(".topbar")?.classList.remove("hidden");
   history.pushState({ screen: "profile" }, "", window.location.href);
   loadProfileUI(uid);
-
-  // Where you really stand with them, from the server.
-  //
-  // This used to be free: `followers` and `followRequests` were arrays
-  // on the profile document, so the read that drew this screen also
-  // answered "do I follow them" and "have I asked". Both are documents
-  // of their own now, so it is a deliberate call — made here, where a
-  // read is being spent anyway, rather than on every cached glance at
-  // a name in the feed. It repaints the button if the answer differs.
-  if (uid !== state.uid) syncFollowState(uid);
 }
 
 /**
@@ -119,6 +109,7 @@ export function closeProfileScreen({ all = false } = {}) {
     state.profileEventsUnsubscribe();
     state.profileEventsUnsubscribe = null;
   }
+  unwatchFollowState();
   state.currentProfileUid = "";
   switchScreen("home");
 }
@@ -280,6 +271,19 @@ function paintProfileEvents() {
   const list = document.getElementById("myProfileEvents");
   if (!list) return;
   paintProfileTabs();
+
+  /* A locked profile has no rows, ever — not hidden ones.
+     The lock used to be applied by applyProfileLock() hiding the
+     section AFTER this had painted, which made it an accident of
+     ordering: whether the profile document had arrived (and so whether
+     isPrivateAccount() knew the answer) before or after the event
+     query came back. It is asked here, at the moment of painting, so
+     the answer cannot arrive too late. */
+  if (isProfileLocked(profileEvents.uid)) {
+    list.innerHTML = "";
+    return;
+  }
+
   if (!profileEvents.loaded) return;
 
   const now = Date.now();
@@ -351,9 +355,23 @@ export async function loadUserEvents(targetUid) {
   Object.assign(profileEvents, {
     uid: targetUid,
     tab: fresh ? "hosted" : profileEvents.tab,
-    hosted: [], joined: [], joinedLocked, loaded: false,
+    hosted: [], joined: [], joinedLocked, loaded: false, lockedOut: false,
   });
   paintProfileTabs();
+
+  /* A LOCKED PROFILE FETCHES NOTHING.
+     The hosted list used to be queried and painted for everybody, and
+     a locked profile relied on applyProfileLock() hiding the section
+     afterwards. That is two reads spent on rows nobody may see, and it
+     only looked right because of the order the two happened to run in
+     — move the lock check a few lines earlier and the rows painted
+     after it and stayed. Hidden is not the same as absent. */
+  if (isProfileLocked(targetUid)) {
+    Object.assign(profileEvents, { loaded: true, lockedOut: true });
+    list.innerHTML = "";
+    paintProfileTabs();
+    return;
+  }
   list.innerHTML = `<div class="pe-skeleton"></div><div class="pe-skeleton"></div>`;
 
   const toEvents = (snap) => {
@@ -423,6 +441,31 @@ async function primeHosts(events) {
 
 export async function loadProfileUI(targetUid) {
   if (!safeId(targetUid)) return;
+
+  /* Where you really stand with this person, from the server, and then
+     kept current for as long as the screen is up.
+
+     Both used to be free: `followers` and `followRequests` were arrays
+     on the profile document, so the one read that drew this screen also
+     answered "do I follow them" and "have I asked". They are documents
+     of their own now, so it is a deliberate call — made here, where a
+     read is being spent anyway, rather than on every cached glance at a
+     name in the feed.
+
+     The listener is the half that was missing: they approve you while
+     you are sitting on their profile, and without it the button went on
+     saying "Requested" until you backed out and came in again.
+
+     This lives in loadProfileUI rather than openProfileScreen because
+     backing up the profile trail comes through here and not through
+     there — otherwise the watcher stayed pointed at the profile you
+     had just left. */
+  if (targetUid !== state.uid) {
+    syncFollowState(targetUid);
+    watchFollowState(targetUid, () => refreshProfileSocial(targetUid));
+  } else {
+    unwatchFollowState();
+  }
 
   const avatarEl = document.getElementById("profileAvatarDisplay");
   const nameDisplay = document.getElementById("profileDisplayNameDisplay");
@@ -689,6 +732,21 @@ export function refreshProfileSocial(targetUid) {
   renderOrbitActions(targetUid, targetUid === state.uid);
 
   applyProfileLock(targetUid);
+
+  /* Being let in opens the rest IN PLACE, which is the whole point of
+     this function — but there are two ways there is nothing on screen
+     to reveal, and they need different answers.
+
+     Either the load was skipped because the profile was already known
+     to be locked, and the rows have to be fetched; or the load ran
+     before the profile document arrived — `isPrivateAccount` cannot
+     answer until it does — and painted into a list that the lock then
+     blanked. In the second case the rows are already in hand and only
+     the paint was lost. */
+  if (profileEvents.uid === targetUid && !isProfileLocked(targetUid)) {
+    if (profileEvents.lockedOut) loadUserEvents(targetUid);
+    else paintProfileEvents();
+  }
 }
 
 /**

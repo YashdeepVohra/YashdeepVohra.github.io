@@ -606,8 +606,14 @@ const gate = await page.evaluate(async () => {
   };
 
   // Let in: the rest opens where you are.
+  // Both halves of the edge, because that is what following writes now
+  // — your own list AND a document under them. The profile watches the
+  // second one while it is open and will repair your list to match it,
+  // so a fixture that sets only `following` is a fixture that unfollows
+  // itself a moment later.
   state.following = ['lock'];
-  prof.refreshProfileSocial('lock'); await wait(300);
+  docs['users/lock/followers/me'] = { at: Date.now() };
+  prof.refreshProfileSocial('lock'); await wait(400);
   out.unlocked = { panel: shown('#profileLocked'), events: shown('.pe-section'), vouches: shown('#statVouchesBox'),
     rows: document.querySelectorAll('#myProfileEvents .pe-row').length,
     orbitBtn: [...document.querySelectorAll('#profileOrbit .orbit-btn')].some((b) => /orbit/i.test(b.innerText)) };
@@ -615,6 +621,7 @@ const gate = await page.evaluate(async () => {
 
   // A public account you don't follow: everything visible, no orbit yet.
   state.following = [];
+  delete docs['users/lock/followers/me'];
   prof.openProfileScreen('open'); await wait(400);
   out.publicView = { panel: shown('#profileLocked'), events: shown('.pe-section'),
     orbitBtn: [...document.querySelectorAll('#profileOrbit .orbit-btn')].some((b) => /orbit/i.test(b.innerText)),
@@ -886,6 +893,102 @@ group('editing and taking back a message');
 }
 
 /* ------------------------------------------------------------------ */
+group('screens that are already open');
+{
+  const live = await page.evaluate(async () => {
+    const { state, follow, orbit, prof } = window.__m;
+    const ui = await import('/js/utils/ui.js');
+    const chat = await import('/js/services/chatService.js');
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const docs = window.__stubDocs;
+    const out = {};
+
+    // ---- The Orbit screen carries "Want to follow you" -------------
+    state.followRequests = [];
+    state.userCache.w1 = { uid: 'w1', username: 'w1', displayName: 'W One', avatar: '' };
+    orbit.openOrbitScreen();
+    await wait(150);
+    out.startsEmpty = !/Want to follow you/.test(document.getElementById('orbitBody')?.innerHTML || '');
+
+    // Somebody asks while it is open. It used to repaint only when the
+    // ORBIT listener fired, so a follow request left it showing stale.
+    state.followRequests = ['w1'];
+    ui.refreshSocialUI();
+    await wait(80);
+    out.showsTheAsk = /Want to follow you/.test(document.getElementById('orbitBody')?.innerHTML || '');
+
+    // And answering it takes the row away again.
+    state.followRequests = [];
+    ui.refreshSocialUI();
+    await wait(80);
+    out.clearsAgain = !/Want to follow you/.test(document.getElementById('orbitBody')?.innerHTML || '');
+    orbit.closeOrbitScreen();
+    await wait(150);
+
+    // ---- Being approved while you sit on their profile -------------
+    docs['users/appr'] = { uid: 'appr', username: 'appr', displayName: 'Appr',
+      avatar: '\u{1F98A}', banned: false, private: true, following: [], followerCount: 0 };
+    delete docs['users/appr/followers/me'];
+    state.following = [];
+    state.userCache.appr = { uid: 'appr', username: 'appr', displayName: 'Appr', avatar: '', private: true };
+
+    prof.openProfileScreen('appr');
+    await wait(350);
+    out.notFollowingYet = !follow.isFollowing('appr');
+
+    // They approve: a document arrives under THEIR profile. Nothing on
+    // this side used to be watching it, so the button went on saying
+    // "Requested" until you backed out and came in again.
+    docs['users/appr/followers/me'] = { at: Date.now() };
+    window.__fireDoc('users/appr/followers/me');
+    await wait(250);
+    out.followsNow = follow.isFollowing('appr');
+
+    prof.closeProfileScreen({ all: true });
+    await wait(150);
+    return out;
+  });
+  ok('the orbit screen starts without a request on it', live.startsEmpty === true);
+  ok('a request arriving repaints it while it is open', live.showsTheAsk === true);
+  ok('and answering one takes the row off again', live.clearsAgain === true);
+  ok('a profile you are asking starts as not-following', live.notFollowingYet === true);
+  ok('being approved lands on the profile you are standing on', live.followsNow === true);
+
+  // ---- The icebreaker is for strangers ----------------------------
+  const ice = await page.evaluate(async () => {
+    const { state } = await import('/js/state/store.js');
+    const chat = await import('/js/services/chatService.js');
+    const wrapper = document.getElementById('inputWrapper');
+    const out = {};
+
+    state.currentChat = 'x_me';
+    state.currentChatType = 'direct';
+    state.currentOtherUid = 'x';
+    state.currentChatStatus = 'icebreaker';
+    state.currentChatInitiatorUid = 'me';
+    state.myMessageCount = 1;
+    window.switchScreen('chatScreen');
+
+    // A stranger: one message, then the box closes until they answer.
+    state.currentChatMutual = false;
+    chat.updateChatFooterUI();
+    out.strangerLocked = wrapper.classList.contains('hidden');
+
+    // Two people who follow each other are not strangers, and this
+    // holds on a thread that began before either of them followed.
+    state.currentChatMutual = true;
+    chat.updateChatFooterUI();
+    out.mutualOpen = !wrapper.classList.contains('hidden');
+
+    state.currentChatMutual = false;
+    chat.closeChat({ silent: true });
+    return out;
+  });
+  ok('a stranger still gets one message until they reply', ice.strangerLocked === true);
+  ok('but people who follow each other have no limit', ice.mutualOpen === true);
+}
+
+/* ------------------------------------------------------------------ */
 group('stamps');
 {
   const pure = await page.evaluate(async () => {
@@ -1100,6 +1203,7 @@ group('a thread that stays put');
     state.currentChatStatus = 'icebreaker';
     state.currentChatInitiatorUid = 'me';
     state.myMessageCount = 1;
+    state.currentChatMutual = false;   // strangers: the wall applies
     window.switchScreen('chatScreen');
     chat.updateChatFooterUI();
     out.lockedThere = wrapper.classList.contains('hidden');

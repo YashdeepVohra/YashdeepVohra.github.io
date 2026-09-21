@@ -83,7 +83,22 @@ const docRef = (path) => ({
     if (path) delete window.__stubDocs[path];
     return Promise.resolve();
   },
-  onSnapshot: (cb) => { setTimeout(() => cb({ exists: false, data: () => ({}) }), 0); return noop; },
+  /* A document listener reads the fixture, and can be fired again —
+     window.__fireDoc(path). It used to answer "does not exist" always,
+     which meant nothing that WATCHES a single document could be tested
+     at all: being approved while you sit on somebody's profile is one
+     document arriving under them, and that is the whole event. */
+  onSnapshot: (cb) => {
+    const fire = () => {
+      const fixture = window.__stubDocs[path];
+      cb({ exists: !!fixture, data: () => fixture || {} });
+    };
+    setTimeout(fire, 0);
+    (window.__docCbs[path] = window.__docCbs[path] || []).push(fire);
+    return () => {
+      window.__docCbs[path] = (window.__docCbs[path] || []).filter((f) => f !== fire);
+    };
+  },
   // A subcollection keeps its parent's path. It used to drop it, so
   // `users/me/private/receipt` arrived here as `/receipt` and a
   // fixture keyed on the real path could never be found — which is
@@ -95,6 +110,10 @@ const docRef = (path) => ({
 // SECOND snapshot — a new message arriving on a thread already open.
 // Load window.__docs with what the query should now return first.
 window.__collCbs = {};
+window.__docCbs = {};
+window.__fireDoc = (path) => {
+  (window.__docCbs[path] || []).slice().forEach((f) => f());
+};
 window.__fireColl = (base) => {
   (window.__collCbs[base] || []).slice().forEach((f) => f());
 };

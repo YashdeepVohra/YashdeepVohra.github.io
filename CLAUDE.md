@@ -93,6 +93,10 @@ Each line is the whole rule. The file after it is the argument for it.
 - How long Recap keeps an event is `recapRules.js`. Change the numbers
   there and in the smoke cases, nowhere else.
 - Blocking is total: filter `isBlocked` everywhere, lists and counts alike.
+- The icebreaker is for STRANGERS: people who follow each other have no
+  first-message limit, on a new thread or an old one.
+- A locked profile fetches nothing and paints nothing — `isProfileLocked`
+  is asked in the painter, not applied over the top afterwards.
 - An ended event is not live — check `expiresAt`, not `startTime`.
 - Follow first, orbit later; a private profile you don't follow shows
   counts and a way in, nothing else.
@@ -279,10 +283,10 @@ Handles inside a page: `window.__m` (the modules), `window.__events` +
 Note `window.showTab` is app.js's `goToTab`, which closes an open chat on
 its way; use `ui.showTab` when a test needs the chat to stay open.
 
-Two tests are currently RED and were red before the share work: the dead
-scroll container on the laptop profile, and the claim screen on a short
-window. `docs/layout.md` describes the fix for both; the CSS for neither
-is in the sheet.
+The suite is green. It was red on two for a long time — the dead scroll
+container on the laptop profile, and the claim screen on a short window
+— and `docs/layout.md` had described the fix for both the whole time.
+The CSS is in the sheet now.
 
 Every rule above came from something that broke. Add a case when
 something breaks again.
