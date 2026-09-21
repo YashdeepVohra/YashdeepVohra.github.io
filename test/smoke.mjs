@@ -886,6 +886,82 @@ group('editing and taking back a message');
 }
 
 /* ------------------------------------------------------------------ */
+group('stamps');
+{
+  const pure = await page.evaluate(async () => {
+    const f = await import('/js/utils/formatters.js');
+    const ms = 1700000000000;
+    const ts = { seconds: Math.floor(ms / 1000), nanoseconds: 0, toMillis: () => ms };
+    const raw = { seconds: Math.floor(ms / 1000), nanoseconds: 0 };   // no toMillis
+    return {
+      number: f.msOf(ms) === ms,
+      timestamp: f.msOf(ts) === ms,
+      rawShape: f.msOf(raw) === ms,
+      date: f.msOf(new Date(ms)) === ms,
+      nothing: f.msOf(null) === 0 && f.msOf(undefined) === 0,
+      formats: f.formatTime(ts) === f.formatTime(ms)
+    };
+  });
+  ok('a stamp reads the same whether it is a number or a Timestamp',
+     pure.number && pure.timestamp && pure.date, JSON.stringify(pure));
+  ok('including one that has not been through the SDK', pure.rawShape === true);
+  ok('and a missing stamp is zero, not a crash', pure.nothing === true);
+  ok('so the same moment formats the same either way', pure.formats === true);
+
+  // An event's start and end are chosen, not "now" — but the live feed
+  // is the sixty events with the furthest-away end date, so unbounded
+  // they were a way to own the feed permanently.
+  const publish = await page.evaluate(async () => {
+    const ev = await import('/js/services/eventsService.js');
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const DAY = 24 * 60 * 60 * 1000;
+    const iso = (ms) => {
+      const d = new Date(ms);
+      return new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    };
+    const attempt = async (start, end) => {
+      ev.openCreateScreen();
+      document.getElementById('title').value = 'Thing';
+      document.getElementById('place').value = 'Lawn';
+      document.getElementById('startTime').value = iso(start);
+      document.getElementById('endTime').value = iso(end);
+      window.__lastBatch = null;
+      await ev.addEvent();
+      await wait(80);
+      const ops = window.__lastBatch || [];
+      return ops.find((o) => String(o.path).indexOf('events/') === 0) || null;
+    };
+
+    const now = Date.now();
+    const out = {};
+
+    // The year 9999 — sixty of these were the whole feed, for everybody.
+    out.squat = !(await attempt(now + 60000, 253370764800000));
+    // Nine days is longer than the app has ever allowed.
+    out.tooLong = !(await attempt(now + 60000, now + 9 * DAY));
+    // Half a year ahead.
+    out.tooFar = !(await attempt(now + 180 * DAY, now + 180 * DAY + 3600000));
+
+    const good = await attempt(now + 60000, now + 2 * 3600000);
+    out.published = !!good;
+    out.ttlIsTimestamp = !!good && !!good.data.ttlAt && typeof good.data.ttlAt.toMillis === 'function';
+    out.ttlFollowsEnd = out.ttlIsTimestamp
+      && good.data.ttlAt.toMillis() === good.data.expiresAt + 72 * 60 * 60 * 1000;
+    out.createdOnServer = !!good && good.data.createdAt && good.data.createdAt.__op === 'now';
+    ev.closeCreateScreen();
+    await wait(120);
+    return out;
+  });
+  ok('an event dated the year 9999 is refused', publish.squat === true);
+  ok('so is one that runs longer than a week', publish.tooLong === true);
+  ok('and one starting half a year out', publish.tooFar === true);
+  ok('an ordinary event still publishes', publish.published === true, JSON.stringify(publish));
+  ok('and carries a real Timestamp for the sweep', publish.ttlIsTimestamp === true);
+  ok('set from when it ends, not from now', publish.ttlFollowsEnd === true);
+  ok('while createdAt is the server saying so', publish.createdOnServer === true);
+}
+
+/* ------------------------------------------------------------------ */
 group('a thread that stays put');
 {
   const thread = await page.evaluate(async () => {

@@ -408,7 +408,7 @@ async function sendAsk(uid) {
   const attempt = async () => {
     const batch = db.batch();
     stampAsk(batch);
-    batch.set(askRef(uid, state.uid), { at: Date.now() });
+    batch.set(askRef(uid, state.uid), { at: FieldValue.serverTimestamp() });
     await batch.commit();
   };
 
@@ -496,7 +496,7 @@ async function follow(uid, onDone) {
       // `followerEdge` is what lets the rule check the count moved with
       // a real document — see firestore.rules.
       const batch = db.batch();
-      batch.set(followerRef(uid, state.uid), { at: Date.now() });
+      batch.set(followerRef(uid, state.uid), { at: FieldValue.serverTimestamp() });
       batch.update(db.collection("users").doc(uid), {
         followerCount: FieldValue.increment(1),
         followerEdge: state.uid
@@ -628,7 +628,7 @@ export async function answerFollowRequest(requesterUid, accept, { quiet = false 
     if (accept) {
       const batch = db.batch();
       batch.delete(askRef(state.uid, uid));
-      batch.set(followerRef(state.uid, uid), { at: Date.now() });
+      batch.set(followerRef(state.uid, uid), { at: FieldValue.serverTimestamp() });
       batch.update(db.collection("users").doc(state.uid), {
         followerCount: FieldValue.increment(1),
         followerEdge: uid

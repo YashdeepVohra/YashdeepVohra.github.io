@@ -331,6 +331,46 @@ service cloud.firestore {
                && request.resource.data.followerCount == resource.data.get('followerCount', 0) - 1);
     }
 
+    /* -----------------------------------------------------------------
+       WHEN AN EVENT RUNS
+       -----------------------------------------------------------------
+       An event's start and end are CHOSEN — somebody picks them in a
+       date field — so unlike a message's `time` they are not "now" and
+       cannot be request.time. But nothing bounded them at all, and the
+       live feed is
+
+           where expiresAt > now, order by expiresAt DESC, limit 60
+
+       so the sixty events with the furthest-away end date ARE the feed,
+       for everybody. Sixty events dated the year 9999 would have been
+       the entire campus feed, permanently, and not one of them would
+       ever have moved to Recap. The app already refused a run longer
+       than a week — only the app did.
+       ----------------------------------------------------------------- */
+    function sensibleEventWindow(startTime, expiresAt) {
+      return startTime is number
+        && expiresAt is number
+        && expiresAt > startTime
+        && timestamp.value(expiresAt) <= timestamp.value(startTime) + duration.value(7, 'd')
+        && timestamp.value(startTime) < request.time + duration.value(90, 'd')
+        && timestamp.value(startTime) > request.time - duration.value(30, 'd');
+    }
+
+    /* A REAL Timestamp, so that Firestore's TTL can one day sweep
+       finished events away: a TTL policy can only be set on a Timestamp
+       field, and it cannot be added to documents that already exist
+       without rewriting every one of them. So it goes in now, while
+       there is nothing to rewrite.
+       Mirrors EVENT_TTL_AFTER_MS in js/services/recapRules.js — change
+       it in both or every publish is refused.
+       NOT SAFE TO ENABLE YET: TTL does not cascade any more than a
+       manual delete does, so it would leave every event's messages
+       behind, unreachable. */
+    function ttlFollowsExpiry() {
+      return request.resource.data.ttlAt
+        == timestamp.value(request.resource.data.expiresAt) + duration.value(72, 'h');
+    }
+
     function pairKey(a, b) {
       return a < b ? a + '_' + b : b + '_' + a;
     }
@@ -512,7 +552,10 @@ service cloud.firestore {
               || iFollow(userId));
 
         allow create: if request.resource.data.keys().hasOnly(['at'])
-          && request.resource.data.at is number
+          // The server's clock. The list is read newest-first, so a
+          // number the follower chose is a number that decides where
+          // they sit in it.
+          && request.resource.data.at == request.time
           && (
                // Following someone: your own row, a public account, and
                // not across a block.
@@ -546,7 +589,10 @@ service cloud.firestore {
 
         allow create: if isMe(askerUid)
           && request.resource.data.keys().hasOnly(['at'])
-          && request.resource.data.at is number
+          // Same: the queue is read newest-first and capped, so a
+          // forged stamp is a way to sit at the top of it — or to push
+          // somebody else off the end.
+          && request.resource.data.at == request.time
           // Asking only means anything while the account is private,
           // from someone who is not already in, and not across a block.
           && accountIsPrivate(userId)
@@ -607,6 +653,7 @@ service cloud.firestore {
         && handle.matches('^[a-z0-9_]{3,20}$')
         && request.resource.data.uid == uid()
         && request.resource.data.keys().hasOnly(['uid', 'createdAt'])
+        && request.resource.data.createdAt == request.time
         // One handle per account: you cannot reserve a second one.
         && haveNoHandleYet();
 
@@ -649,9 +696,9 @@ service cloud.firestore {
         && request.resource.data.description is string
         && request.resource.data.description.size() <= 500
         && request.resource.data.tag is string
-        && request.resource.data.startTime is number
-        && request.resource.data.expiresAt is number
-        && request.resource.data.expiresAt > request.resource.data.startTime
+        && sensibleEventWindow(request.resource.data.startTime, request.resource.data.expiresAt)
+        && ttlFollowsExpiry()
+        && request.resource.data.createdAt == request.time
         // A host cannot open with a pre-filled guest list or fake hype.
         && request.resource.data.participantUids == [uid()]
         && request.resource.data.hypedUids == []
@@ -685,7 +732,7 @@ service cloud.firestore {
           // through branch (b) and self-service through branch (c).
           && changedKeys().hasOnly([
                'title', 'place', 'description', 'tag',
-               'startTime', 'expiresAt', 'maxCapacity',
+               'startTime', 'expiresAt', 'ttlAt', 'maxCapacity',
                'requiresApproval', 'updatedAt',
                'unconfirmedUids', 'lastEditSummary'
              ])
@@ -707,9 +754,8 @@ service cloud.firestore {
           && isString(request.resource.data.place, 80)
           && request.resource.data.description is string
           && request.resource.data.description.size() <= 500
-          && request.resource.data.startTime is number
-          && request.resource.data.expiresAt is number
-          && request.resource.data.expiresAt > request.resource.data.startTime
+          && sensibleEventWindow(request.resource.data.startTime, request.resource.data.expiresAt)
+          && ttlFollowsExpiry()
           // Capacity cannot be cut below the people already going —
           // that would silently put the event over its own limit.
           && (request.resource.data.maxCapacity == null
@@ -786,7 +832,15 @@ service cloud.firestore {
           return signedIn() && uid() in eventData(eventId).participantUids;
         }
         allow read: if inEventChat();
-        allow write: if inEventChat() && typingUid == uid();
+        // Only yours to write, only the one field, and the stamp is the
+        // server's: the indicator shows while `at` is inside six
+        // seconds, so a number of your own choosing left you typing at
+        // everybody in the event chat for as long as you liked.
+        allow write: if inEventChat()
+          && typingUid == uid()
+          && (request.method == 'delete'
+              || (request.resource.data.keys().hasOnly(['at'])
+                  && request.resource.data.at == request.time));
         // Only yours to write — but the host has to be able to clear
         // ALL of them when deleting the event. Anything left under a
         // deleted event is unreachable: every rule in here authorises
@@ -899,6 +953,7 @@ service cloud.firestore {
         && request.resource.data.initiatedByUid == uid()
         && request.resource.data.status in ['unlocked', 'icebreaker']
         && request.resource.data.get('icebreakerUsed', false) is bool
+        && request.resource.data.createdAt == request.time
         && sensibleTime(request.resource.data.lastUpdated);
 
       allow update: if inThisChat()
@@ -1011,6 +1066,7 @@ service cloud.firestore {
       allow list: if signedIn() && uid() in resource.data.pair;
 
       allow create: if inPair()
+        && request.resource.data.createdAt == request.time
         && request.resource.data.pair.size() == 2
         && uid() in request.resource.data.pair
         && request.resource.data.pair[0] < request.resource.data.pair[1]
@@ -1065,7 +1121,7 @@ service cloud.firestore {
         // You send your own requests. Nobody opens one on your behalf.
         && request.resource.data.fromUid == uid()
         && request.resource.data.status == 'pending'
-        && request.resource.data.at is number
+        && request.resource.data.at == request.time
         && !blockedWith(theOther())
         // Orbit comes after following. You can only ask someone you are
         // actually in the followers of — checked on THEIR document, which
@@ -1105,7 +1161,10 @@ service cloud.firestore {
         && request.resource.data.reason.size() <= 60
         && request.resource.data.note is string
         && request.resource.data.note.size() <= 500
-        && request.resource.data.createdAt is number;
+        // Nobody reads a report from the client, so there is no
+        // optimistic paint to protect: this can simply be the truth.
+        // Triage will want them in the order they really arrived.
+        && request.resource.data.createdAt == request.time;
 
       allow read, update, delete: if false;
     }

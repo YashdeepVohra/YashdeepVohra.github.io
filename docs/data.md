@@ -81,6 +81,48 @@ Read a stamp with `msOf()` (`js/utils/formatters.js`) or `sentMs()`
 Never `new Date(x)` on a stored stamp: it is a number while the write
 is in flight and a Firestore `Timestamp` afterwards.
 
+### Anything that means "now" is the server's, unless the UI has to sort by it
+
+`serverTimestamp()` everywhere it can be: a follower's `at`, a follow
+request's, an orbit request's, a block, a report, a handle reservation,
+`joinedAt`, a chat's `createdAt`, an event's `createdAt`, and the
+typing flag. None of those is read before it lands, so none of them
+needs a local guess, and several of them are ORDERED by — a follower
+list and a request queue are both newest-first, so a stamp the writer
+chose is a stamp that decides where they sit in somebody else's list.
+
+Three stay client numbers, because something has to sort by them
+immediately: a message's `time`, `chats.lastUpdated`, and an event's
+`startTime`/`expiresAt` — the last pair being chosen rather than now.
+Every one of them is bounded in `firestore.rules`, and the bound is the
+point:
+
+- an unbounded message `time` pinned a message to the top of everyone's
+  live window forever;
+- an unbounded `lastUpdated` pinned a conversation to the top of
+  somebody's inbox forever;
+- an unbounded `expiresAt` was worse than either. The live feed is
+  `where expiresAt > now, order by expiresAt DESC, limit 60`, so the
+  sixty events with the furthest-away end date ARE the feed. Sixty
+  events dated the year 9999 would have been the whole campus feed,
+  permanently, and not one of them would ever have moved to Recap. The
+  app refused a run longer than a week; only the app did.
+  `sensibleEventWindow()` now bounds the run to a week and the start to
+  three months out, in both places.
+
+### An event carries `ttlAt`, and nothing sweeps it yet
+
+A real Timestamp, `expiresAt + EVENT_TTL_AFTER_MS` (72h), checked by
+the rules so it cannot drift from the event it belongs to. It exists
+because a Firestore TTL policy can only be set on a Timestamp field and
+one cannot be added to documents that already exist without rewriting
+every one of them — so it goes in while there is nothing to rewrite.
+
+Do NOT enable the policy yet. TTL does not cascade any more than a
+manual delete does, so it would leave every event's messages behind,
+unreachable, exactly as deleting an event used to. `recapRules.js` has
+the note and `confirmDeletePermanently()` has the shape a cascade needs.
+
 ### A bubble is identified by its document id
 
 Not by `time`. Two messages written in the same millisecond used to

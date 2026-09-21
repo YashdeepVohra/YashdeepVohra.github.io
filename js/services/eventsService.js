@@ -12,7 +12,7 @@
 // state.eventCache on the other side.
 // ==========================================
 
-import { auth, db, FieldValue } from '../config/firebase.js';
+import { auth, db, FieldValue, Timestamp } from '../config/firebase.js';
 import { state } from '../state/store.js';
 import { renderAvatar, escapeHtml, safeId } from '../utils/formatters.js';
 import { showTab, toast, returnChip, switchScreen } from '../utils/ui.js';
@@ -22,10 +22,33 @@ import { isBlocked, withoutBlocked } from './blockService.js';
 import { stampEvent, readLimits, limitMessage } from './limitsService.js';
 import { askConfirm } from '../utils/confirm.js';
 import { inOrbit, vouchersYouKnow } from './orbitService.js';
-import { RECAP_MAX_MS, inRecap, recapUntil, wasCalledOff } from './recapRules.js';
+import { RECAP_MAX_MS, EVENT_TTL_AFTER_MS, inRecap, recapUntil, wasCalledOff } from './recapRules.js';
 import { harvestReceipt, renderReceipt, primeReceipt } from './receiptService.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * When this event's document may be swept.
+ *
+ * A real Timestamp, because a Firestore TTL policy can only be set on
+ * one — and because a field like this cannot be added to documents
+ * that already exist without rewriting every one of them, it goes in
+ * from the first event rather than the first time anybody needs it.
+ * The rules check it follows expiresAt, so it cannot be turned into a
+ * way of keeping a document around forever.
+ *
+ * Nothing sweeps yet: see the note on EVENT_TTL_AFTER_MS for why
+ * turning the policy on has to wait for a delete that cascades.
+ */
+function ttlFor(expiresAt) {
+  return Timestamp.fromMillis(expiresAt + EVENT_TTL_AFTER_MS);
+}
+
+// Mirrors sensibleEventWindow() in firestore.rules. The app refused a
+// run longer than a week long before the database did; now both do,
+// which is what stops sixty events dated the year 9999 being the feed.
+const MAX_RUN_MS = 7 * DAY_MS;
+const MAX_AHEAD_MS = 90 * DAY_MS;
 
 // A campus does not have 60 things happening at once. The live feed is
 // bounded rather than paged, because it has to stay realtime.
@@ -232,7 +255,8 @@ export async function addEvent(e) {
 
   if (!Number.isFinite(startTime) || !Number.isFinite(expiresAt)) return toast("Those dates don't look right.");
   if (expiresAt <= startTime) return toast("Your event end time must be AFTER the start time.");
-  if (expiresAt - startTime > 7 * DAY_MS) return toast("Events can run for at most a week.");
+  if (expiresAt - startTime > MAX_RUN_MS) return toast("Events can run for at most a week.");
+  if (startTime - Date.now() > MAX_AHEAD_MS) return toast("That's too far ahead — three months at most.");
 
   const restore = () => {
     if (btn) {
@@ -268,7 +292,8 @@ export async function addEvent(e) {
       unconfirmedUids: [],
       requiresApproval: !!document.getElementById("requiresApproval")?.checked,
       maxCapacity: Number.isFinite(maxCapacity) && maxCapacity > 1 ? maxCapacity : null,
-      createdAt: Date.now()
+      createdAt: FieldValue.serverTimestamp(),
+      ttlAt: ttlFor(expiresAt)
     });
     await batch.commit();
 
@@ -1761,6 +1786,8 @@ async function saveEventEdits(e) {
   if (!title || !place) return toast("Title and location can't be empty.");
   if (!Number.isFinite(startTime) || !Number.isFinite(expiresAt)) return toast("Those dates don't look right.");
   if (expiresAt <= startTime) return toast("The end time must be after the start time.");
+  if (expiresAt - startTime > MAX_RUN_MS) return toast("Events can run for at most a week.");
+  if (startTime - Date.now() > MAX_AHEAD_MS) return toast("That's too far ahead — three months at most.");
 
   const going = (existing.participantUids || []).length;
   if (maxCapacity !== null && maxCapacity < going) {
@@ -1776,7 +1803,10 @@ async function saveEventEdits(e) {
     expiresAt,
     maxCapacity: Number.isFinite(maxCapacity) && maxCapacity > 1 ? maxCapacity : null,
     requiresApproval: !!document.getElementById("requiresApproval")?.checked,
-    updatedAt: Date.now()
+    updatedAt: Date.now(),
+    // Moving the end moves when it may be swept, and the rule checks
+    // the two agree — so this is not optional on an edit.
+    ttlAt: ttlFor(expiresAt)
   };
 
   const changes = materialDiff(existing, next);

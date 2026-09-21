@@ -32,6 +32,21 @@
 
 const HOUR = 60 * 60 * 1000;
 
+/* HOW LONG AN EVENT DOCUMENT IS KEPT AT ALL, after it ends.
+   Comfortably past RECAP_MAX_MS, so nothing is swept while it is still
+   a stub somebody can open. This is what `ttlAt` on the event is
+   computed from, and it is mirrored in firestore.rules — change it in
+   both or every publish is refused.
+
+   NOTE: nothing sweeps yet. The field exists because a Firestore TTL
+   policy needs a Timestamp field and one cannot be added to documents
+   that already exist without rewriting every one of them — so it goes
+   in while there is nothing to rewrite. Turning the policy ON is not
+   safe until a delete cascades: TTL leaves subcollections behind
+   exactly as a manual delete did, and an event's messages would be
+   orphaned and unreachable. See confirmDeletePermanently(). */
+export const EVENT_TTL_AFTER_MS = 72 * HOUR;
+
 export const RECAP_MIN_MS = 6 * HOUR;
 export const RECAP_MAX_MS = 48 * HOUR;
 export const RECAP_STEP_MS = 8 * HOUR;

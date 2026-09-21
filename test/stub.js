@@ -294,5 +294,6 @@ window.firebase = {
         }
       };
     } }),
-    { FieldPath: { documentId: () => '__name__' }, FieldValue: { arrayUnion: (v) => ({ __op: 'union', v }), arrayRemove: (v) => ({ __op: 'remove', v }), increment: (v) => ({ __op: 'inc', v }), serverTimestamp: () => ({ __op: 'now' }), delete: () => ({ __op: 'delete' }) } }),
+    { Timestamp: { fromMillis: (ms) => stamp(ms), now: () => stamp() },
+      FieldPath: { documentId: () => '__name__' }, FieldValue: { arrayUnion: (v) => ({ __op: 'union', v }), arrayRemove: (v) => ({ __op: 'remove', v }), increment: (v) => ({ __op: 'inc', v }), serverTimestamp: () => ({ __op: 'now' }), delete: () => ({ __op: 'delete' }) } }),
 };

@@ -68,10 +68,20 @@ Each line is the whole rule. The file after it is the argument for it.
 - What you may still do to a message you sent is `messageRules.js`: an
   EDIT (15 minutes, always leaves "edited") or a RETRACTION (a tombstone,
   never a real delete). The 15 minutes is mirrored in `firestore.rules`.
+- A stamp that means "now" is `serverTimestamp()`. The exceptions are
+  the three the UI has to order by before a round trip — a message's
+  `time`, `chats.lastUpdated`, and an event's `startTime`/`expiresAt`,
+  which are chosen rather than now — and every one of those is BOUNDED
+  in `firestore.rules`. An unbounded one is a way to own a feed, an
+  inbox or a thread.
 - A message carries TWO stamps: `time`, the client's number, which the
   thread is ordered by; and `sentAt`, the server's, which anything that
   must not be gameable is measured against. Stamps are read through
   `msOf()` / `sentMs()`, never `new Date(x)`.
+- An event carries `ttlAt`, a real Timestamp, only because a Firestore
+  TTL policy needs one and it cannot be backfilled. Nothing sweeps yet
+  and turning it on is unsafe until deletes cascade — `recapRules.js`
+  says why.
 - A bubble is identified by its document id, never by when it was sent.
 - Reactions are a map keyed by uid, from a fixed list, written one dotted
   path at a time.

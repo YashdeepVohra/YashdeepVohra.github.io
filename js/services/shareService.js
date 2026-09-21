@@ -222,7 +222,7 @@ async function sendToChat(otherUid) {
       // them — status is decided by the chat document, not here.
       await chatRef.set({
         userUids: [state.uid, otherUid].sort(),
-        createdAt: Date.now(),
+        createdAt: FieldValue.serverTimestamp(),
         initiatedByUid: state.uid,
         status: "icebreaker",
         icebreakerUsed: false,

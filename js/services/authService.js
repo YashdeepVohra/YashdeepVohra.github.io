@@ -12,7 +12,7 @@
 //   usernames/{handle}           { uid } — the handle reservation
 // ==========================================
 
-import { auth, db, isLocalhost } from '../config/firebase.js';
+import { auth, db, FieldValue, isLocalhost } from '../config/firebase.js';
 import { state, resetState } from '../state/store.js';
 import { clearReceipt } from './receiptService.js';
 import { switchScreen, setLoading, toast } from '../utils/ui.js';
@@ -197,7 +197,7 @@ export function initAuthListener() {
           googlePfp: userAuth.photoURL || "",
           avatar: userAuth.photoURL || "\u{1F464}",
           banned: false,
-          joinedAt: Date.now()
+          joinedAt: FieldValue.serverTimestamp()
         });
 
         // Email is deliberately NOT in the public profile doc. It lives
@@ -445,7 +445,7 @@ export async function claimUsername() {
 
       const batch = db.batch();
       stampAsk(batch);
-      batch.set(handleRef, { uid, createdAt: Date.now() });
+      batch.set(handleRef, { uid, createdAt: FieldValue.serverTimestamp() });
       await batch.commit();
     }
 

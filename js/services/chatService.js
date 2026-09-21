@@ -262,7 +262,10 @@ export function openEventChat(eventId) {
     .onSnapshot((snap) => {
       const fresh = Date.now() - 6000;
       state.eventTypingUids = snap.docs
-        .filter((d) => (d.data().at || 0) > fresh)
+        // The stamp is the server's now, so it comes back as a
+        // Timestamp — comparing that to a number is always false, and
+        // the indicator would never have shown at all.
+        .filter((d) => msOf(d.data().at) > fresh)
         .map((d) => d.id)
         .filter((u) => u !== state.uid);
       updateTypingIndicator();
@@ -375,7 +378,7 @@ export async function sendMessage() {
       initiatedByUid = state.uid;
       await chatRef.set({
         userUids: [state.uid, otherUid].sort(),
-        createdAt: Date.now(),
+        createdAt: FieldValue.serverTimestamp(),
         initiatedByUid,
         status,
         icebreakerUsed: false,
@@ -450,7 +453,7 @@ function writeTyping(on) {
   if (!ref) return;
 
   if (state.currentChatType === "event") {
-    if (on) ref.set({ at: Date.now() }).catch(() => {});
+    if (on) ref.set({ at: FieldValue.serverTimestamp() }).catch(() => {});
     else ref.delete().catch(() => {});
   } else {
     ref.set({ typingUid: on ? state.uid : "" }, { merge: true }).catch(() => {});

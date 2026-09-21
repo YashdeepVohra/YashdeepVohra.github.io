@@ -19,7 +19,7 @@
 // Function). The UI never reveals it — blocked people simply disappear.
 // ==========================================
 
-import { db } from '../config/firebase.js';
+import { db, FieldValue } from '../config/firebase.js';
 import { state } from '../state/store.js';
 import { safeId } from '../utils/formatters.js';
 
@@ -89,7 +89,7 @@ export async function blockUser(targetUid) {
     await db.collection("blocks").doc(pair.join("_")).set({
       pair,
       blockerUid: state.uid,
-      createdAt: Date.now()
+      createdAt: FieldValue.serverTimestamp()
     });
     return true;
   } catch (e) {
@@ -123,7 +123,7 @@ export async function submitReport({ targetUid, reason, note = "", targetType = 
       targetId: String(targetId).slice(0, 128),
       reason: String(reason).slice(0, 60),
       note: String(note).slice(0, 500),
-      createdAt: Date.now()
+      createdAt: FieldValue.serverTimestamp()
     });
     return true;
   } catch (e) {

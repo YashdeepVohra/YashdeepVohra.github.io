@@ -224,7 +224,7 @@ export async function pullIn(targetUid) {
       pair: [state.uid, uid].sort(),
       fromUid: state.uid,
       status: "pending",
-      at: Date.now()
+      at: FieldValue.serverTimestamp()
     });
     await batch.commit();
     toast("Request sent to " + displayNameFor(uid));

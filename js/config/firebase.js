@@ -84,6 +84,9 @@ db.enablePersistence({ synchronizeTabs: true }).catch((err) => {
 // global `firebase` object everywhere.
 export const FieldValue = firebase.firestore.FieldValue;
 export const FieldPath = firebase.firestore.FieldPath;
+// Needed to build a real Timestamp for an event's ttlAt: a Firestore
+// TTL policy can only be set on a Timestamp field, never on a number.
+export const Timestamp = firebase.firestore.Timestamp;
 
 // Keep the session alive across tabs/reloads on shared campus machines
 // only as long as the browser session lasts is NOT what we want here —
