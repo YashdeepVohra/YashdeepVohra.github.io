@@ -897,6 +897,92 @@ group('editing and taking back a message');
 }
 
 /* ------------------------------------------------------------------ */
+group('who sits where in the feed');
+{
+  const rank = await page.evaluate(async () => {
+    const f = await import('/js/services/feedRules.js');
+    const H = 60 * 60 * 1000;
+    const t = 1700000000000;
+    const graph = { uid: 'me', orbit: ['orb'], following: ['fol'], vouchedBy: ['vou'] };
+    const ev = (id, host, startsIn) => ({ id, hostUid: host, startTime: t + startsIn });
+    const order = (list) => f.rankFeed(list, graph, t).map((e) => e.id).join(',');
+
+    return {
+      // Who you know, in order.
+      mine: f.hostRank('me', graph), orb: f.hostRank('orb', graph),
+      fol: f.hostRank('fol', graph), vou: f.hostRank('vou', graph),
+      str: f.hostRank('nobody', graph),
+
+      // Live always beats upcoming, whoever is hosting.
+      liveWins: order([ev('soonFriend', 'orb', 5 * 60e3), ev('liveStranger', 'zz', -10 * 60e3)]),
+
+      // Inside one hour, the people you know come first — and in the
+      // order the weights say.
+      withinTheHour: order([
+        ev('stranger', 'zz', 10 * 60e3),
+        ev('friend', 'fol', 20 * 60e3),
+        ev('orbit', 'orb', 30 * 60e3),
+        ev('vouched', 'vou', 40 * 60e3)
+      ]),
+
+      // But URGENCY still wins across buckets: a stranger's thing in
+      // five minutes is above a friend's in six hours.
+      urgencyWins: order([ev('friendLater', 'orb', 6 * H), ev('strangerSoon', 'zz', 5 * 60e3)]),
+
+      // Two strangers an hour apart are in the order they always were.
+      unchanged: order([ev('later', 'zz', 3 * H), ev('sooner', 'yy', 30 * 60e3)]),
+
+      // Live events: most recently started first, as before.
+      liveOrder: order([ev('old', 'zz', -3 * H), ev('fresh', 'yy', -5 * 60e3)]),
+
+      // Your own sits top of its bucket.
+      ownFirst: order([ev('theirs', 'orb', 10 * 60e3), ev('ours', 'me', 20 * 60e3)]),
+
+      buckets: [f.timeBucket(ev('a', 'z', -1), t), f.timeBucket(ev('b', 'z', 5 * 60e3), t)]
+    };
+  });
+  ok('your own event outranks everyone', rank.mine > rank.orb);
+  ok('orbit outranks a one-way follow', rank.orb > rank.fol);
+  ok('a follow outranks a vouched stranger', rank.fol > rank.vou);
+  ok('and a vouched stranger outranks a stranger', rank.vou > rank.str);
+  ok('anything live is above anything upcoming', rank.liveWins === 'liveStranger,soonFriend', rank.liveWins);
+  ok('within the hour, the people you know come first',
+     rank.withinTheHour === 'orbit,friend,vouched,stranger', rank.withinTheHour);
+  ok('but a stranger five minutes away beats a friend six hours away',
+     rank.urgencyWins === 'strangerSoon,friendLater', rank.urgencyWins);
+  ok('two strangers still sort by the clock', rank.unchanged === 'sooner,later', rank.unchanged);
+  ok('live events are still newest-first', rank.liveOrder === 'fresh,old', rank.liveOrder);
+  ok('your own event leads its bucket', rank.ownFirst === 'ours,theirs', rank.ownFirst);
+  ok('a live bucket always sorts above an upcoming one', rank.buckets[0] < rank.buckets[1],
+     JSON.stringify(rank.buckets));
+
+  // And through the real feed, not just the comparator.
+  const feed = await page.evaluate(async () => {
+    const { state, ev } = window.__m;
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const t = Date.now();
+    const mk = (id, host, startsIn) => ({
+      id, hostUid: host, title: id, place: 'Lawn', tag: '☕ Chill',
+      startTime: t + startsIn, expiresAt: t + 6 * 3600e3,
+      participantUids: [host], hypedUids: [], circleId: 'main'
+    });
+    ['zz', 'orb'].forEach((u) => {
+      state.userCache[u] = { uid: u, username: u, displayName: u, avatar: '\u{1F98A}' };
+    });
+    state.orbitUids = ['orb'];
+    state.following = [];
+    window.__events = [mk('stranger', 'zz', 10 * 60e3), mk('orbit', 'orb', 30 * 60e3)];
+    ev.loadEvents();
+    await wait(400);
+    const out = { order: state.eventOrder.join(',') };
+    state.orbitUids = [];
+    return out;
+  });
+  ok('the feed itself puts your orbit above a stranger in the same hour',
+     feed.order === 'orbit,stranger', feed.order);
+}
+
+/* ------------------------------------------------------------------ */
 group('circles, and the geography under them');
 {
   // The hashes are checked against the reference implementation's own
@@ -1022,13 +1108,21 @@ group('circles, and the geography under them');
     const ev = await import('/js/services/eventsService.js');
     const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
+    // An empty feed first: the failure message deliberately refuses to
+    // paint over cards that are already on screen, because stale real
+    // events beat an error box.
     window.__events = [];
+    ev.loadEvents();
+    await wait(300);
+
     window.__eventsFail = { code: 'failed-precondition' };
     const before = (window.__eventCbs || []).length;
     ev.loadEvents();
     await wait(600);
     const out = {
-      saidSo: /can't load/i.test(document.getElementById('events')?.innerText || ''),
+      saidSo: /can't reach the feed/i.test(document.getElementById('events')?.innerText || ''),
+      // And a way back out of it, which a dead feed never used to have.
+      offersAWayBack: !!document.querySelector('#events button'),
       gaveUp: (window.__eventCbs || []).length <= before + 1
     };
     window.__eventsFail = null;
@@ -1036,6 +1130,7 @@ group('circles, and the geography under them');
   });
   ok('a feed with no index says so instead of going quiet', noIndex.saidSo === true,
      JSON.stringify(noIndex));
+  ok('and leaves a way back rather than skeletons forever', noIndex.offersAWayBack === true);
   ok('and does not sit there retrying something that cannot succeed', noIndex.gaveUp === true);
   // That test breaks the feed ON PURPOSE, and the whole point of it is
   // that the app complains loudly — so the complaint is expected, and

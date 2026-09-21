@@ -22,6 +22,7 @@ import { isBlocked, withoutBlocked } from './blockService.js';
 import { stampEvent, readLimits, limitMessage } from './limitsService.js';
 import { askConfirm } from '../utils/confirm.js';
 import { inOrbit, vouchersYouKnow } from './orbitService.js';
+import { rankFeed } from './feedRules.js';
 import { RECAP_MAX_MS, EVENT_TTL_AFTER_MS, inRecap, recapUntil, wasCalledOff } from './recapRules.js';
 import { harvestReceipt, renderReceipt, primeReceipt } from './receiptService.js';
 import { myCircleId, circleGeo, feedIsScoped } from './circleService.js';
@@ -180,6 +181,19 @@ export function openCreateScreen() {
     const el = document.getElementById(id);
     if (el) el.value = "";
   });
+
+  // A publish the server refused hands their words back rather than a
+  // blank sheet. Once only — a second open is a fresh one.
+  if (failedDraft) {
+    const set = (id, value) => { const el = document.getElementById(id); if (el && value) el.value = value; };
+    set("title", failedDraft.title);
+    set("place", failedDraft.place);
+    set("description", failedDraft.description);
+    set("startTime", failedDraft.startTimeStr);
+    set("endTime", failedDraft.endTimeStr);
+    set("maxCapacity", failedDraft.capacityRaw);
+    failedDraft = null;
+  }
 }
 
 /** Swap the sheet between creating and editing. */
@@ -303,7 +317,30 @@ export async function addEvent(e) {
       // every event already carries a position. See geoRules.js.
       geo: circleGeo()
     });
-    await batch.commit();
+    /* PUBLISH IS NOT A ROUND TRIP ANY MORE.
+       This used to `await batch.commit()` before closing the sheet, and
+       a commit does not resolve until the SERVER has acknowledged it —
+       so the publish button sat spinning for a full round trip, twice
+       over counting the limits read above, while the event was already
+       in the local cache and the feed listener had already been told
+       about it. The card was ready before the screen would let go of
+       it.
+       Firestore's own latency compensation does the rest: the write is
+       in the local snapshot immediately, and if the server refuses it
+       the SDK takes it back out and the listener fires again without
+       it. So the only thing left to do on failure is say so. */
+    const draft = { title, place, description, startTimeStr, endTimeStr, capacityRaw };
+    batch.commit().catch((error) => {
+      console.error("Publish failed:", error.code || error.message);
+      // A rules rejection arrives as a flat permission-denied, so the
+      // only honest guess at the reason is the limit we just checked.
+      toast(error.code === "permission-denied"
+        ? limitMessage("event")
+        : "Couldn't publish that. Your details are still here — try again.");
+      // Their words back, so a refusal does not also cost them the typing.
+      failedDraft = draft;
+      openCreateScreen();
+    });
 
     ["title", "place", "description", "maxCapacity"].forEach((id) => {
       const el = document.getElementById(id);
@@ -315,14 +352,38 @@ export async function addEvent(e) {
     setTimeout(() => focusEvent(ref.id), 350);
   } catch (error) {
     console.error("Publish failed:", error.code || error.message);
-    // A rules rejection arrives as a flat permission-denied, so the
-    // only honest guess at the reason is the limit we just checked.
-    toast(error.code === "permission-denied"
-      ? limitMessage("event")
-      : "Failed to publish. Try again.");
+    toast("Couldn't publish that. Try again.");
   } finally {
     restore();
   }
+}
+
+// A publish the server refused, kept so reopening Create hands their
+// own words back rather than a blank sheet.
+let failedDraft = null;
+
+/**
+ * Who you know, in the shape feedRules wants it.
+ *
+ * Nothing here costs a read: your orbit and your following list are
+ * both in state, and the vouch lists ride along on the cached profiles
+ * the feed has already fetched to draw its bylines.
+ */
+function socialGraph(events) {
+  // Built from the events being ranked, not from the last order — the
+  // last order is what this is about to replace.
+  const vouchedBy = [];
+  (events || []).forEach((e) => {
+    if (e && e.hostUid && !vouchedBy.includes(e.hostUid) && vouchersYouKnow(e.hostUid).length) {
+      vouchedBy.push(e.hostUid);
+    }
+  });
+  return {
+    uid: state.uid,
+    orbit: state.orbitUids || [],
+    following: state.following || [],
+    vouchedBy
+  };
 }
 
 // ---------- Feed ----------
@@ -367,21 +428,16 @@ export function loadEvents() {
 
         await primeUsers([...uids]);
 
-        // Happening now first, most recently started at the top of those;
-        // then what starts soonest. This used to be a plain descending
-        // sort on startTime, which put the event furthest in the FUTURE
-        // at the top of a feed called Live Now, and buried the thing
-        // starting in ten minutes at the bottom.
-        const clock = Date.now();
-        const live = (x) => (x.startTime || 0) <= clock;
-        state.eventOrder = events
-          .sort((a, b) => {
-            if (live(a) !== live(b)) return live(a) ? -1 : 1;
-            return live(a)
-              ? (b.startTime || 0) - (a.startTime || 0)
-              : (a.startTime || 0) - (b.startTime || 0);
-          })
-          .map((x) => x.id);
+        /* Happening now first, then what starts soonest — and inside
+           each hour of that, the people you would actually show up for
+           before the strangers. feedRules.js has the weights and the
+           argument for why the social part is a TIEBREAK: sorting by it
+           outright would bury a stranger's thing starting in five
+           minutes under a friend's thing starting in six hours, and
+           "happening now" is the whole product.
+           The graph is free — every list here is already in memory for
+           the trust chip on the card. */
+        state.eventOrder = rankFeed(events, socialGraph(events)).map((x) => x.id);
 
         renderEvents();
       },
@@ -392,6 +448,20 @@ export function loadEvents() {
         retryFeed(error);
       }
     );
+}
+
+/**
+ * Try the feed again, now, from the top.
+ *
+ * Bound to the button a failed feed puts on screen, and called when
+ * the tab comes back to the front. Resets the backoff, because a
+ * person asking for it is new information — the last five failures
+ * were a minute ago and the network has probably moved on.
+ */
+export function retryFeedNow() {
+  feedRetries = 0;
+  clearTimeout(feedRetryTimer);
+  if (state.uid) loadEvents();
 }
 
 /* ---------------------------------------------------------------------
@@ -417,35 +487,57 @@ function isMissingIndex(error) {
   return code === "failed-precondition" || code.indexOf("failed-precondition") !== -1;
 }
 
+/**
+ * Say the feed is broken, and leave a way out of it.
+ *
+ * A failed feed used to leave the SKELETONS on screen for ever: the
+ * listener was dead, nothing repainted, and there was no route back
+ * except reloading the page — which on a phone means finding the
+ * browser chrome the app is trying not to have. Three loading cards
+ * that never become anything is the worst of both, because it reads as
+ * "still trying" when nothing is trying at all.
+ */
 function reportFeedFailure(error) {
-  if (!isMissingIndex(error)) return;
-  console.error(
-    "The feed query has no index.\n" +
-    "Deploy it:  firebase deploy --only firestore:indexes\n" +
-    "Or create it by hand: collection `events`, circleId ascending + " +
-    "expiresAt descending. Firestore usually puts a direct link to it " +
-    "in the error above.\n" +
-    "Until it exists and finishes BUILDING, this feed cannot load."
-  );
-  const list = document.getElementById("events");
-  if (list) {
-    list.innerHTML = `
-      <div class="empty-state">
-        <h4>The feed can't load</h4>
-        <p>Something's wrong at our end, not yours. It should sort itself
-           out shortly — try again in a minute.</p>
-      </div>`;
+  if (isMissingIndex(error)) {
+    console.error(
+      "The feed query has no index.\n" +
+      "Deploy it:  firebase deploy --only firestore:indexes\n" +
+      "Or create it by hand from the link Firestore puts in the error " +
+      "above.\n" +
+      "Until it exists and has finished BUILDING, this feed cannot load."
+    );
   }
+
+  const list = document.getElementById("events");
+  // Something real on screen is better than an error over the top of it.
+  if (!list || list.querySelector(".event")) return;
+
+  list.innerHTML = `
+    <div class="empty-state">
+      <span class="fr-spark">
+        <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
+          <path d="M12 3v10M12 17.5v.5" stroke="currentColor" stroke-width="2.4"
+                stroke-linecap="round" fill="none"/>
+        </svg>
+      </span>
+      <h4>Can't reach the feed</h4>
+      <p>Something went wrong on our side. Your events are safe — this is
+         just the list.</p>
+      <button class="act primary" onclick="window.retryFeedNow()">Try again</button>
+    </div>`;
 }
 
 let feedRetries = 0;
+let feedRetryTimer = 0;
+
 function retryFeed(error) {
-  // No amount of waiting builds an index.
+  // No amount of waiting builds an index — but the button is there.
   if (isMissingIndex(error)) return;
   if (feedRetries >= 5) return;
   const wait = 1200 * Math.pow(2, feedRetries);
   feedRetries++;
-  setTimeout(() => { if (state.uid) loadEvents(); }, wait);
+  clearTimeout(feedRetryTimer);
+  feedRetryTimer = setTimeout(() => { if (state.uid) loadEvents(); }, wait);
 }
 
 /* ---------------------------------------------------------------------
@@ -1027,6 +1119,8 @@ export function renderEvents() {
 
     const e = state.eventCache[eventId];
     if (!e) return;
+    // Being deleted: off the screen already, whatever the server still says.
+    if (deleting.has(eventId)) return;
     const id = safeId(eventId);
     if (!id) return;
 
@@ -1735,33 +1829,63 @@ async function purgeCollection(ref) {
   return false;   // more left than we are willing to walk in one go
 }
 
+/* Events being deleted right now.
+   The card has to leave the screen at once — a host who has just
+   confirmed a deletion should not watch it sit there — but the
+   document is still on the server for as long as the purge takes, so
+   the live listener would keep handing it back. Same idea as
+   pendingHype: the feed knows about something the database does not
+   agree with yet, and says so until it catches up. */
+const deleting = new Set();
+
 export async function confirmDeletePermanently() {
   const id = state.eventIdToManage;
   if (!id) return;
   closeDeleteModal();
 
+  /* GONE NOW; THE NETWORK CATCHES UP BEHIND IT.
+     This used to purge three subcollections and delete the document —
+     four round trips, in series — before touching the screen. On a
+     good connection that is a second of a card sitting there after you
+     confirmed; on campus wifi it is several, and it reads as the app
+     having ignored you. Nothing about the outcome is in doubt: it is
+     the host's own event and the rules have already agreed. */
+  const snapshot = state.eventCache[id];
+  const wasLive = (state.eventOrder || []).includes(id);
+  const wasRecap = (state.recapOrder || []).includes(id);
+
+  deleting.add(id);
+  delete state.eventCache[id];
+  state.eventOrder = (state.eventOrder || []).filter((x) => x !== id);
+  state.recapOrder = (state.recapOrder || []).filter((x) => x !== id);
+  fadeOutCard(id, true);
+  toast("Deleted.");
+
   const eventRef = db.collection("events").doc(id);
   try {
-    // Children first — the parent is what authorises removing them.
-    await purgeCollection(eventRef.collection("messages"));
-    await purgeCollection(eventRef.collection("typing"));
-    await purgeCollection(eventRef.collection("pinned"));
-
+    // Children first — the parent is what authorises removing them —
+    // but all three at once, because they have nothing to say to
+    // each other.
+    await Promise.all([
+      purgeCollection(eventRef.collection("messages")),
+      purgeCollection(eventRef.collection("typing")),
+      purgeCollection(eventRef.collection("pinned"))
+    ]);
     await eventRef.delete();
-
-    delete state.eventCache[id];
-    state.eventOrder = (state.eventOrder || []).filter((x) => x !== id);
-    state.recapOrder = (state.recapOrder || []).filter((x) => x !== id);
-    fadeOutCard(id, true);
-    toast("Deleted.");
+    deleting.delete(id);
   } catch (error) {
     console.error("Delete failed:", error.code, error.message);
+    deleting.delete(id);
+    // Put it back rather than leave a host thinking it is gone.
+    if (snapshot) state.eventCache[id] = snapshot;
+    if (wasLive && !(state.eventOrder || []).includes(id)) state.eventOrder = [id].concat(state.eventOrder || []);
+    if (wasRecap && !(state.recapOrder || []).includes(id)) state.recapOrder = (state.recapOrder || []).concat(id);
     toast(
       error.code === "permission-denied"
         ? "You don't have permission to delete this event."
-        : "Could not delete. Check your connection."
+        : "Couldn't delete that — it's still there. Check your connection."
     );
-    loadEvents();
+    renderEvents();
   }
 }
 

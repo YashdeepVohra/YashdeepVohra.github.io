@@ -42,7 +42,7 @@ js/services/        auth, events, chat, profile, follow, orbit, block,
                     search, user, limits, receipt, circle — plus the
                     pure rule files recapRules, aboutRules,
                     messageRules, receiptRules, shareRules, matchRules,
-                    geoRules
+                    geoRules, feedRules
 js/utils/           ui (screens/toasts/repaint registry), confirm, overlays,
                     formatters, theme, viewport
 js/interactions/    search screen, message gestures (swipe, hold)
@@ -188,7 +188,14 @@ Each line is the whole rule. The file after it is the argument for it.
 - Filters hide, they don't re-render.
 - Social state is on screen in four places; everything that changes the
   graph goes through `refreshSocialUI()`.
-- Optimistic first, then the network, then roll back on failure.
+- Optimistic first, then the network, then roll back on failure. That
+  includes PUBLISHING and DELETING an event — neither waits on a server
+  round trip before the screen moves.
+- The feed's order is `feedRules.js`: time buckets first, then who you
+  know inside a bucket. Never sort socially across buckets — urgency
+  wins, that is the product.
+- A feed that fails must leave a way back on screen. Skeletons that
+  never resolve are the worst outcome.
 - No `window.confirm` or `alert` anywhere: `askConfirm()` and `toast()`.
 - Overlays go through `js/utils/overlays.js`, so Android back works.
 

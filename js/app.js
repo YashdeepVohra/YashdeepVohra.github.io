@@ -23,6 +23,7 @@ import {
 import {
   renderEvents,
   flushAllHype,
+  retryFeedNow,
   addEvent,
   joinEvent,
   leaveEvent,
@@ -209,6 +210,7 @@ Object.assign(window, {
   jumpToVibe,
   focusEvent,
   loadRecap,
+  retryFeedNow,
   ensureRecapLoaded,
   onRecapScroll,
   toggleEventDesc,
@@ -359,6 +361,14 @@ function boot() {
   setInterval(() => {
     if (document.visibilityState === "visible" && state.uid) renderEvents();
   }, 60000);
+
+  // Coming back to the app is the moment to find out whether the feed
+  // survived being away. A listener that errored while the tab was in
+  // the background is dead and will not say so on its own.
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible") return;
+    if (state.uid && !state.eventsUnsubscribe) retryFeedNow();
+  });
 
   // Registering this is what lets a browser offer "add to home screen".
   // It caches nothing — see sw.js for why that is deliberate.
