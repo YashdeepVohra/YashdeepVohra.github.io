@@ -1,5 +1,6 @@
 import { state } from '../state/store.js';
 import { escapeHtml, safeId } from './formatters.js';
+import { closeAllOverlays } from './overlays.js';
 
 const SCREENS = ["login", "home", "usernameScreen", "profileScreen", "chatScreen"];
 
@@ -17,6 +18,17 @@ export function switchScreen(screenId) {
   // A way back to somewhere you are no longer coming from is worse
   // than no way back at all.
   clearReturnChip();
+
+  /* AND NEITHER IS A LAYER OVER SOMETHING IT DOES NOT BELONG TO.
+     Overlays sit at z-index 1500 and every screen is far below, so
+     changing the screen under an open one simply hid the new screen
+     behind it. Tapping a name in the Orbit list opened that profile
+     underneath the list, and pressing back — which closed the list —
+     was the only way to discover it had worked.
+     openProfileScreen already knew to tear down an open CHAT for
+     exactly this reason. It is not a chat problem, it is a layering
+     one, so it belongs here where every screen change goes through. */
+  closeAllOverlays();
   const frame = document.querySelector(".app-frame");
 
   SCREENS.forEach((id) => document.getElementById(id)?.classList.add("hidden"));

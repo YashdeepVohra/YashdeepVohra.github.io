@@ -108,6 +108,30 @@ export function replaceOverlay(id, { onClose } = {}) {
   }
 }
 
+/**
+ * Close every layer, properly.
+ *
+ * A layer is `position: fixed; inset: 0` at z-index 1500 and the
+ * screens beneath it are nowhere near that — so changing the screen
+ * under an open layer put the new screen UNDERNEATH it. Tapping
+ * somebody in the Orbit screen opened their profile behind the orbit
+ * list, and the only way to find out was to press back.
+ *
+ * Goes through closeOverlay() rather than tearing the stack down, so
+ * each layer spends its history entry the way it would have if the
+ * person had closed it themselves. clearOverlays() below does NOT do
+ * that, on purpose — it is for sign-out, where the page is about to
+ * reload and the history is going with it.
+ */
+export function closeAllOverlays() {
+  let closed = false;
+  while (stack.length) {
+    closeOverlay();
+    closed = true;
+  }
+  return closed;
+}
+
 /** Drop everything, e.g. on sign-out. */
 export function clearOverlays() {
   pendingPops = 0;

@@ -198,6 +198,9 @@ Each line is the whole rule. The file after it is the argument for it.
   never resolve are the worst outcome.
 - No `window.confirm` or `alert` anywhere: `askConfirm()` and `toast()`.
 - Overlays go through `js/utils/overlays.js`, so Android back works.
+- A screen change closes every overlay (`switchScreen`). A layer sits
+  at z-index 1500 and every screen is far below it, so anything opened
+  under one is invisible until the layer goes.
 
 **Links, embeds and shared events** → `docs/sharing.md`
 

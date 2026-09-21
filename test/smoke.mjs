@@ -897,6 +897,60 @@ group('editing and taking back a message');
 }
 
 /* ------------------------------------------------------------------ */
+group('a screen change takes its layers with it');
+{
+  const layered = await page.evaluate(async () => {
+    const { state, orbit, prof } = window.__m;
+    const chat = await import('/js/services/chatService.js');
+    const ov = await import('/js/utils/overlays.js');
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const shown = (id) => {
+      const el = document.getElementById(id);
+      return !!el && !el.classList.contains('hidden');
+    };
+    const out = {};
+
+    state.userCache.lay = { uid: 'lay', username: 'lay', displayName: 'Lay', avatar: '\u{1F98A}' };
+    state.orbitUids = ['lay'];
+
+    // From the ORBIT screen, which is a layer at z-index 1500.
+    orbit.openOrbitScreen();
+    await wait(200);
+    out.orbitOpen = shown('orbitScreen');
+
+    prof.openProfileScreen('lay');
+    await wait(300);
+    // The profile used to open UNDERNEATH the orbit list, and pressing
+    // back — which closed the list — was how you found out.
+    out.orbitGone = !shown('orbitScreen');
+    out.profileUp = shown('profileScreen');
+    out.stackEmpty = !ov.anyOverlayOpen();
+
+    prof.closeProfileScreen({ all: true });
+    await wait(200);
+
+    // Same for a conversation opened from a layer.
+    orbit.openOrbitScreen();
+    await wait(200);
+    chat.openChat('lay_me', 'lay');
+    await wait(250);
+    out.chatOverOrbit = shown('chatScreen') && !shown('orbitScreen');
+    chat.closeChat({ silent: false });
+    await wait(200);
+
+    state.orbitUids = [];
+    return out;
+  });
+  ok('the orbit screen opens as a layer', layered.orbitOpen === true);
+  ok('opening a profile from it closes the layer', layered.orbitGone === true,
+     JSON.stringify(layered));
+  ok('and the profile is the screen you are on', layered.profileUp === true);
+  ok('with nothing left on the overlay stack', layered.stackEmpty === true);
+  ok('a conversation opened from a layer is not under it either',
+     layered.chatOverOrbit === true);
+}
+
+/* ------------------------------------------------------------------ */
 group('who sits where in the feed');
 {
   const rank = await page.evaluate(async () => {
