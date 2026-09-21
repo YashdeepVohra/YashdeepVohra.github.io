@@ -110,6 +110,53 @@ point:
   `sensibleEventWindow()` now bounds the run to a week and the start to
   three months out, in both places.
 
+### A circle is who shares a feed with you
+
+`users/{uid}.circleId` and `events/{id}.circleId`, and the live feed
+and the recap both filter on it. Without it the feed was the sixty
+events ending furthest away in the entire database — which is exactly
+right while everyone shares one campus and meaningless the moment they
+do not, because `LIVE_LIMIT` would be spent on strangers nowhere near
+you before anything close to you got a look in.
+
+A college is one kind of circle and it is where this starts, but the
+field is not college-shaped: a city, a neighbourhood and a campus are
+all the same row. Only the FEED is partitioned — following, chat and
+orbit all work across circles, because the graph is not the feed.
+
+Everybody starts in `main`, a real id rather than an empty string, so
+a query always has something to match on and the app needs no console
+setup at all. `circles/{id}` is optional metadata — a display name and
+a position — readable by anyone signed in and written by nobody from
+the client. An event may only be published into its host's own circle,
+which the rules check with one document access on a write that is
+already rate-limited.
+
+### Geography is laid down but not switched on
+
+Every event copies its circle's point into `geo` (`lat`, `lng`,
+`geohash`). Nothing queries it. It is stored because that is the one
+part of the switch that cannot be deferred — a value written wrong
+today is a migration tomorrow, and `geoRules.js` is a pure, tested
+encoder checked against the reference implementation's own examples so
+that it is right from the first event.
+
+Events are the easy half anyway: they carry a 72h `ttlAt`, so by the
+time anything switches, everything written today is long gone. It is
+the CIRCLES that have to be right now — a circle's centroid is what
+gives every event under it a real position, so on the day geography
+turns on, the existing feed already has coordinates.
+
+What the switch takes: the feed query stops being
+`where circleId == mine` and becomes a geohash prefix range over the
+nine cells around you, neighbour arithmetic lands in `geoRules.js`
+next to `rangeFor`, and the composite index changes. No document is
+rewritten by any of it.
+
+A circle with no coordinates stamps nothing rather than zeroes —
+`0, 0` is a real place off the coast of Africa and a lie that would
+survive into the geo era.
+
 ### An event carries `ttlAt`, and nothing sweeps it yet
 
 A real Timestamp, `expiresAt + EVENT_TTL_AFTER_MS` (72h), checked by

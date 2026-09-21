@@ -20,6 +20,7 @@ import { clearOverlays, openOverlay } from '../utils/overlays.js';
 import { renderAvatar } from '../utils/formatters.js';
 import { normalizeUsername, hydrateProfileCache, rememberUser, clearProfileCache } from './userService.js';
 import { stampAsk, msUntilAskAllowed } from './limitsService.js';
+import { DEFAULT_CIRCLE, loadCircle } from './circleService.js';
 import { loadEvents, renderEvents, showSharedEvent } from './eventsService.js';
 import { consumePendingEvent } from './shareService.js';
 import { loadBlocks } from './blockService.js';
@@ -197,6 +198,10 @@ export function initAuthListener() {
           googlePfp: userAuth.photoURL || "",
           avatar: userAuth.photoURL || "\u{1F464}",
           banned: false,
+          // Everybody starts in the same circle. There is no picker
+          // because there is one circle; when there are two, this is
+          // where the choice goes, and nothing else has to change.
+          circleId: DEFAULT_CIRCLE,
           joinedAt: FieldValue.serverTimestamp()
         });
 
@@ -251,6 +256,7 @@ export function initializeUserApp(userData) {
   state.followRequests = [];
   state.isPrivate = userData.private === true;
   state.privacyChosen = typeof userData.private === "boolean";
+  state.circleId = userData.circleId || DEFAULT_CIRCLE;
 
   // Names and avatars saved on a previous visit go back into the cache
   // before anything renders, so the first paint costs zero reads.
@@ -302,7 +308,13 @@ export function initializeUserApp(userData) {
   loadMyProfile(() => refreshSocialUI());
 
   loadChatList();
-  loadEvents();
+
+  // The feed is scoped to the circle, so the circle has to be known
+  // before it is asked for. One read, and the app works without the
+  // document existing at all — everything it carries is a display name
+  // or the point that events are stamped with.
+  loadCircle().then(() => { if (state.uid) loadEvents(); });
+
   setLoading(false);
 
   // If they arrived on a shared link, this is the first moment there

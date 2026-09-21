@@ -24,6 +24,7 @@ import { askConfirm } from '../utils/confirm.js';
 import { inOrbit, vouchersYouKnow } from './orbitService.js';
 import { RECAP_MAX_MS, EVENT_TTL_AFTER_MS, inRecap, recapUntil, wasCalledOff } from './recapRules.js';
 import { harvestReceipt, renderReceipt, primeReceipt } from './receiptService.js';
+import { myCircleId, circleGeo } from './circleService.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -293,7 +294,14 @@ export async function addEvent(e) {
       requiresApproval: !!document.getElementById("requiresApproval")?.checked,
       maxCapacity: Number.isFinite(maxCapacity) && maxCapacity > 1 ? maxCapacity : null,
       createdAt: FieldValue.serverTimestamp(),
-      ttlAt: ttlFor(expiresAt)
+      ttlAt: ttlFor(expiresAt),
+      // Who this is for. The rules check it against the host's own
+      // circle, so an event cannot be published into somebody else's.
+      circleId: myCircleId(),
+      // And WHERE it is, copied off the circle. Nothing queries this
+      // yet — it is here so that the day the feed becomes "near me",
+      // every event already carries a position. See geoRules.js.
+      geo: circleGeo()
     });
     await batch.commit();
 
@@ -327,6 +335,12 @@ export function loadEvents() {
 
   state.eventsUnsubscribe = db
     .collection("events")
+    /* YOUR CIRCLE, and nothing else. Without this the feed was the
+       sixty events ending furthest away in the entire database — fine
+       while everyone shares one campus, meaningless the moment they do
+       not, because LIVE_LIMIT would be spent on strangers nowhere near
+       you. Needs the circleId + expiresAt index. */
+    .where("circleId", "==", myCircleId())
     // ONLY what is still running. Recap is 24 hours of finished events
     // that most people never open — loading it with the feed meant
     // every user paid for it on every launch. It is paged in on demand
@@ -1910,6 +1924,8 @@ export async function loadRecap({ reset = false } = {}) {
     for (let pages = 0; pages < RECAP_PAGES_PER_CALL && !added && !state.recapDone; pages++) {
       const now = Date.now();
       let q = db.collection("events")
+        // Recap is the same feed, afterwards — so the same scope.
+        .where("circleId", "==", myCircleId())
         .where("expiresAt", "<=", now)
         .where("expiresAt", ">", now - RECAP_MAX_MS)
         .orderBy("expiresAt", "desc")

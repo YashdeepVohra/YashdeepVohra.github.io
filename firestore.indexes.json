@@ -4,32 +4,70 @@
       "collectionGroup": "events",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "participantUids", "arrayConfig": "CONTAINS" },
-        { "fieldPath": "expiresAt", "order": "ASCENDING" }
+        {
+          "fieldPath": "participantUids",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "expiresAt",
+          "order": "ASCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "events",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "participantUids", "arrayConfig": "CONTAINS" },
-        { "fieldPath": "expiresAt", "order": "DESCENDING" }
+        {
+          "fieldPath": "participantUids",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "expiresAt",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "events",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "hostUid", "order": "ASCENDING" },
-        { "fieldPath": "expiresAt", "order": "DESCENDING" }
+        {
+          "fieldPath": "hostUid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "expiresAt",
+          "order": "DESCENDING"
+        }
       ]
     },
     {
       "collectionGroup": "chats",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "userUids", "arrayConfig": "CONTAINS" },
-        { "fieldPath": "lastUpdated", "order": "DESCENDING" }
+        {
+          "fieldPath": "userUids",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "fieldPath": "lastUpdated",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "circleId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "expiresAt",
+          "order": "DESCENDING"
+        }
       ]
     }
   ],

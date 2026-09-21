@@ -33,6 +33,13 @@ export const state = {
   followRequests: [],      // uids waiting on me, when my account is private
   isPrivate: false,        // do I approve my followers?
   privacyChosen: false,    // has this account ever picked public or private?
+
+  // WHO SHARES A FEED WITH YOU. A place or community you belong to —
+  // a college to begin with, but the field is not college-shaped. The
+  // feed is partitioned by this; the social graph is not. See
+  // js/services/circleService.js.
+  circleId: "",
+  circleDoc: null,         // { id, name, lat, lng, geohash } once read
   orbitUids: [],           // linked — both of you accepted
   orbitIncoming: [],       // uids who asked to join your orbit
   orbitOutgoing: [],       // uids you asked, still waiting
@@ -151,6 +158,8 @@ export function resetState() {
   state.followRequests = [];
   state.isPrivate = false;
   state.privacyChosen = false;
+  state.circleId = "";
+  state.circleDoc = null;
   state.orbitUids = [];
   state.orbitIncoming = [];
   state.orbitOutgoing = [];

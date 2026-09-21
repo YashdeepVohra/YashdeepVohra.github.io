@@ -347,6 +347,34 @@ service cloud.firestore {
        ever have moved to Recap. The app already refused a run longer
        than a week — only the app did.
        ----------------------------------------------------------------- */
+    /* -----------------------------------------------------------------
+       CIRCLES
+       -----------------------------------------------------------------
+       A circle is who shares a feed with you — a place or a community
+       you belong to. The feed is partitioned by it; the social graph is
+       not, so following, chat and orbit all still work across circles.
+
+       An event may only be published into the host's OWN circle, which
+       is one document access on a write that is already rate-limited
+       and already reads that document. Without it, anyone could post
+       into any circle's feed — the same hole as an unbounded expiresAt,
+       reached a different way.
+
+       `geo` is stored and nothing queries it yet. See geoRules.js: it
+       is here so the day the feed becomes "near me", every event
+       already carries a position and no document has to be rewritten.
+       ----------------------------------------------------------------- */
+    function myCircle() {
+      return myProfile().get('circleId', 'main');
+    }
+    function sensibleGeo(geo) {
+      return geo == null
+        || (geo.keys().hasOnly(['lat', 'lng', 'geohash'])
+            && geo.lat is number && geo.lat >= -90 && geo.lat <= 90
+            && geo.lng is number && geo.lng >= -180 && geo.lng <= 180
+            && geo.geohash is string && geo.geohash.size() <= 12);
+    }
+
     function sensibleEventWindow(startTime, expiresAt) {
       return startTime is number
         && expiresAt is number
@@ -433,7 +461,10 @@ service cloud.firestore {
 
       allow update: if isMe(userId)
         // Fields the client is allowed to touch at all.
-        && changedKeys().hasOnly(['username', 'displayName', 'avatar', 'googlePfp', 'updatedAt', 'following', 'private', 'bio', 'interests'])
+        && changedKeys().hasOnly(['username', 'displayName', 'avatar', 'googlePfp', 'updatedAt', 'following', 'private', 'bio', 'interests', 'circleId'])
+        && (!(changedKeys().hasAny(['circleId']))
+            || (request.resource.data.circleId is string
+                && request.resource.data.circleId.matches('^[A-Za-z0-9_-]{1,64}$')))
         // ABOUT YOU. A short bio, and up to five interests from a fixed
         // list (js/services/aboutRules.js — keep the two in step).
         && (!(changedKeys().hasAny(['bio']))
@@ -699,6 +730,8 @@ service cloud.firestore {
         && sensibleEventWindow(request.resource.data.startTime, request.resource.data.expiresAt)
         && ttlFollowsExpiry()
         && request.resource.data.createdAt == request.time
+        && request.resource.data.circleId == myCircle()
+        && sensibleGeo(request.resource.data.get('geo', null))
         // A host cannot open with a pre-filled guest list or fake hype.
         && request.resource.data.participantUids == [uid()]
         && request.resource.data.hypedUids == []
@@ -1152,6 +1185,16 @@ service cloud.firestore {
     // Students can file; nobody can read, edit or delete from the
     // client. Read them in the Firebase console.
     // ---------------------------------------------------------------
+    /* The circles themselves: a name and a point, readable by anyone
+       signed in and written by nobody from the client. They are made in
+       the console, and the app works with no circle document at all —
+       everything on one is either a display name or the position that
+       events copy. */
+    match /circles/{circleId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
     match /reports/{reportId} {
       allow create: if signedIn()
         && request.resource.data.reporterUid == uid()

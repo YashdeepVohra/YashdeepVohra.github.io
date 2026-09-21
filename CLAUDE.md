@@ -39,9 +39,10 @@ js/app.js           entry: imports, window bindings, boot, back button
 js/config/          firebase init + offline persistence
 js/state/store.js   one mutable object, plus resetState() on logout
 js/services/        auth, events, chat, profile, follow, orbit, block,
-                    search, user, limits, receipt — plus the pure rule
-                    files recapRules, aboutRules, messageRules,
-                    receiptRules, shareRules, matchRules
+                    search, user, limits, receipt, circle — plus the
+                    pure rule files recapRules, aboutRules,
+                    messageRules, receiptRules, shareRules, matchRules,
+                    geoRules
 js/utils/           ui (screens/toasts/repaint registry), confirm, overlays,
                     formatters, theme, viewport
 js/interactions/    search screen, message gestures (swipe, hold)
@@ -98,6 +99,12 @@ Each line is the whole rule. The file after it is the argument for it.
 - A locked profile fetches nothing and paints nothing — `isProfileLocked`
   is asked in the painter, not applied over the top afterwards.
 - An ended event is not live — check `expiresAt`, not `startTime`.
+- The FEED is scoped to your circle; the social graph is not. An event
+  may only be published into its host's own circle.
+- A circle carries a point, and every event copies it into `geo`.
+  Nothing queries it yet — it is there so the switch to "near me" is a
+  query and an index, never a migration. `geoRules.js` says what is
+  left to do.
 - Follow first, orbit later; a private profile you don't follow shows
   counts and a way in, nothing else.
 - A follower is a DOCUMENT (`users/{uid}/followers/{uid}`), `following`
@@ -216,6 +223,7 @@ Decisions already made, with the reason, so they don't get undone:
 | | why |
 |---|---|
 | Feed capped at `LIVE_LIMIT = 60`, recap paged | the recap used to load with the feed and nobody opened it |
+| Feed and recap filtered by `circleId` | 60 is plenty for one campus and meaningless across many — the limit would be spent on strangers nowhere near you |
 | Messages: 25 live + paged scrollback | full history on every chat open |
 | Profiles cached in localStorage, 6h TTL | ~20 reads per open for data that changes twice a year |
 | Firestore offline persistence on | resume tokens: only changed docs bill |

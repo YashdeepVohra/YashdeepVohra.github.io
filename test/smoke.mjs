@@ -90,7 +90,11 @@ const mkEvent = (id, host, title, tag) => ({
   id, hostUid: host, title, place: 'Lawn', description: '', tag,
   startTime: now - 6e5, expiresAt: now + 72e5,
   participantUids: [host], hypedUids: [], pendingUids: [], unconfirmedUids: [],
-  requiresApproval: false, maxCapacity: null
+  requiresApproval: false, maxCapacity: null,
+  // The feed and the recap are both scoped to a circle now, and the
+  // stub's event queries really do filter — an event with no circle on
+  // it is an event in nobody's feed. 'main' is where everybody starts.
+  circleId: 'main'
 });
 
 /* ------------------------------------------------------------------ */
@@ -890,6 +894,92 @@ group('editing and taking back a message');
   ok('deleting blanks the text and drops the quote', dom.deleteBlanks === true);
   ok('the row stays behind as a tombstone', dom.tombstonesAfter === 2 && dom.stillThere === 3,
      JSON.stringify({ t: dom.tombstonesAfter, s: dom.stillThere }));
+}
+
+/* ------------------------------------------------------------------ */
+group('circles, and the geography under them');
+{
+  // The hashes are checked against the reference implementation's own
+  // worked examples. This matters more than it looks: nothing queries
+  // a geohash yet, so a wrong one would sit in the database unnoticed
+  // until the day the feed switches — and THAT is the migration this
+  // whole field exists to avoid.
+  const geo = await page.evaluate(async () => {
+    const g = await import('/js/services/geoRules.js');
+    return {
+      ezs42: g.geohash(42.6, -5.6, 5),
+      london: g.geohash(51.5074, -0.1278, 7),
+      origin: g.geohash(0, 0, 6),
+      prefixShared: g.geohash(51.5074, -0.1278, 5) === g.geohash(51.5079, -0.1271, 5),
+      precision1km: g.precisionForRadius(1000),
+      range: JSON.stringify(g.rangeFor('gcpvj')),
+      km: Math.round(g.distanceM({ lat: 51.5, lng: -0.12 }, { lat: 51.52, lng: -0.12 })),
+      badLat: g.geohash(999, 0, 9),
+      point: JSON.stringify(g.geoPoint(42.6, -5.6, 5)),
+      noPoint: g.geoPoint(NaN, 0)
+    };
+  });
+  ok('a geohash matches the reference implementation', geo.ezs42 === 'ezs42' && geo.london === 'gcpvj0d',
+     geo.ezs42 + ' / ' + geo.london);
+  ok('and the origin is where it should be', geo.origin === 's00000', geo.origin);
+  ok('two points in the same box share a prefix', geo.prefixShared === true);
+  ok('a kilometre wants five characters or so', geo.precision1km === 6, String(geo.precision1km));
+  ok('a prefix range is bounded the way Firestore needs',
+     geo.range === '{"start":"gcpvj","end":"gcpvj"}', geo.range);
+  ok('distance is about right', geo.km > 2100 && geo.km < 2300, String(geo.km));
+  ok('an impossible latitude gets no hash at all', geo.badLat === '');
+  ok('a point carries its own hash', geo.point === '{"lat":42.6,"lng":-5.6,"geohash":"ezs42"}', geo.point);
+  ok('and no point is null, never zero,zero', geo.noPoint === null);
+
+  // The feed is partitioned. Without this it was the sixty events
+  // ending furthest away in the whole database.
+  const scoped = await page.evaluate(async () => {
+    const { state } = await import('/js/state/store.js');
+    const circle = await import('/js/services/circleService.js');
+    const ev = await import('/js/services/eventsService.js');
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const out = {};
+
+    out.defaultsToMain = (state.circleId = '', circle.myCircleId() === 'main');
+    state.circleId = 'northgate';
+    out.readsTheField = circle.myCircleId() === 'northgate';
+
+    // No circle document is a normal state: the app works, there is
+    // simply no name and no point to stamp.
+    state.circleDoc = null;
+    out.noDocNoGeo = circle.circleGeo() === null && circle.circleName() === '';
+
+    state.circleDoc = { id: 'northgate', name: 'North Gate', lat: 42.6, lng: -5.6 };
+    out.named = circle.circleName() === 'North Gate';
+    const g = circle.circleGeo();
+    out.stamps = !!g && g.geohash.indexOf('ezs42') === 0;
+
+    // A circle whose document has no coordinates stamps nothing.
+    state.circleDoc = { id: 'northgate', name: 'North Gate' };
+    out.noCoordsNoStamp = circle.circleGeo() === null;
+
+    // The recap query really filters on it — the stub applies where().
+    state.circleId = 'main';
+    state.circleDoc = null;
+    const H = 3600e3, t = Date.now();
+    const past = (id, cid) => ({ id, hostUid: 'me', title: id, place: 'Lawn', tag: '☕ Chill',
+      startTime: t - 3 * H, expiresAt: t - H, participantUids: ['me', 'g1', 'g2'], hypedUids: [], circleId: cid });
+    window.__events = [past('mine', 'main'), past('theirs', 'elsewhere')];
+    state.recapOrder = []; state.recapCursor = null; state.recapDone = false;
+    await ev.loadRecap({ reset: true });
+    await wait(200);
+    out.recapMine = state.recapOrder.includes('mine');
+    out.recapNotTheirs = !state.recapOrder.includes('theirs');
+    return out;
+  });
+  ok('no circle on the account still means a feed', scoped.defaultsToMain === true);
+  ok('and one that is set is the one used', scoped.readsTheField === true);
+  ok('a circle with no document is not an error', scoped.noDocNoGeo === true);
+  ok('a circle with a document carries its name', scoped.named === true);
+  ok('and stamps events with its position', scoped.stamps === true, JSON.stringify(scoped));
+  ok('a circle with no coordinates stamps nothing', scoped.noCoordsNoStamp === true);
+  ok('recap shows your own circle', scoped.recapMine === true, JSON.stringify(scoped));
+  ok("and not somebody else's", scoped.recapNotTheirs === true);
 }
 
 /* ------------------------------------------------------------------ */
