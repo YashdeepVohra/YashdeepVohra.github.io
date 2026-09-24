@@ -120,12 +120,12 @@ await seed({});
 const empty = await page.evaluate(() => ({
   heading: document.querySelector('#events .empty-state.first-run h4')?.innerText,
   starters: document.querySelectorAll('#events .starter').length,
-  bolt: !!document.querySelector('.fr-spark svg'),
+  bolt: !!document.querySelector('.first-run img.fr-logo[src="/logo.svg"]'),
   scroll: document.body.scrollWidth <= document.documentElement.clientWidth
 }));
 ok('empty feed asks for something', !!empty.heading, empty.heading);
 ok('three starters plus start-from-scratch', empty.starters === 4, String(empty.starters));
-ok('brand mark is drawn, not an icon font', empty.bolt);
+ok('the empty feed shows the firefly logo', empty.bolt);
 ok('no horizontal scroll', empty.scroll);
 
 /* ------------------------------------------------------------------ */

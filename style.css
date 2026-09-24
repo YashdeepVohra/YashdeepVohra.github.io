@@ -3076,6 +3076,8 @@ html:not(.kb-open) .chat-footer {
   box-shadow: none;
   animation: sparkFloat 4.5s var(--ease) infinite;
 }
+/* The firefly itself on the day-one screen: the logo brings its own tile. */
+img.fr-logo { background: none; object-fit: contain; }
 @keyframes sparkFloat {
   0%, 100% { transform: translateY(0) rotate(-4deg); }
   50%      { transform: translateY(-6px) rotate(4deg); }

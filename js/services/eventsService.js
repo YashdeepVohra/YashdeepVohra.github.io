@@ -1392,14 +1392,10 @@ export function renderEvents() {
     liveCards,
     "",
     `<div class="empty-state first-run">
-       <span class="fr-spark">
-         <!-- Drawn rather than an icon font. This is the first thing
-              anybody sees, and a webfont that fails to load would leave
-              an empty gradient blob in its place. -->
-         <svg viewBox="0 0 24 24" width="27" height="27" aria-hidden="true">
-           <path d="M13.5 2 4 13.2h6.2L9.8 22 20 10.6h-6.6L13.5 2Z" fill="currentColor"/>
-         </svg>
-       </span>
+       <!-- The firefly: the brand mark greets an empty feed. An image of
+            our own SVG, never an icon font, so a font that fails to load
+            cannot leave a blank in the first thing anybody sees. -->
+       <img class="fr-spark fr-logo" src="/logo.svg" alt="" width="58" height="58">
        <h4>Someone has to go first</h4>
        <p>Nothing is on right now. Start something and everyone nearby sees it the second you publish.</p>
        <div class="starter-grid">
