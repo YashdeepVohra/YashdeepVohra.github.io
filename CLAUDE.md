@@ -19,6 +19,8 @@ matching file before changing that area; don't read them all.
 - The repo lives on the user's machine. Edit it there; don't rebuild it
   in the cloud container.
 - **Always `node --check` every changed .js** before committing.
+- `.vercelignore` keeps `package.json`/`build.mjs` away from Vercel. If
+  Vercel ever sees them it tries to BUILD the site and deploys stop.
 - **After any change under `js/`, run `npm run build`.** The browser loads
   `dist/app.js`, one bundled file; `js/` is the source. `dist/` is
   committed (no build on the host) and the smoke suite fails if it is stale.

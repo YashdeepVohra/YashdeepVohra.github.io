@@ -1,0 +1,25 @@
+# What Vercel must NOT receive.
+#
+# The site is plain files served as they are. The moment Vercel sees a
+# package.json with a "build" script it stops serving the folder and
+# tries to install and build it instead — that is what stopped every
+# deploy after the bundling commit. The bundle (dist/app.js) is already
+# committed, so there is nothing for Vercel to build: package.json and
+# build.mjs are tools for YOUR machine only (npm run build).
+package.json
+package-lock.json
+build.mjs
+node_modules
+
+# Working notes, tests and old copies: in the repo, never on the site.
+CLAUDE.md
+SECURITY.md
+docs
+test
+_backup_pre_uid
+Claude outputs
+.claude
+firebase.json
+.firebaserc
+firestore.rules
+firestore.indexes.json
