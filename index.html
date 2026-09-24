@@ -99,50 +99,18 @@
 
        1. The Firebase SDK is `defer`, not blocking. Deferred scripts
           and module scripts run in document order, so the SDK is still
-          there before js/app.js — but the page paints first.
-       2. Every module is listed below as a modulepreload, so the
-          browser fetches all 33 at once instead of discovering them one
-          import at a time (six round trips deep on a slow line).
-          test/smoke.mjs fails if a module is missing from this list.
+          there before the app — but the page paints first.
+       2. The app is ONE file, dist/app.js, bundled from js/ by
+          build.mjs (npm run build), and preloaded here so it downloads
+          alongside the SDK. The source in js/ is unchanged; this is
+          only what the browser gets.
        3. A failed script is reported to the boot watchdog at the
           bottom of the page, which retries instead of giving up. -->
   <script>window.__bootFailed = []; function __sdkFail(el) { window.__bootFailed.push(el.src); }</script>
   <script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js" onerror="__sdkFail(this)"></script>
   <script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js" onerror="__sdkFail(this)"></script>
   <script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js" onerror="__sdkFail(this)"></script>
-  <link rel="modulepreload" href="js/app.js">
-  <link rel="modulepreload" href="js/config/firebase.js">
-  <link rel="modulepreload" href="js/state/store.js">
-  <link rel="modulepreload" href="js/utils/ui.js">
-  <link rel="modulepreload" href="js/services/authService.js">
-  <link rel="modulepreload" href="js/services/eventsService.js">
-  <link rel="modulepreload" href="js/services/chatService.js">
-  <link rel="modulepreload" href="js/services/profileService.js">
-  <link rel="modulepreload" href="js/services/orbitService.js">
-  <link rel="modulepreload" href="js/services/followService.js">
-  <link rel="modulepreload" href="js/utils/theme.js">
-  <link rel="modulepreload" href="js/utils/confirm.js">
-  <link rel="modulepreload" href="js/services/receiptService.js">
-  <link rel="modulepreload" href="js/services/shareService.js">
-  <link rel="modulepreload" href="js/interactions/swipeReply.js">
-  <link rel="modulepreload" href="js/interactions/pullRefresh.js">
-  <link rel="modulepreload" href="js/utils/viewport.js">
-  <link rel="modulepreload" href="js/utils/overlays.js">
-  <link rel="modulepreload" href="js/interactions/searchUI.js">
-  <link rel="modulepreload" href="js/utils/formatters.js">
-  <link rel="modulepreload" href="js/services/userService.js">
-  <link rel="modulepreload" href="js/services/limitsService.js">
-  <link rel="modulepreload" href="js/services/circleService.js">
-  <link rel="modulepreload" href="js/services/blockService.js">
-  <link rel="modulepreload" href="js/services/feedRules.js">
-  <link rel="modulepreload" href="js/services/recapRules.js">
-  <link rel="modulepreload" href="js/services/messageRules.js">
-  <link rel="modulepreload" href="js/services/shareRules.js">
-  <link rel="modulepreload" href="js/services/searchService.js">
-  <link rel="modulepreload" href="js/services/aboutRules.js">
-  <link rel="modulepreload" href="js/services/receiptRules.js">
-  <link rel="modulepreload" href="js/services/geoRules.js">
-  <link rel="modulepreload" href="js/services/matchRules.js">
+  <link rel="modulepreload" href="dist/app.js">
 
   <!-- Theme before first paint, so a dark-mode phone never flashes white.
        utils/theme.js takes over once the app has loaded. -->
@@ -868,7 +836,7 @@
       // Our own code threw while starting. A reload is still the fix
       // for the likeliest cause (half of it arrived from one version
       // and half from the next), so the button stays.
-      if (e.filename && e.filename.indexOf("/js/") !== -1) {
+      if (e.filename && /\/(js|dist)\//.test(e.filename)) {
         fail("Something went wrong while starting. Try again — if it keeps happening, update your browser.", "The app didn't start.");
       }
     }, true);
@@ -912,6 +880,7 @@
   })();
 </script>
 
-<script type="module" src="js/app.js"></script>
+<!-- Built from js/app.js — run `npm run build` after changing anything in js/. -->
+<script type="module" src="dist/app.js"></script>
 </body>
 </html>

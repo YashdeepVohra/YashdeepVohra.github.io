@@ -1,0 +1,12 @@
+{
+  "name": "livesociya",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "test": "node test/smoke.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "0.24.0"
+  }
+}

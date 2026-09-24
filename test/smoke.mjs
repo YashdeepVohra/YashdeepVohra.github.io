@@ -27,6 +27,23 @@ const ok = (name, cond, detail = '') => {
 const group = (name) => console.log('\n' + name);
 
 const browser = await chromium.launch(CHROME ? { executablePath: CHROME } : {});
+
+// index.html loads dist/app.js, the bundle. These tests reach into the
+// app through its modules (`import('/js/state/store.js')`), and a module
+// imported that way is only the SAME instance the app is using if the
+// app was loaded from js/ too. So every context here swaps the bundle
+// for a one-line module that imports the source. The service worker is
+// blocked because requests it serves never reach a route. The bundle
+// itself gets its own check in "one file for the browser".
+const rawNewContext = browser.newContext.bind(browser);
+browser.newContext = async (opts = {}) => {
+  const ctx = await rawNewContext({ serviceWorkers: 'block', ...opts });
+  await ctx.route('**/dist/app.js', (r) => r.fulfill({
+    contentType: 'text/javascript', body: 'import "/js/app.js";'
+  }));
+  return ctx;
+};
+browser.newPage = async (opts) => (await browser.newContext(opts)).newPage();
 const page = await browser.newPage({ viewport: { width: 430, height: 950 } });
 
 const errors = [];
@@ -3390,31 +3407,46 @@ group('everything scrolls to its bottom');
 }
 
 /* ------------------------------------------------------------------ */
-group('slow networks, a phone on its side, and Send');
+group('one file for the browser, a phone on its side, and Send');
 {
-  // Every module the app imports is preloaded, or a slow line goes back
-  // to discovering them one import at a time.
+  // The browser gets one file. It must be built from the js/ that is
+  // here now, or a change would test green and ship stale.
   const { readFileSync } = await import('node:fs');
-  const { dirname, join, normalize } = await import('node:path');
+  const { join } = await import('node:path');
   const root = fileURLToPath(new URL('..', import.meta.url));
   const html = readFileSync(join(root, 'index.html'), 'utf8');
-  const preloaded = new Set([...html.matchAll(/rel="modulepreload" href="([^"]+)"/g)].map((m) => normalize(m[1])));
-  const graph = new Set();
-  const walk = (file) => {
-    if (graph.has(file)) return;
-    graph.add(file);
-    const src = readFileSync(join(root, file), 'utf8');
-    for (const m of src.matchAll(/(?:import|export)[^'"]*?from\s*['"](\.[^'"]+)['"]|import\s*['"](\.[^'"]+)['"]/g)) {
-      walk(normalize(join(dirname(file), m[1] || m[2])));
-    }
-  };
-  walk('js/app.js');
-  const missing = [...graph].filter((f) => !preloaded.has(f));
-  const stale = [...preloaded].filter((f) => !graph.has(f));
-  ok('every module is a modulepreload', missing.length === 0, missing.join(', '));
-  ok('and nothing preloaded that is not imported', stale.length === 0, stale.join(', '));
+  let fresh = false, why = '';
+  try {
+    const { build } = await import('esbuild');
+    const { OPTIONS } = await import(new URL('../build.mjs', import.meta.url).href);
+    const out = await build({ ...OPTIONS, absWorkingDir: root, write: false });
+    const js = out.outputFiles.find((f) => f.path.endsWith('app.js'));
+    fresh = js && js.text === readFileSync(join(root, 'dist/app.js'), 'utf8');
+    if (!fresh) why = 'dist/app.js is older than js/ — run npm run build';
+  } catch (e) { why = 'could not rebuild: ' + e.message.slice(0, 120); }
+  ok('dist/app.js is built from the current js/', fresh, why);
+  ok('index.html loads the bundle, and preloads it',
+     /<script type="module" src="dist\/app\.js"><\/script>/.test(html) && /rel="modulepreload" href="dist\/app\.js"/.test(html));
   ok('the Firebase SDK does not block the first paint',
      [...html.matchAll(/<script[^>]*firebasejs[^>]*>/g)].every((m) => /\sdefer\b/.test(m[0])));
+
+  // And the real bundle, not the source, actually starts.
+  {
+    const ctx = await rawNewContext({ serviceWorkers: 'block' });
+    const real = await ctx.newPage();
+    const errs = [];
+    real.on('pageerror', (e) => errs.push(e.message.slice(0, 140)));
+    await real.addInitScript({ path: fileURLToPath(new URL('./stub.js', import.meta.url)) });
+    await real.goto(APP_URL, { waitUntil: 'domcontentloaded' });
+    await real.waitForTimeout(1800);
+    const r = await real.evaluate(() => ({
+      booted: !!window.__livesociyaBooted,
+      scripts: performance.getEntriesByType('resource').filter((e) => /\/(js|dist)\//.test(e.name)).map((e) => new URL(e.name).pathname)
+    }));
+    ok('the bundle boots on its own', r.booted && errs.length === 0, errs.join(' | '));
+    ok('and it is the only app script the browser fetches', r.scripts.length === 1 && r.scripts[0] === '/dist/app.js', r.scripts.join(', '));
+    await ctx.close();
+  }
 
   const boot = await page.evaluate(() => ({
     booted: !!window.__livesociyaBooted,

@@ -24,10 +24,17 @@ stacked up:
 - The SDK tags are `defer`. Deferred classic scripts and module scripts
   run in document order, so `firebase` still exists before `js/app.js`
   runs, but the page paints first.
-- Every module is a `<link rel="modulepreload">`, so all of them download
-  at once. `test/smoke.mjs` walks the import graph and fails on a module
-  missing from the list, or on a listed one nothing imports. Add a module
-  and you add its line.
+- The app is ONE file. `build.mjs` bundles `js/` with esbuild into
+  `dist/app.js`: minified, lowered to what Safari 13 understands, with a
+  source map that points back at `js/`. 466 KB in 33 requests became
+  174 KB (53 KB gzipped) in one. `index.html` preloads it next to the SDK.
+  `js/` is still the source and is what you edit. `dist/` is committed
+  because the host serves the repo as it is, with no build step. The
+  smoke suite rebuilds in memory and fails if `dist/app.js` differs.
+  The tests themselves swap the bundle for `import "/js/app.js"` so that
+  their own `import('/js/…')` reaches the same module instances. They
+  check the real bundle separately: it boots, and it is the only app
+  script fetched.
 - boxicons loads with `media="print" onload="this.media='all'"`, so it
   never holds up the first paint. That is why every icon-only button is
   drawn (`.ico`, inline SVG). A slow unpkg used to leave empty circles.
@@ -56,8 +63,8 @@ cache-first worker strands everyone on an old version. So:
   through. The data has its own offline cache (`enablePersistence`).
 - Bumping `VERSION` throws every cached copy away on the next activate.
 
-The known cost: on a slow line right after a deploy, one module can come
-from the cache and its neighbour from the network. If their exports no
-longer match, the app throws while starting, the watchdog shows "Try
-again", and the retry gets consistent files. That is rare, and better
-than never starting at all.
+With the app in one file, the old worry (one module from the cache and
+its neighbour from the network, with exports that no longer match) is
+mostly gone. What is left is index.html and dist/app.js arriving from
+different versions. If that ever throws, the watchdog's "Try again"
+fetches both fresh.

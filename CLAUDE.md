@@ -3,8 +3,8 @@
 **What it is.** A campus app for things happening *right now*: somebody
 starts an event, everyone nearby sees it instantly, it vanishes when it
 ends. Plus direct messages, and a social graph. Live at livesociya.com,
-Firebase Hosting + Firestore, vanilla ES modules — no framework, no build
-step. Open `index.html` over http (not `file://`, modules won't load).
+Firestore, vanilla ES modules — no framework. The only build step is
+bundling `js/` into `dist/app.js` with esbuild (`build.mjs`). Open `index.html` over http (not `file://`, modules won't load).
 
 This file is loaded into every session before anything is typed, so it is
 kept short on purpose. It holds the RULES. The reason behind each one —
@@ -18,8 +18,10 @@ matching file before changing that area; don't read them all.
 
 - The repo lives on the user's machine. Edit it there; don't rebuild it
   in the cloud container.
-- **Always `node --check` every changed .js** before committing. There is
-  no build step to catch a typo.
+- **Always `node --check` every changed .js** before committing.
+- **After any change under `js/`, run `npm run build`.** The browser loads
+  `dist/app.js`, one bundled file; `js/` is the source. `dist/` is
+  committed (no build on the host) and the smoke suite fails if it is stale.
 - **Run `test/smoke.mjs`** before saying something works (see Testing).
 - **Commit when a change is done and tested** (`git add -A`, so new files
   come along). The user only runs `git push` — don't leave work unstaged.
@@ -34,6 +36,7 @@ matching file before changing that area; don't read them all.
 
 ```
 index.html          one page, every screen is a div that hides
+build.mjs, dist/    esbuild bundles js/ into dist/app.js — generated, committed
 style.css           one sheet, tokens at the top (--vibe-*, --s-*, --lift-*)
 js/app.js           entry: imports, window bindings, boot, back button
 js/config/          firebase init + offline persistence
@@ -185,8 +188,8 @@ Each line is the whole rule. The file after it is the argument for it.
 
 **Starting on a bad network** → `docs/boot.md`
 
-- The Firebase SDK is `defer` and every module is a `modulepreload`;
-  the smoke suite fails if the list and the import graph disagree.
+- The Firebase SDK is `defer`; the app is one preloaded file,
+  `dist/app.js`. Tests load `js/` in its place (see smoke.mjs top).
 - The boot watchdog fails on a real failure only, retries once, and
   says "still loading" while it is merely slow. No fixed deadline.
 - `sw.js` is network-first for our own files (a cached copy after 4s or
@@ -312,6 +315,7 @@ startAfter), batches that really apply, and counters on `window.__reads` /
 `window.__writes`.
 
 ```
+npm install                        # once: esbuild (and put playwright on the path)
 python3 -m http.server 8111        # from the repo root
 node test/smoke.mjs                # CHROME_PATH=... if playwright has no browser
 node test/contrast.mjs             # no browser, no network — just the palette
