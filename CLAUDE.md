@@ -178,6 +178,20 @@ Each line is the whole rule. The file after it is the argument for it.
   must be drawn, or a font that fails to load leaves nothing there.
 - Zoom is off everywhere, on purpose. The keyboard is handled by the
   visual viewport, not `innerHeight`.
+- Send cancels its own mousedown, so the keyboard never drops; nothing
+  inside a fixed layer may `scrollIntoView` (on iOS it scrolls the page).
+- Phones are portrait only. A web page cannot lock rotation, so a phone
+  on its side gets `.rotate-cover` and the app behind it stops painting.
+
+**Starting on a bad network** → `docs/boot.md`
+
+- The Firebase SDK is `defer` and every module is a `modulepreload`;
+  the smoke suite fails if the list and the import graph disagree.
+- The boot watchdog fails on a real failure only, retries once, and
+  says "still loading" while it is merely slow. No fixed deadline.
+- `sw.js` is network-first for our own files (a cached copy after 4s or
+  on failure) and cache-first only for versioned CDN URLs. It never
+  touches Firestore, Auth or `/__/`.
 
 **Painting the feed** → `docs/feed.md`
 

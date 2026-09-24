@@ -370,15 +370,8 @@ function boot() {
     if (state.uid && !state.eventsUnsubscribe) retryFeedNow();
   });
 
-  // Registering this is what lets a browser offer "add to home screen".
-  // It caches nothing — see sw.js for why that is deliberate.
-  if ("serviceWorker" in navigator) {
-    window.addEventListener("load", () => {
-      navigator.serviceWorker.register("/sw.js").catch((e) => {
-        console.warn("Install prompt unavailable:", e.message);
-      });
-    });
-  }
+  // The service worker is registered by the watchdog in index.html, so
+  // it is installed even on a visit where this module never ran.
 
   // A hype waits a moment before it is written, so anything still
   // waiting has to go when the app is put away — otherwise tapping and

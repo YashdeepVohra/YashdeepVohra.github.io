@@ -85,6 +85,10 @@ export function initViewportFit() {
 
   let frame = 0;
   let wasOpen = false;
+  let scrollBeforeKb = window.scrollY;
+
+  const layerOpen = () => !!document.querySelector(
+    "#chatScreen:not(.hidden), .profile-screen-wrapper:not(.hidden), .full-screen-view:not(.hidden)");
 
   const measure = () => {
     const zoomed = (vv.scale || 1) > 1.05;
@@ -104,6 +108,13 @@ export function initViewportFit() {
     if (open && !wasOpen) {
       const box = document.getElementById("messages");
       if (box) box.scrollTop = box.scrollHeight;
+    }
+    // iOS scrolls the page up to make room for the keyboard and does not
+    // always scroll it back when the keyboard goes. Under a full-screen
+    // layer nothing needs the page to move, so put it back where it was;
+    // left alone, the chat sat raised with a strip of blank below it.
+    if (!open && wasOpen && layerOpen() && Math.abs(window.scrollY - scrollBeforeKb) > 1) {
+      window.scrollTo(0, scrollBeforeKb);
     }
     wasOpen = open;
   };
@@ -133,6 +144,7 @@ export function initViewportFit() {
   document.addEventListener("focusin", (event) => {
     const el = event.target;
     if (!(el instanceof HTMLElement) || !typingInField()) return;
+    if (!wasOpen) scrollBeforeKb = window.scrollY;
     settle();
 
     setTimeout(() => {

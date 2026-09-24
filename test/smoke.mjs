@@ -835,7 +835,8 @@ group('editing and taking back a message');
     const input = document.getElementById('msgInput');
     out.loadedIntoBox = input.value;
     out.noteIsEditing = !!document.querySelector('.compose-note.editing');
-    out.sendBecameTick = !!document.querySelector('#inputWrapper button i.bx-check');
+    out.sendBecameTick = document.getElementById('sendBtn')?.dataset.mode === 'edit'
+      && !!document.querySelector('#sendBtn svg');
 
     input.value = 'typo here';
     await window.sendMessage();
@@ -3386,6 +3387,70 @@ group('everything scrolls to its bottom');
        unreachable.length === 0, unreachable.join(', '));
     ok(`no errors getting there on ${label}`, errs.length === 0, errs.join(' | '));
   }
+}
+
+/* ------------------------------------------------------------------ */
+group('slow networks, a phone on its side, and Send');
+{
+  // Every module the app imports is preloaded, or a slow line goes back
+  // to discovering them one import at a time.
+  const { readFileSync } = await import('node:fs');
+  const { dirname, join, normalize } = await import('node:path');
+  const root = fileURLToPath(new URL('..', import.meta.url));
+  const html = readFileSync(join(root, 'index.html'), 'utf8');
+  const preloaded = new Set([...html.matchAll(/rel="modulepreload" href="([^"]+)"/g)].map((m) => normalize(m[1])));
+  const graph = new Set();
+  const walk = (file) => {
+    if (graph.has(file)) return;
+    graph.add(file);
+    const src = readFileSync(join(root, file), 'utf8');
+    for (const m of src.matchAll(/(?:import|export)[^'"]*?from\s*['"](\.[^'"]+)['"]|import\s*['"](\.[^'"]+)['"]/g)) {
+      walk(normalize(join(dirname(file), m[1] || m[2])));
+    }
+  };
+  walk('js/app.js');
+  const missing = [...graph].filter((f) => !preloaded.has(f));
+  const stale = [...preloaded].filter((f) => !graph.has(f));
+  ok('every module is a modulepreload', missing.length === 0, missing.join(', '));
+  ok('and nothing preloaded that is not imported', stale.length === 0, stale.join(', '));
+  ok('the Firebase SDK does not block the first paint',
+     [...html.matchAll(/<script[^>]*firebasejs[^>]*>/g)].every((m) => /\sdefer\b/.test(m[0])));
+
+  const boot = await page.evaluate(() => ({
+    booted: !!window.__livesociyaBooted,
+    error: document.getElementById('boot-error').classList.contains('hidden'),
+    slow: document.getElementById('boot-slow').classList.contains('hidden')
+  }));
+  ok('a booted app shows no boot warning', boot.booted && boot.error && boot.slow, JSON.stringify(boot));
+
+  const send = await page.evaluate(() => {
+    const btn = document.getElementById('sendBtn');
+    const ev = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+    btn.dispatchEvent(ev);
+    return { kept: ev.defaultPrevented, drawn: !!btn.querySelector('svg'), type: btn.type };
+  });
+  const blankIcons = await page.evaluate(() => [...document.querySelectorAll('.back-btn, .icon-btn, .fab, .brand-dot, .login-mark')]
+    .filter((el) => !el.querySelector('svg')).map((el) => el.className + (el.getAttribute('onclick') ? ' ' + el.getAttribute('onclick') : '')));
+  ok('every icon-only button is drawn, not a font glyph', blankIcons.length === 0, blankIcons.join(' | '));
+  ok('Send never takes focus from the field', send.kept, JSON.stringify(send));
+  ok('and its icon is drawn, not a font glyph', send.drawn && send.type === 'button', JSON.stringify(send));
+
+  const turn = await page.evaluate(async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const root = document.documentElement;
+    const cover = document.querySelector('.rotate-cover');
+    const out = { hiddenUpright: getComputedStyle(cover).display === 'none' };
+    root.classList.add('rotate-lock'); await wait(50);
+    out.coverShown = getComputedStyle(cover).display !== 'none' && getComputedStyle(cover).visibility === 'visible';
+    out.appHidden = [...document.body.children].filter((el) => el !== cover && el.tagName !== 'SCRIPT')
+      .every((el) => getComputedStyle(el).visibility === 'hidden');
+    root.classList.remove('rotate-lock'); await wait(50);
+    out.back = getComputedStyle(cover).display === 'none';
+    return out;
+  });
+  ok('upright, the rotate cover is not there', turn.hiddenUpright, JSON.stringify(turn));
+  ok('sideways, the cover is all that paints', turn.coverShown && turn.appHidden, JSON.stringify(turn));
+  ok('and turning back puts the app back', turn.back, JSON.stringify(turn));
 }
 
 /* ------------------------------------------------------------------ */

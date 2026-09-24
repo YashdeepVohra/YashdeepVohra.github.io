@@ -89,11 +89,60 @@
        headings ask for weight 800, the fallback is already heavy, so
        the swap changes letterforms rather than weight. -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300..800&family=Archivo:wght@800&display=swap" rel="stylesheet">
-  <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
+  <!-- Icons load without holding up the first paint. Anything
+       load-bearing is inline SVG, so a slow unpkg costs a few glyphs
+       for a moment, never the whole page. -->
+  <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet" media="print" onload="this.media='all'">
 
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <!-- SLOW NETWORKS. Three things, because on campus 3G each one alone
+       was the difference between an app and "The app didn't start":
+
+       1. The Firebase SDK is `defer`, not blocking. Deferred scripts
+          and module scripts run in document order, so the SDK is still
+          there before js/app.js — but the page paints first.
+       2. Every module is listed below as a modulepreload, so the
+          browser fetches all 33 at once instead of discovering them one
+          import at a time (six round trips deep on a slow line).
+          test/smoke.mjs fails if a module is missing from this list.
+       3. A failed script is reported to the boot watchdog at the
+          bottom of the page, which retries instead of giving up. -->
+  <script>window.__bootFailed = []; function __sdkFail(el) { window.__bootFailed.push(el.src); }</script>
+  <script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js" onerror="__sdkFail(this)"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js" onerror="__sdkFail(this)"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js" onerror="__sdkFail(this)"></script>
+  <link rel="modulepreload" href="js/app.js">
+  <link rel="modulepreload" href="js/config/firebase.js">
+  <link rel="modulepreload" href="js/state/store.js">
+  <link rel="modulepreload" href="js/utils/ui.js">
+  <link rel="modulepreload" href="js/services/authService.js">
+  <link rel="modulepreload" href="js/services/eventsService.js">
+  <link rel="modulepreload" href="js/services/chatService.js">
+  <link rel="modulepreload" href="js/services/profileService.js">
+  <link rel="modulepreload" href="js/services/orbitService.js">
+  <link rel="modulepreload" href="js/services/followService.js">
+  <link rel="modulepreload" href="js/utils/theme.js">
+  <link rel="modulepreload" href="js/utils/confirm.js">
+  <link rel="modulepreload" href="js/services/receiptService.js">
+  <link rel="modulepreload" href="js/services/shareService.js">
+  <link rel="modulepreload" href="js/interactions/swipeReply.js">
+  <link rel="modulepreload" href="js/interactions/pullRefresh.js">
+  <link rel="modulepreload" href="js/utils/viewport.js">
+  <link rel="modulepreload" href="js/utils/overlays.js">
+  <link rel="modulepreload" href="js/interactions/searchUI.js">
+  <link rel="modulepreload" href="js/utils/formatters.js">
+  <link rel="modulepreload" href="js/services/userService.js">
+  <link rel="modulepreload" href="js/services/limitsService.js">
+  <link rel="modulepreload" href="js/services/circleService.js">
+  <link rel="modulepreload" href="js/services/blockService.js">
+  <link rel="modulepreload" href="js/services/feedRules.js">
+  <link rel="modulepreload" href="js/services/recapRules.js">
+  <link rel="modulepreload" href="js/services/messageRules.js">
+  <link rel="modulepreload" href="js/services/shareRules.js">
+  <link rel="modulepreload" href="js/services/searchService.js">
+  <link rel="modulepreload" href="js/services/aboutRules.js">
+  <link rel="modulepreload" href="js/services/receiptRules.js">
+  <link rel="modulepreload" href="js/services/geoRules.js">
+  <link rel="modulepreload" href="js/services/matchRules.js">
 
   <!-- Theme before first paint, so a dark-mode phone never flashes white.
        utils/theme.js takes over once the app has loaded. -->
@@ -111,9 +160,51 @@
       if (m) m.setAttribute("content", t === "dark" ? "#1a2327" : "#e6f2dd");
     })();
   </script>
+  <!-- Portrait only, on phones. Turning an iPhone sideways made Safari
+       re-lay-out and repaint the whole app at once, and that was
+       enough to kill the tab. A phone on its side now gets the cover
+       below instead, and the app behind it stops painting (visibility,
+       not display, so every scroll position survives the turn back).
+       Screen orientation, never the viewport's shape: an Android
+       keyboard makes a portrait viewport wider than tall. -->
+  <script>
+    (function () {
+      var root = document.documentElement;
+      function sideways() {
+        try {
+          var phone = Math.min(screen.width, screen.height) < 540 &&
+            window.matchMedia && matchMedia("(pointer: coarse)").matches;
+          if (!phone) return false;
+          if (screen.orientation && screen.orientation.type) {
+            return screen.orientation.type.indexOf("landscape") === 0;
+          }
+          return Math.abs(window.orientation || 0) === 90;
+        } catch (e) { return false; }
+      }
+      function check() { root.classList.toggle("rotate-lock", sideways()); }
+      check();
+      if (screen.orientation && screen.orientation.addEventListener) {
+        screen.orientation.addEventListener("change", check);
+      }
+      window.addEventListener("orientationchange", check);
+      window.addEventListener("resize", check);
+      // Only an installed app may actually lock; everywhere else this
+      // is refused, quietly, and the cover does the job.
+      try { screen.orientation.lock("portrait").catch(function () {}); } catch (e) {}
+    })();
+  </script>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+
+<div class="rotate-cover" aria-hidden="true">
+  <svg viewBox="0 0 48 48" width="56" height="56" aria-hidden="true">
+    <rect x="15" y="5" width="18" height="38" rx="4" fill="none" stroke="currentColor" stroke-width="2.5"/>
+    <line x1="21" y1="37" x2="27" y2="37" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+  </svg>
+  <p class="rotate-cover-title">Turn your phone upright</p>
+  <p class="rotate-cover-sub">livesociya works in portrait.</p>
+</div>
 
 <!-- =====================================================================
      LANDING — what a stranger sees when a classmate shares the link
@@ -122,7 +213,7 @@
   <div class="login-aura a1"></div>
   
   <div class="login-card">
-    <div class="login-mark"><i class='bx bxs-bolt'></i></div>
+    <div class="login-mark"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M13.2 2 4.5 13.5h6.3L9.9 22l8.8-11.6h-6.4z"/></svg></div>
     <h1 class="login-title">livesociya</h1>
     <p class="login-sub">See what's happening on campus, right now.</p>
 
@@ -153,10 +244,10 @@
   <!-- Desktop sidebar -->
   <aside class="sidebar">
     <button class="sidebar-brand brand-home" onclick="showTab('events')" aria-label="Go to Live Now">
-      <div class="brand-dot"><i class='bx bxs-bolt'></i></div>
+      <div class="brand-dot"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M13.2 2 4.5 13.5h6.3L9.9 22l8.8-11.6h-6.4z"/></svg></div>
       <div class="title">livesociya</div>
     </button>
-    <button class="side-item side-search" onclick="openSearch()"><i class='bx bx-search'></i> Search</button>
+    <button class="side-item side-search" onclick="openSearch()"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg> Search</button>
     <button class="side-item active" data-tab="events" onclick="showTab('events')"><i class='bx bx-bolt-circle'></i> Live Now</button>
     <button class="side-item" data-tab="recap" onclick="showTab('recap')"><i class='bx bx-history'></i> Recap</button>
     <button class="side-item" data-tab="chats" onclick="showTab('chats')">
@@ -164,7 +255,7 @@
       <div id="sideBadge" class="side-badge hidden"></div>
     </button>
     <button class="side-item" onclick="openOrbitScreen()">
-      <i class='bx bx-planet'></i> Orbit
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><ellipse cx="12" cy="12" rx="10" ry="3.4" transform="rotate(-25 12 12)"/></svg> Orbit
       <div class="side-badge orbit-badge hidden"></div>
     </button>
     <button class="sidebar-create" onclick="openCreateScreen()">+ New Event</button>
@@ -179,13 +270,13 @@
   <!-- Mobile top bar -->
   <header class="topbar">
     <button class="brand-lockup brand-home" onclick="showTab('events')" aria-label="Go to Live Now">
-      <div class="brand-dot"><i class='bx bxs-bolt'></i></div>
+      <div class="brand-dot"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M13.2 2 4.5 13.5h6.3L9.9 22l8.8-11.6h-6.4z"/></svg></div>
       <div class="title">livesociya</div>
     </button>
     <div class="topbar-actions">
-      <button class="icon-btn" onclick="openSearch()" aria-label="Search"><i class='bx bx-search'></i></button>
+      <button class="icon-btn" onclick="openSearch()" aria-label="Search"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg></button>
       <button class="icon-btn has-badge" onclick="openOrbitScreen()" aria-label="Orbit">
-        <i class='bx bx-planet'></i>
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><ellipse cx="12" cy="12" rx="10" ry="3.4" transform="rotate(-25 12 12)"/></svg>
         <span class="nav-badge orbit-badge hidden"></span>
       </button>
       <button class="profileBtn hidden" onclick="window.openProfileScreen()" id="topAvatar">👤</button>
@@ -237,9 +328,9 @@
     <div id="chatsTab" class="hidden">
       <div class="section-head"><h3>Messages</h3></div>
       <div class="inbox-search">
-        <i class='bx bx-search'></i>
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg>
         <input id="chatUser" placeholder="Find someone by handle..." oninput="onInboxSearch(this.value)" onkeydown="if(event.key === 'Enter') startChat()" autocomplete="off" autocapitalize="none" spellcheck="false" />
-        <button class="icon-btn clear-btn hidden" id="inboxSearchClear" onclick="clearInboxSearch()" aria-label="Clear"><i class='bx bx-x'></i></button>
+        <button class="icon-btn clear-btn hidden" id="inboxSearchClear" onclick="clearInboxSearch()" aria-label="Clear"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button>
       </div>
       <div id="chatList"></div>
     </div>
@@ -288,7 +379,7 @@
   <!-- Chat -->
   <div id="chatScreen" class="hidden">
     <div class="chat-header">
-      <button class="back-btn" onclick="history.back()"><i class='bx bx-left-arrow-alt'></i></button>
+      <button class="back-btn" onclick="history.back()"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 5.5 4.5 12l6.5 6.5"/></svg></button>
       <div class="chat-avatar" id="chatHeaderAvatar" style="width:38px; height:38px; font-size:16px;">?</div>
       <div id="chatWithTitle" class="header-title">User</div>
     </div>
@@ -305,7 +396,12 @@
       <div id="replyPreviewContainer" style="width:100%;"></div>
       <div id="inputWrapper" class="input-wrapper">
         <input id="msgInput" placeholder="Message..." autocomplete="off" oninput="handleTyping()" onkeydown="if(event.key === 'Enter') sendMessage()" />
-        <button onclick="sendMessage()"><i class='bx bxs-send'></i></button>
+        <!-- mousedown is cancelled so a tap on Send never takes focus off
+             the field: on iOS that blur dropped the keyboard, and the
+             page it had scrolled up stayed up, leaving the composer
+             floating with a gap under it. The icon is drawn, not a font
+             glyph, so a slow network can't leave a blank circle here. -->
+        <button id="sendBtn" type="button" data-mode="send" aria-label="Send" onmousedown="event.preventDefault()" onclick="sendMessage()"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M3.4 20.4 21 12 3.4 3.6l-.01 6.53L15 12 3.39 13.87z"/></svg></button>
       </div>
     </div>
   </div>
@@ -314,7 +410,7 @@
   <div id="profileScreen" class="hidden profile-screen-wrapper">
     <div class="chat-header profile-header-layout">
       <div class="header-left">
-        <button class="back-btn" onclick="history.back()"><i class='bx bx-left-arrow-alt'></i></button>
+        <button class="back-btn" onclick="history.back()"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 5.5 4.5 12l6.5 6.5"/></svg></button>
         <div class="header-title">Profile</div>
       </div>
       <button id="profileSettingsBtn" class="hidden settings-gear-btn" onclick="openSettingsScreen()">
@@ -380,7 +476,7 @@
     </div>
   </div>
 
-  <button class="fab" onclick="openCreateScreen()" aria-label="New event"><i class='bx bx-plus'></i></button>
+  <button class="fab" onclick="openCreateScreen()" aria-label="New event"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></button>
 
   <!-- Mobile bottom nav -->
   <nav class="bottom-nav">
@@ -404,7 +500,7 @@
 
 <div id="settingsScreen" class="full-screen-view hidden">
   <div class="screen-header">
-    <button class="back-btn" onclick="closeSettingsScreen()"><i class='bx bx-left-arrow-alt'></i></button>
+    <button class="back-btn" onclick="closeSettingsScreen()"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 5.5 4.5 12l6.5 6.5"/></svg></button>
     <div class="header-title">Settings</div>
     <div style="width:42px;"></div>
   </div>
@@ -487,7 +583,7 @@
 </div>
 
 <div id="usernameScreen" class="full-screen-view onboarding-screen hidden">
-  <div class="login-mark" style="margin-bottom:20px;"><i class='bx bx-at'></i></div>
+  <div class="login-mark" style="margin-bottom:20px;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.8"/><path d="M15.8 12v1.4a2.6 2.6 0 0 0 5.2 0V12a9 9 0 1 0-3.5 7.1"/></svg></div>
   <h2 style="font-size:30px; font-weight:700; letter-spacing:-0.04em; margin-bottom:8px;">Claim your handle</h2>
   <p style="font-weight:500; margin-bottom:28px;">This is your campus identity. It's permanent.</p>
 
@@ -518,7 +614,7 @@
 
 <div id="createScreen" class="full-screen-view hidden">
   <div class="screen-header">
-    <button class="back-btn" onclick="closeCreateScreen()"><i class='bx bx-x'></i></button>
+    <button class="back-btn" onclick="closeCreateScreen()"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button>
     <div class="header-title" id="createHeading">New Broadcast</div>
     <button class="text-action-btn" id="createSubmit" onclick="addEvent(event)">Publish</button>
   </div>
@@ -599,9 +695,9 @@
 
 <div id="searchScreen" class="full-screen-view hidden">
   <div class="screen-header search-header">
-    <button class="back-btn" onclick="closeSearch()"><i class='bx bx-left-arrow-alt'></i></button>
+    <button class="back-btn" onclick="closeSearch()"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 5.5 4.5 12l6.5 6.5"/></svg></button>
     <div class="search-field">
-      <i class='bx bx-search'></i>
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg>
       <input id="searchInput" type="search" placeholder="Search people and events..." oninput="onSearchInput(this.value)" autocomplete="off" autocapitalize="none" spellcheck="false">
     </div>
   </div>
@@ -611,10 +707,10 @@
 <!-- ORBIT — who you'd actually show up for -->
 <div id="orbitScreen" class="full-screen-view hidden">
   <div class="screen-header">
-    <button class="back-btn" onclick="closeOrbitScreen()"><i class='bx bx-left-arrow-alt'></i></button>
+    <button class="back-btn" onclick="closeOrbitScreen()"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 5.5 4.5 12l6.5 6.5"/></svg></button>
     <div class="header-title">Orbit</div>
     <button class="icon-btn" onclick="closeOrbitScreen(); openSearch();" aria-label="Find people">
-      <i class='bx bx-user-plus'></i>
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.6"/><path d="M2.5 20c.6-3.6 3.2-5.6 6.5-5.6s5.9 2 6.5 5.6M19 8v6M16 11h6"/></svg>
     </button>
   </div>
   <div class="screen-body" id="orbitBody"></div>
@@ -623,7 +719,7 @@
 <!-- The people behind a number on a profile -->
 <div id="followListScreen" class="full-screen-view hidden">
   <div class="screen-header">
-    <button class="back-btn" onclick="closeFollowList()"><i class='bx bx-left-arrow-alt'></i></button>
+    <button class="back-btn" onclick="closeFollowList()"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 5.5 4.5 12l6.5 6.5"/></svg></button>
     <div class="header-title" id="followListTitle">Followers</div>
     <!-- Balances the back button so the title sits in the middle. -->
     <span class="header-spacer" aria-hidden="true"></span>
@@ -689,16 +785,25 @@
 <div id="loading-screen">
   <div class="spinner"></div>
   <p id="loading-text">Logging you in...</p>
+  <p id="boot-slow" class="hidden" style="max-width:300px; text-align:center; font-size:13px; color:var(--text-muted); margin-top:4px;">Slow connection — still loading…</p>
   <div id="boot-error" class="hidden" style="max-width:340px; text-align:center;">
-    <p style="font-weight:800; color:var(--ember); margin-bottom:8px;">The app didn't start.</p>
+    <p id="boot-error-title" style="font-weight:800; color:var(--obsidian); margin-bottom:8px;">Couldn't load livesociya.</p>
     <p id="boot-error-detail" style="font-size:13px; font-weight:500; line-height:1.5;"></p>
+    <button id="boot-retry" type="button" onclick="location.reload()" style="margin-top:14px;">Try again</button>
   </div>
 </div>
 
 <script>
   // Boot watchdog (classic script — always runs, even when the module
-  // graph is blocked). If js/app.js never executes, say why instead of
-  // spinning forever.
+  // graph is blocked).
+  //
+  // It used to give up after 12 seconds and say "js/app.js failed to
+  // load" — on a slow phone network that fired while the app was still
+  // arriving, and it was the most common way anybody saw it. Now it
+  // only calls something a failure when something actually FAILED (a
+  // script that errored, or a module graph that did not fetch), says
+  // "still loading" while it is merely slow, retries once on its own,
+  // and tries again the moment the phone gets its signal back.
   (function () {
     var FILE_PROTOCOL_HELP =
       "You've opened this file directly, so the browser is blocking " +
@@ -706,30 +811,104 @@
       "instead: open Terminal in this folder and run " +
       "<code>python3 -m http.server 8000</code> " +
       "then visit <b>http://localhost:8000</b>";
+    var NETWORK_HELP = "Part of the app didn't download — usually a weak signal. " +
+      "Check your connection and try again.";
+    var SLOW_HELP = "This is taking longer than it should. Your connection may be very slow.";
 
-    var GENERIC_HELP =
-      "js/app.js failed to load or threw before it finished. Open the " +
-      "browser console and check the first red error.";
+    var failed = false;
+    var failPending = false;
+    function booted() { return !!window.__livesociyaBooted; }
+    function show(id, on) { var el = document.getElementById(id); if (el) el.classList.toggle("hidden", !on); }
 
-    function fail(message) {
+    function fail(message, title) {
+      if (booted() || failed) return;
+      failed = true;
       var spinner = document.querySelector("#loading-screen .spinner");
-      var text = document.getElementById("loading-text");
-      var box = document.getElementById("boot-error");
-      var detail = document.getElementById("boot-error-detail");
       if (spinner) spinner.style.display = "none";
-      if (text) text.style.display = "none";
+      show("loading-text", false);
+      show("boot-slow", false);
+      var detail = document.getElementById("boot-error-detail");
       if (detail) detail.innerHTML = message;
-      if (box) box.classList.remove("hidden");
+      if (title) document.getElementById("boot-error-title").textContent = title;
+      show("boot-error", true);
+    }
+
+    // One quiet retry per tab for a genuine network failure: a blip on
+    // one of forty files should not need the person to do anything.
+    // Three SDK files can fail at once; that is one decision, made a
+    // moment later, and only if the app still hasn't come up.
+    function networkFail() {
+      if (booted() || failPending) return;
+      failPending = true;
+      setTimeout(function () {
+        failPending = false;
+        if (booted()) return;
+        var tries = 0;
+        try { tries = +sessionStorage.getItem("livesociya.bootRetry") || 0; } catch (e) {}
+        if (tries < 1 && navigator.onLine !== false) {
+          try { sessionStorage.setItem("livesociya.bootRetry", String(tries + 1)); } catch (e) {}
+          location.reload();
+          return;
+        }
+        fail(NETWORK_HELP);
+      }, 1500);
     }
 
     if (location.protocol === "file:") {
-      fail(FILE_PROTOCOL_HELP);
+      fail(FILE_PROTOCOL_HELP, "The app didn't start.");
       return;
     }
 
+    // A script or stylesheet that failed to download fires `error` on its
+    // own element; it only reaches window in the capture phase.
+    window.addEventListener("error", function (e) {
+      if (booted()) return;
+      var t = e.target;
+      if (t && t.tagName === "SCRIPT" && t.src) return networkFail();
+      // Our own code threw while starting. A reload is still the fix
+      // for the likeliest cause (half of it arrived from one version
+      // and half from the next), so the button stays.
+      if (e.filename && e.filename.indexOf("/js/") !== -1) {
+        fail("Something went wrong while starting. Try again — if it keeps happening, update your browser.", "The app didn't start.");
+      }
+    }, true);
+    if ((window.__bootFailed || []).length) networkFail();
+
+    // Coming back online while stuck is the best moment to try again.
+    window.addEventListener("online", function () {
+      if (!booted()) location.reload();
+    });
+
+    setTimeout(function () { if (!booted() && !failed) show("boot-slow", true); }, 6000);
     setTimeout(function () {
-      if (!window.__livesociyaBooted) fail(GENERIC_HELP);
-    }, 12000);
+      if (booted() || failed) return;
+      // Still not there after 40s: offer the button, but leave the
+      // spinner — if it does arrive, boot hides all of this anyway.
+      var detail = document.getElementById("boot-error-detail");
+      if (detail) detail.textContent = SLOW_HELP;
+      document.getElementById("boot-error-title").textContent = "Still loading…";
+      show("boot-slow", false);
+      show("boot-error", true);
+    }, 40000);
+
+    // Once the app is actually up: clear the one-retry allowance, and
+    // take down any warning that turned out to be premature.
+    var clear = setInterval(function () {
+      if (!booted()) return;
+      clearInterval(clear);
+      try { sessionStorage.removeItem("livesociya.bootRetry"); } catch (e) {}
+      show("boot-slow", false);
+      show("boot-error", false);
+    }, 500);
+
+    // Registering the worker here rather than in app.js means it is
+    // installed even on a visit where the app failed to start — which
+    // is exactly the visit after which a cached copy helps most.
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", function () {
+        navigator.serviceWorker.register("/sw.js").catch(function () {});
+      });
+    }
   })();
 </script>
 

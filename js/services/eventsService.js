@@ -1521,8 +1521,8 @@ export async function renderPeople() {
   if (pending.length) {
     html += `<div class="result-group">Waiting for you (${pending.length})</div>`;
     html += pending.map((uid) => row(uid, (u) => `
-      <button class="btn-ghost" onclick="window.declineRequest('${u}')" aria-label="Decline"><i class='bx bx-x'></i></button>
-      <button onclick="window.approveRequest('${u}')" aria-label="Approve"><i class='bx bx-check'></i></button>`)).join("");
+      <button class="btn-ghost" onclick="window.declineRequest('${u}')" aria-label="Decline"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button>
+      <button onclick="window.approveRequest('${u}')" aria-label="Approve"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>`)).join("");
   }
 
   html += `<div class="result-group">Going (${going.length + 1})</div>`;
@@ -1538,7 +1538,7 @@ export async function renderPeople() {
   if (going.length) {
     html += going.map((uid) => {
       const markup = row(uid, (u) => `
-        <button class="btn-ghost danger-text" onclick="window.removeAttendee('${u}')" aria-label="Remove"><i class='bx bx-user-minus'></i></button>`);
+        <button class="btn-ghost danger-text" onclick="window.removeAttendee('${u}')" aria-label="Remove"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.6"/><path d="M2.5 20c.6-3.6 3.2-5.6 6.5-5.6s5.9 2 6.5 5.6M16 11h6"/></svg></button>`);
       return unconfirmed.includes(uid)
         ? markup.replace("</div>\n      </div>", `</div>\n        <span class="unconfirmed-tag">not confirmed</span>\n      </div>`)
         : markup;

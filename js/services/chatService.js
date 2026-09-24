@@ -317,6 +317,9 @@ export function closeChat({ silent = false } = {}) {
   if (!silent) switchScreen("home");
 }
 
+const SVG_SEND = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M3.4 20.4 21 12 3.4 3.6l-.01 6.53L15 12 3.39 13.87z"/></svg>';
+const SVG_TICK = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+
 // ---------- Sending ----------
 export async function sendMessage() {
   const input = document.getElementById("msgInput");
@@ -341,6 +344,7 @@ export async function sendMessage() {
   input.value = "";
   state.replyingToMessage = null;
   updateChatFooterUI();
+  keepComposerFocused(input);
 
   try {
     if (state.currentChatType === "event") {
@@ -517,6 +521,20 @@ export function stopTyping() {
  * Firestore's, it is already on every bubble as `data-msg-id`, and it
  * does not change when the clock does.
  */
+/**
+ * Sending must not drop the keyboard. The Send button cancels its own
+ * mousedown so it never takes focus, but a browser that blurred the
+ * field anyway gets it back here — synchronously, inside the tap, which
+ * is the only moment iOS lets a page raise the keyboard. preventScroll,
+ * because the composer is pinned: scrolling it "into view" moved the
+ * whole page up instead.
+ */
+function keepComposerFocused(input) {
+  if (!input || document.activeElement === input) return;
+  if (!window.matchMedia || !matchMedia("(pointer: coarse)").matches) return;
+  try { input.focus({ preventScroll: true }); } catch (e) { input.focus(); }
+}
+
 export function initiateReply(senderUid, text, messageId) {
   if (!text) return;            // a retracted message has nothing to quote
   state.editingMessage = null;  // the two composer modes are exclusive
@@ -524,9 +542,11 @@ export function initiateReply(senderUid, text, messageId) {
   updateChatFooterUI();
   setTimeout(() => {
     const input = document.getElementById("msgInput");
+    // No scrollIntoView: the composer is pinned to the bottom of a
+    // fixed layer, so "into view" could only scroll the page behind it
+    // — which on iOS lifted the composer off the keyboard.
     if (input) {
-      input.focus();
-      input.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      try { input.focus({ preventScroll: true }); } catch (e) { input.focus(); }
     }
   }, 50);
 }
@@ -957,7 +977,14 @@ export function scrollToMessage(messageId) {
   const bubble = targetMsg?.querySelector(".msg-bubble");
   if (!bubble) return;
 
-  targetMsg.scrollIntoView({ behavior: "smooth", block: "center" });
+  // Scroll the thread, never the page: scrollIntoView walks up to the
+  // window too, and on iOS with the keyboard up that dragged the whole
+  // chat layer — composer and all — off the bottom of the screen.
+  const box = document.getElementById("messages");
+  if (box) {
+    const off = targetMsg.getBoundingClientRect().top - box.getBoundingClientRect().top;
+    box.scrollTo({ top: box.scrollTop + off - box.clientHeight / 2 + targetMsg.offsetHeight / 2, behavior: "smooth" });
+  }
   const flashClass = bubble.classList.contains("msg-sent") ? "flash-sent" : "flash-received";
   bubble.classList.remove("flash-sent", "flash-received");
   void bubble.offsetWidth;
@@ -1197,10 +1224,15 @@ export function updateChatFooterUI() {
 
   // The composer is in one of three modes, and the note above it says
   // which: writing something new, quoting, or rewriting.
-  const sendIcon = inputWrapper.querySelector("button i");
+  // The button's icon is drawn (see index.html), so it is swapped as a
+  // whole: a paper plane to send, a tick to save an edit.
+  const sendBtn = document.getElementById("sendBtn");
   inputWrapper.classList.toggle("editing", !!state.editingMessage);
-  if (sendIcon) {
-    sendIcon.className = state.editingMessage ? "bx bx-check" : "bx bxs-send";
+  const mode = state.editingMessage ? "edit" : "send";
+  if (sendBtn && sendBtn.dataset.mode !== mode) {
+    sendBtn.dataset.mode = mode;
+    sendBtn.setAttribute("aria-label", mode === "edit" ? "Save edit" : "Send");
+    sendBtn.innerHTML = mode === "edit" ? SVG_TICK : SVG_SEND;
   }
 
   if (state.editingMessage) {

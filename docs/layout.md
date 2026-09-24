@@ -292,3 +292,37 @@ against iOS focus-zoom.
 at exactly that box while `html.kb-open`. A keyboard only counts with a
 text field focused. The smoke suite fakes a
 visual viewport to test this; a real phone is still the final word.
+
+
+### Sending must not drop the keyboard (iOS)
+
+Tapping a `<button>` on iOS takes focus off the field. The keyboard
+starts to close, and the page iOS had scrolled up to make room often
+stays up, so the composer floated with a strip of blank space under it.
+Three defences:
+
+- `#sendBtn` cancels its own `mousedown`, which is where WebKit moves
+  focus, so the field keeps it.
+- `sendMessage()` refocuses the field with `preventScroll`, inside the
+  tap, in case a browser blurred it anyway.
+- `viewport.js` notes the page's scroll when the keyboard opens and puts
+  it back when the keyboard closes, if a full-screen layer is up.
+
+`scrollIntoView` walks up to the window, so inside a fixed layer it moves
+the page and not just the thread. Replying and jumping to a quoted
+message both used it. Both now scroll the thread box itself.
+
+### A phone on its side
+
+Rotating an iPhone made Safari re-lay-out and repaint the whole app in
+one go, which was enough to kill the tab. A web page cannot block
+rotation. `screen.orientation.lock()` only works for an installed app
+(the manifest already says portrait), and iOS doesn't support it at all.
+So the inline script in the head sets `html.rotate-lock` when a phone
+(short side under 540px, coarse pointer) is in landscape by SCREEN
+orientation. It must not use the viewport's shape: an Android keyboard
+makes a portrait viewport wider than it is tall. Under that class,
+`.rotate-cover` is shown and everything else is `visibility: hidden` with
+animations paused. It is visibility and not display, so every scroll
+position and half-typed message is still there when the phone turns
+back.

@@ -582,6 +582,12 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 .brand-lockup { display: flex; align-items: center; gap: 9px; }
 /* A solid mark, not a gradient: one colour, one paint, and it survives
    being printed, screenshotted or rendered on a cheap panel. */
+/* A drawn icon sits exactly where a font glyph did: 1em square, in the
+   text colour, so the font-size already on every icon button sizes it.
+   Load-bearing icons are drawn so that a slow network, which now loads
+   boxicons last, never leaves an empty circle where a button should be. */
+.ico { width: 1em; height: 1em; flex-shrink: 0; display: block; }
+
 .brand-dot {
   width: 30px; height: 30px; flex-shrink: 0;
   border-radius: 9px;
@@ -3721,6 +3727,34 @@ html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }
+
+/* ---- A phone on its side ----
+   Set by the inline script in index.html. The app behind stops
+   painting and animating (visibility keeps its layout and scroll
+   positions); the cover is the only thing on screen. */
+.rotate-cover { display: none; }
+html.rotate-lock .rotate-cover {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s-8);
+  padding: var(--s-24);
+  background: var(--canvas);
+  color: var(--forest);
+  text-align: center;
+  visibility: visible;
+}
+html.rotate-lock .rotate-cover svg { margin-bottom: var(--s-8); }
+.rotate-cover-title { margin: 0; font-family: var(--font-display); font-weight: 800; font-size: 20px; color: var(--obsidian); }
+.rotate-cover-sub { margin: 0; font-size: 14px; color: var(--text-muted); }
+html.rotate-lock body > :not(.rotate-cover) { visibility: hidden; }
+html.rotate-lock body *,
+html.rotate-lock body *::before,
+html.rotate-lock body *::after { animation-play-state: paused !important; }
 
 /* With the keyboard up, full-screen layers are pinned to exactly the
    part of the screen you can see, measured by utils/viewport.js. The
