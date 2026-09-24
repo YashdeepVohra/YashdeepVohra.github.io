@@ -102,7 +102,7 @@ export function toggleEventDesc(eventId) {
   if (!card) return;
   card.classList.toggle("expanded");
   const btn = card.querySelector(".read-more-btn");
-  if (btn) btn.innerText = card.classList.contains("expanded") ? "Hide details" : "Read details...";
+  if (btn) btn.innerText = card.classList.contains("expanded") ? "Less" : "More";
 }
 
 /** Create mode: blank sheet, "Publish". */
@@ -685,6 +685,7 @@ function posterBand(e, now, { stats, spent = false } = {}) {
       <div class="poster-deco" aria-hidden="true">
         ${glyph ? `<span class="poster-glyph">${escapeHtml(glyph)}</span>` : ""}
       </div>
+      ${spent ? "" : `<span class="poster-clock" aria-hidden="true"><span data-vt="clock"></span></span>`}
     </div>`;
 }
 
@@ -703,11 +704,15 @@ function avatarStack(uids) {
   return `<div class="av-stack">${chips}${more}</div>`;
 }
 
-function goingText(uids, unconfirmedCount = 0) {
+/**
+ * Who is going, not counting the host — the byline right above already
+ * names them, and "Aarav, Diya and 2 more" under "Aarav" said it twice.
+ */
+function goingText(uids, unconfirmedCount = 0, isHost = false) {
   const tail = unconfirmedCount > 0
     ? ` <span class="unconfirmed-tag">${unconfirmedCount} not confirmed</span>`
     : "";
-  if (!uids.length) return "Nobody yet — be first" + tail;
+  if (!uids.length) return (isHost ? "Nobody's joined yet" : "Nobody else yet — be first") + tail;
   const names = uids.slice(0, 2).map((uid) => {
     const id = safeId(uid);
     const name = escapeHtml(displayNameFor(uid));
@@ -755,6 +760,17 @@ function renderLiveRail(order, now) {
     .filter((e) => e && e.expiresAt > now && !isBlocked(e.hostUid))
     .sort((a, b) => a.startTime - b.startTime)
     .slice(0, 12);
+
+  // The header's count: how many are on at this moment. Upcoming ones
+  // are in the rail but not in this number. renderEvents runs on the
+  // minute tick, so it moves when something starts or ends.
+  const countEl = document.getElementById("liveCount");
+  const onNow = items.filter((e) => now >= e.startTime).length;
+  if (countEl) {
+    countEl.classList.toggle("hidden", onNow === 0);
+    const n = document.getElementById("liveCountN");
+    if (n && n.textContent !== String(onNow)) n.textContent = String(onNow);
+  }
 
   // An empty rail is worse than no rail.
   wrap.classList.toggle("hidden", items.length === 0);
@@ -1046,6 +1062,16 @@ export function paintVolatile(listEl, now = Date.now()) {
       else if (kind === "sub") text = stat.sub || "";
       else if (kind === "ago") text = relTime(e.expiresAt, now);
       else if (kind === "leaves") text = relTime(now + (recapUntil(e, state.uid) - now), now);
+      else if (kind === "clock") {
+        // Not text: how much of a LIVE event is still to run, as the
+        // width of an ember line. Upcoming and ended events show none.
+        const span = e.expiresAt - e.startTime;
+        const left = now >= e.startTime && now < e.expiresAt && span > 0
+          ? Math.max(0, Math.min(1, (e.expiresAt - now) / span)) : 0;
+        const w = (left * 100).toFixed(1) + "%";
+        if (slot.style.width !== w) slot.style.width = w;
+        return;
+      }
       // Only touch the DOM when it would actually change.
       if (slot.textContent !== text) slot.textContent = text;
     });
@@ -1178,9 +1204,14 @@ export function renderEvents() {
 
 
 
+    // The description is READ, not hidden behind a button: two lines of
+    // it sit under the place, and "More" appears only when there is
+    // more than two lines' worth. (Length is a guess at the clamp, and a
+    // safe one: a false "More" expands to the same text.)
+    const longDesc = e.description && (e.description.length > 90 || e.description.includes("\n"));
     const desc = e.description
       ? `<div class="event-desc-box">${escapeHtml(e.description)}</div>
-         <button class="read-more-btn" onclick="window.toggleEventDesc('${id}')">Read details</button>`
+         ${longDesc ? `<button class="read-more-btn" onclick="window.toggleEventDesc('${id}')">More</button>` : ""}`
       : "";
 
     const capacity = e.maxCapacity
@@ -1275,8 +1306,8 @@ export function renderEvents() {
           </div>
         </div>` : ""}
       <div class="going-row">
-        ${avatarStack(withoutBlocked(confirmedGoing))}
-        <span class="going-text">${goingText(withoutBlocked(confirmedGoing), unconfirmed.length)}</span>
+        ${avatarStack(withoutBlocked(confirmedGoing.filter((u) => u !== e.hostUid)))}
+        <span class="going-text">${goingText(withoutBlocked(confirmedGoing.filter((u) => u !== e.hostUid)), unconfirmed.length, isHost)}</span>
       </div>
       ${capacity}
       </div>`;

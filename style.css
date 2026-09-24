@@ -710,7 +710,37 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
    only ever shows what is happening at this moment.
    ===================================================================== */
 
-.live-rail-wrap { margin: 0 calc(-1 * var(--gut)) var(--s-20); }
+.live-rail-wrap { margin: calc(-1 * var(--s-4)) calc(-1 * var(--gut)) var(--s-16); }
+
+/* "3 on now", beside the title. Ember, because it IS right now. */
+.live-count {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 6px 12px 6px 10px;
+  border-radius: var(--r-pill);
+  background: var(--ember-soft); border: 1px solid var(--ember-line);
+  color: var(--ember-ink);
+  font-family: var(--font-mono); font-size: 11.5px; font-weight: 600;
+  letter-spacing: var(--track-mono); text-transform: uppercase;
+  white-space: nowrap; flex-shrink: 0;
+}
+.live-count.hidden { display: none; }
+
+/* A live band's clock: an ember line along its bottom edge, as long as
+   the time the event has left. It shortens on the minute tick
+   (paintVolatile) — nothing about it is in the card's markup. */
+.poster-clock {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  height: 3px;
+  background: color-mix(in srgb, var(--ember) 18%, transparent);
+  pointer-events: none;
+}
+.poster-clock > span {
+  display: block; height: 100%; width: 0;
+  background: var(--ember);
+  border-radius: 0 3px 3px 0;
+  transition: width 0.6s var(--ease);
+}
+.stub .poster-clock { display: none; }
 .live-rail-head {
   display: flex; align-items: center; gap: var(--s-8);
   padding: 0 var(--gut) var(--s-12);
@@ -745,7 +775,7 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
 
 .live-story {
   flex-shrink: 0;
-  width: 68px;
+  width: 62px;
   padding: 0;
   background: none;
   box-shadow: none;
@@ -767,7 +797,7 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
    solid colour instead of a three-stop gradient — same meaning, a
    fraction of the paint cost with a dozen of them on screen. */
 .story-ring {
-  width: 62px; height: 62px;
+  width: 56px; height: 56px;
   border-radius: 50%;
   padding: 2.5px;
   display: flex; align-items: center; justify-content: center;
@@ -1160,18 +1190,21 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   margin-bottom: 0;
 }
 .event-desc-box {
-  display: none;
   margin-top: var(--s-8);
   font-size: 14.5px; color: var(--fog); line-height: 1.5;
   white-space: pre-wrap;
-  animation: rise 0.25s var(--ease);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
 }
-.event.expanded .event-desc-box { display: block; }
+.event.expanded .event-desc-box { display: block; -webkit-line-clamp: unset; line-clamp: unset; overflow: visible; }
 .read-more-btn {
-  width: auto; padding: 0; margin-top: 6px;
+  width: auto; padding: 0; margin-top: 4px;
   background: none; border: none; box-shadow: none;
-  font-family: var(--font-mono);
-  font-size: 11px; letter-spacing: var(--track-mono); text-transform: uppercase;
+  font-family: var(--font);
+  font-size: 13.5px; font-weight: 600; letter-spacing: var(--track); text-transform: none;
   color: var(--forest);
   text-decoration: underline; text-underline-offset: 3px;
 }

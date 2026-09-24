@@ -254,12 +254,15 @@
   <div class="container hidden" id="home">
 
     <div id="eventsTab">
+      <!-- The title and the one number that matters, on one line. The
+           rail used to carry its own "Happening now" label, which said
+           the title again one line lower. -->
       <div class="section-head">
         <h3>Live <span class="marker">now</span></h3>
+        <span class="live-count hidden" id="liveCount" aria-live="polite"><span class="live-dot"></span><span id="liveCountN">0</span> on now</span>
       </div>
 
       <div class="live-rail-wrap" id="liveRailWrap">
-        <div class="live-rail-head"><span class="live-dot"></span> Happening now</div>
         <div class="live-rail" id="liveRail"></div>
       </div>
 
