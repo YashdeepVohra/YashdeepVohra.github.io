@@ -12,6 +12,7 @@
   <title>livesociya — what's happening on campus, right now</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
   <meta name="theme-color" content="#e6f2dd">
+  <meta name="author" content="livesociya">
   <meta name="description" content="livesociya is the campus live feed: see what's happening right now, join it, and meet the people who showed up. Events start in seconds and vanish when they end.">
   <link rel="canonical" href="https://livesociya.com/">
   <meta name="robots" content="index, follow, max-image-preview:large">
@@ -23,7 +24,14 @@
        allowed. This is the difference between a website somebody visits
        and an icon on a phone. -->
   <link rel="manifest" href="/manifest.json">
+  <!-- The firefly. SVG for every modern browser; PNGs for the rest.
+       Google shows a site's favicon beside it in results and wants a
+       square that is a multiple of 48px, hence 48 and 192. -->
+  <link rel="icon" href="/logo.svg" type="image/svg+xml">
+  <link rel="icon" href="/favicon-48.png" sizes="48x48" type="image/png">
+  <link rel="icon" href="/icon-192.png" sizes="192x192" type="image/png">
   <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+  <link rel="icon" href="/favicon-16.png" sizes="16x16" type="image/png">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="livesociya">
@@ -41,10 +49,13 @@
   <meta property="og:image" content="https://livesociya.com/og-image.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="livesociya — a firefly logo and the line: what's happening on campus, right now.">
+  <meta property="og:locale" content="en_IN">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="livesociya — what's happening on campus, right now">
   <meta name="twitter:description" content="See what's on, join it, and meet the people who showed up. Events vanish when they end.">
   <meta name="twitter:image" content="https://livesociya.com/og-image.png">
+  <meta name="twitter:image:alt" content="livesociya — what's happening on campus, right now.">
 
   <!-- Structured data. Two things it buys that the tags above do not:
        a search box for the site in Google's own results, and
@@ -74,7 +85,22 @@
         "browserRequirements": "Requires JavaScript.",
         "description": "A campus app for things happening right now. Somebody starts an event, everyone nearby sees it instantly, and it vanishes when it ends.",
         "image": "https://livesociya.com/og-image.png",
-        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "INR" }
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "INR" },
+        "publisher": { "@id": "https://livesociya.com/#org" }
+      },
+      {
+        "@type": "Organization",
+        "@id": "https://livesociya.com/#org",
+        "name": "livesociya",
+        "alternateName": ["live sociya", "livesocia", "live socia", "Livesociya"],
+        "url": "https://livesociya.com/",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "https://livesociya.com/icon-512.png",
+          "width": 512,
+          "height": 512
+        },
+        "description": "The campus live feed. See what's happening right now, join it, and meet the people who showed up."
       }
     ]
   }
@@ -165,6 +191,18 @@
 </head>
 <body>
 
+<!-- Read by crawlers that run no JavaScript, and by anyone with it off.
+     Everything below is the app; this is the one paragraph that says
+     what the app IS, in plain HTML. -->
+<noscript>
+  <div style="max-width:560px;margin:48px auto;padding:0 20px;font-family:system-ui,sans-serif;color:#273338;line-height:1.5">
+    <img src="/logo.svg" alt="livesociya logo" width="72" height="72">
+    <h1>livesociya — what's happening on campus, right now</h1>
+    <p>livesociya is the campus live feed. Somebody starts an event, everyone nearby sees it instantly, you join, and you meet the people who showed up. Events vanish when they end, and the best ones stay in Recap for a while.</p>
+    <p>livesociya needs JavaScript to run. Turn it on and reload the page.</p>
+  </div>
+</noscript>
+
 <div class="rotate-cover" aria-hidden="true">
   <svg viewBox="0 0 48 48" width="56" height="56" aria-hidden="true">
     <rect x="15" y="5" width="18" height="38" rx="4" fill="none" stroke="currentColor" stroke-width="2.5"/>
@@ -181,7 +219,7 @@
   <div class="login-aura a1"></div>
   
   <div class="login-card">
-    <div class="login-mark"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M13.2 2 4.5 13.5h6.3L9.9 22l8.8-11.6h-6.4z"/></svg></div>
+    <img class="login-mark" src="/logo.svg" alt="livesociya" width="66" height="66">
     <h1 class="login-title">livesociya</h1>
     <p class="login-sub">See what's happening on campus, right now.</p>
 
@@ -212,7 +250,7 @@
   <!-- Desktop sidebar -->
   <aside class="sidebar">
     <button class="sidebar-brand brand-home" onclick="showTab('events')" aria-label="Go to Live Now">
-      <div class="brand-dot"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M13.2 2 4.5 13.5h6.3L9.9 22l8.8-11.6h-6.4z"/></svg></div>
+      <img class="brand-dot" src="/logo.svg" alt="" width="30" height="30">
       <div class="title">livesociya</div>
     </button>
     <button class="side-item side-search" onclick="openSearch()"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg> Search</button>
@@ -238,7 +276,7 @@
   <!-- Mobile top bar -->
   <header class="topbar">
     <button class="brand-lockup brand-home" onclick="showTab('events')" aria-label="Go to Live Now">
-      <div class="brand-dot"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor"><path d="M13.2 2 4.5 13.5h6.3L9.9 22l8.8-11.6h-6.4z"/></svg></div>
+      <img class="brand-dot" src="/logo.svg" alt="" width="30" height="30">
       <div class="title">livesociya</div>
     </button>
     <div class="topbar-actions">

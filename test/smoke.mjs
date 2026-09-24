@@ -3462,9 +3462,23 @@ group('one file for the browser, a phone on its side, and Send');
     return { kept: ev.defaultPrevented, drawn: !!btn.querySelector('svg'), type: btn.type };
   });
   const blankIcons = await page.evaluate(() => [...document.querySelectorAll('.back-btn, .icon-btn, .fab, .brand-dot, .login-mark')]
-    .filter((el) => !el.querySelector('svg')).map((el) => el.className + (el.getAttribute('onclick') ? ' ' + el.getAttribute('onclick') : '')));
+    .filter((el) => !el.querySelector('svg') && !(el.tagName === 'IMG' && /\.svg$/.test(el.getAttribute('src') || '')))
+    .map((el) => el.className + (el.getAttribute('onclick') ? ' ' + el.getAttribute('onclick') : '')));
   ok('every icon-only button is drawn, not a font glyph', blankIcons.length === 0, blankIcons.join(' | '));
   ok('Send never takes focus from the field', send.kept, JSON.stringify(send));
+
+  const titles = await page.evaluate(async () => {
+    const ui = await import('/js/utils/ui.js');
+    const out = {};
+    window.switchScreen('home'); ui.showTab('recap'); out.recap = document.title;
+    ui.showTab('events'); out.live = document.title;
+    ui.setTitleUnread(true); out.unread = document.title;
+    ui.showTab('chats'); out.unreadStays = document.title;
+    ui.setTitleUnread(false); ui.showTab('events');
+    return out;
+  });
+  ok('every screen names itself in the title', titles.recap === 'Recap · livesociya' && titles.live === 'Live now · livesociya', JSON.stringify(titles));
+  ok('and an unread message survives a tab change', titles.unread === '(1) Live now · livesociya' && titles.unreadStays === '(1) Messages · livesociya', JSON.stringify(titles));
   ok('and its icon is drawn, not a font glyph', send.drawn && send.type === 'button', JSON.stringify(send));
 
   const turn = await page.evaluate(async () => {

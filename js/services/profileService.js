@@ -9,7 +9,7 @@
 import { auth, db } from '../config/firebase.js';
 import { state } from '../state/store.js';
 import { renderAvatar, escapeHtml, safeId } from '../utils/formatters.js';
-import { switchScreen, showTab, toast } from '../utils/ui.js';
+import { switchScreen, showTab, toast, setPageTitle } from '../utils/ui.js';
 import { askConfirm } from '../utils/confirm.js';
 import { syncThemeUI } from '../utils/theme.js';
 import { focusEvent, loadRecap, renderEvents, vibeColor } from './eventsService.js';
@@ -511,6 +511,7 @@ export async function loadProfileUI(targetUid) {
     if (avatarEl) avatarEl.innerHTML = renderAvatar(avatarFor(targetUid));
     if (nameDisplay) nameDisplay.innerText = displayNameFor(targetUid);
     if (usernameDisplay) usernameDisplay.innerText = "@" + usernameFor(targetUid);
+    setPageTitle(`${displayNameFor(targetUid)} (@${usernameFor(targetUid)})`);
     renderOrbitActions(targetUid, isSelf);
 
     refreshProfileSocial(targetUid);

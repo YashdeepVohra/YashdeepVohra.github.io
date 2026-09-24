@@ -18,7 +18,7 @@
 import { auth, db, FieldValue } from '../config/firebase.js';
 import { state } from '../state/store.js';
 import { renderAvatar, formatTime, formatMessage, escapeHtml, safeId, msOf } from '../utils/formatters.js';
-import { switchScreen, showTab, showNotification, toggleTime, toast } from '../utils/ui.js';
+import { switchScreen, showTab, showNotification, toggleTime, toast, setPageTitle, setTitleUnread } from '../utils/ui.js';
 import { askConfirm } from '../utils/confirm.js';
 import { openOverlay, closeOverlay, isOverlayOpen } from '../utils/overlays.js';
 import {
@@ -162,6 +162,7 @@ export function openChat(chatId, otherUid) {
       hTitle.style.cursor = "pointer";
       hTitle.onclick = () => openProfileScreen(otherUid);
     }
+    setPageTitle(displayNameFor(otherUid));
   });
 
   document.querySelector(".topbar")?.classList.add("hidden");
@@ -248,6 +249,7 @@ export function openEventChat(eventId) {
 
   document.querySelector(".topbar")?.classList.add("hidden");
   switchScreen("chatScreen");
+  setPageTitle(cached.title || "Event chat");
   history.pushState({ modalOpen: true }, "", window.location.href);
 
   if (state.chatDocUnsubscribe) state.chatDocUnsubscribe();
@@ -1791,7 +1793,7 @@ export function loadChatList() {
         if (!chats.length) {
           list.innerHTML = `<div class="empty-state" style="padding-top: 20px;"><i class='bx bx-message-square-x'></i><p>No messages yet.</p></div>`;
           setUnreadBadge(false);
-          document.title = "livesociya";
+          setTitleUnread(false);
           return;
         }
 
@@ -1824,7 +1826,7 @@ export function loadChatList() {
         list.innerHTML = html;
 
         setUnreadBadge(hasGlobalUnread);
-        document.title = hasGlobalUnread ? "(1) New Message - livesociya" : "livesociya";
+        setTitleUnread(hasGlobalUnread);
       },
       (error) => {
         // A Firestore listener that errors is DEAD: it never retries on

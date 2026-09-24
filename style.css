@@ -531,12 +531,15 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
   width: 66px; height: 66px;
   margin: 0 auto var(--s-20);
   border-radius: 20px;
-  background: var(--forest);
+  object-fit: contain;
   box-shadow: none;
   display: flex; align-items: center; justify-content: center;
   color: var(--on-accent); font-size: 30px;
   animation: float 5.5s var(--ease) infinite;
 }
+/* The "@" badge on the claim-your-handle screen shares the shape but is
+   not the logo: it keeps a filled tile. */
+div.login-mark { background: var(--forest); }
 .login-title { font-family: var(--font-display); font-size: 30px; font-weight: var(--display-weight); letter-spacing: -0.035em; margin-bottom: 8px; }
 .login-sub { font-size: 15px; color: var(--fog); margin-bottom: var(--s-24); }
 
@@ -588,10 +591,12 @@ input::placeholder, textarea::placeholder { color: var(--fog); }
    boxicons last, never leaves an empty circle where a button should be. */
 .ico { width: 1em; height: 1em; flex-shrink: 0; display: block; }
 
+/* The firefly (logo.svg) — an identity, so it is the same drawing in
+   both themes and never takes a colour from the tokens. */
 .brand-dot {
   width: 30px; height: 30px; flex-shrink: 0;
   border-radius: 9px;
-  background: var(--forest);
+  object-fit: contain;
   display: flex; align-items: center; justify-content: center;
   color: var(--on-accent); font-size: 15px;
 }

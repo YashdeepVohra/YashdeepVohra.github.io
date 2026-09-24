@@ -4,6 +4,31 @@ import { closeAllOverlays } from './overlays.js';
 
 const SCREENS = ["login", "home", "usernameScreen", "profileScreen", "chatScreen"];
 
+/* ---------------------------------------------------------------------
+   The page title
+   ---------------------------------------------------------------------
+   One owner, because two used to fight over it: the inbox wrote
+   "livesociya" over whatever screen you were on every time a chat
+   changed. Now a screen says what it is (setPageTitle) and the inbox
+   only says whether something is unread (setTitleUnread); this paints
+   both. Signed out, the title is the full search title from index.html
+   — that is the one Google shows, so the front door never changes it. */
+const SEARCH_TITLE = "livesociya — what's happening on campus, right now";
+const TAB_TITLES = { events: "Live now", recap: "Recap", chats: "Messages" };
+const SCREEN_TITLES = { login: "", usernameScreen: "Claim your handle", chatScreen: "Chat", profileScreen: "Profile" };
+let titleLabel = "";
+let titleUnread = false;
+let currentTab = "events";
+function paintTitle() {
+  const base = titleLabel ? `${titleLabel} · livesociya` : SEARCH_TITLE;
+  const t = titleUnread ? `(1) ${base}` : base;
+  if (document.title !== t) document.title = t;
+}
+/** What this screen is, for the tab, history and bookmarks. "" = the search title. */
+export function setPageTitle(label) { titleLabel = label || ""; paintTitle(); }
+/** A new message is waiting: "(1)" in front, whatever screen you are on. */
+export function setTitleUnread(on) { titleUnread = !!on; paintTitle(); }
+
 /**
  * Show one screen. ONE swap, at every width.
  *
@@ -40,6 +65,9 @@ export function switchScreen(screenId) {
   if (signedOut) frame?.classList.add("hidden");
   else if (screenId) frame?.classList.remove("hidden");
 
+  if (screenId === "home") setPageTitle(TAB_TITLES[currentTab]);
+  else if (screenId in SCREEN_TITLES) setPageTitle(SCREEN_TITLES[screenId]);
+
   const hideNav = !screenId || signedOut || screenId === "usernameScreen" || screenId === "chatScreen";
   document.querySelector(".bottom-nav")?.classList.toggle("hidden", hideNav);
 
@@ -63,6 +91,8 @@ const TAB_PANELS = { events: "eventsTab", recap: "recapTab", chats: "chatsTab" }
  */
 export function showTab(tab) {
   const active = TAB_PANELS[tab] ? tab : "events";
+  currentTab = active;
+  if (!document.getElementById("home")?.classList.contains("hidden")) setPageTitle(TAB_TITLES[active]);
 
   Object.values(TAB_PANELS).forEach((id) =>
     document.getElementById(id)?.classList.add("hidden")

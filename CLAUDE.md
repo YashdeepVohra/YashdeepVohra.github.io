@@ -196,6 +196,14 @@ Each line is the whole rule. The file after it is the argument for it.
   on failure) and cache-first only for versioned CDN URLs. It never
   touches Firestore, Auth or `/__/`.
 
+**The mark**
+
+- The logo is the firefly: `logo.svg` (tile), `logo-mark.svg` (no tile), PNGs
+  at 16/32/48/192/512 + maskable + apple-touch, and `og-image.png`. It is an
+  identity: same drawing in both themes, used as an `<img>`, never recoloured.
+- `document.title` has one owner, `ui.js` (`setPageTitle`, `setTitleUnread`).
+  Signed out it is the full search title; nothing else writes it.
+
 **Painting the feed** → `docs/feed.md`
 
 - The feed is diffed, not rebuilt. Never reintroduce `innerHTML =` in
