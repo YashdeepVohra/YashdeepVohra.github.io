@@ -3529,6 +3529,149 @@ group('sharing an event to several people');
 }
 
 /* ------------------------------------------------------------------ */
+group('icons, the orbit, the emoji picker and the inbox');
+{
+  // Every Boxicons class the app uses must be DRAWN in style.css now —
+  // there is no icon font any more, so a name with no rule is an empty
+  // square on screen. This is a static check: it reads the source.
+  const fs = await import('node:fs');
+  const root = new URL('..', import.meta.url);
+  const read = (p) => fs.readFileSync(new URL(p, root), 'utf8');
+  const walk = (dir) => fs.readdirSync(new URL(dir, root), { withFileTypes: true })
+    .flatMap((d) => d.isDirectory() ? walk(dir + d.name + '/') : (d.name.endsWith('.js') ? [dir + d.name] : []));
+  const source = [read('index.html'), ...walk('js/').map(read)].join('\n');
+  const css = read('style.css');
+  const used = [...new Set(source.match(/\bbx[sl]?-[a-z0-9-]+/g) || [])];
+  const undrawn = used.filter((n) => !new RegExp('\\.' + n + '\\s*\\{').test(css));
+  ok('every icon name the app uses is drawn in the stylesheet', undrawn.length === 0, undrawn.join(', '));
+
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const pg = await ctx.newPage();
+  const errs = [];
+  pg.on('pageerror', (e) => errs.push(e.message));
+  await pg.addInitScript({ path: fileURLToPath(new URL('./stub.js', import.meta.url)) });
+  await pg.goto(APP_URL, { waitUntil: 'domcontentloaded' });
+  await pg.waitForTimeout(1500);
+
+  const r = await pg.evaluate(async () => {
+    const wait = (ms) => new Promise((res) => setTimeout(res, ms));
+    const { state } = await import('/js/state/store.js');
+    const ui = await import('/js/utils/ui.js');
+    const chat = await import('/js/services/chatService.js');
+    const prof = await import('/js/services/profileService.js');
+    const orbit = await import('/js/services/orbitService.js');
+    const now = Date.now();
+    window.__authSingleton.currentUser = { uid: 'me' };
+    state.uid = 'me'; state.blockedUids = []; state.privacyChosen = true;
+    const mk = (u, n, a) => ({ uid: u, username: u, displayName: n, avatar: a, followers: [], following: [], vouchedBy: [] });
+    const ppl = [['r', 'Riya', '🦊'], ['a', 'Arjun', '🐻'], ['n', 'Neha', '🐯'], ['k', 'Kabir', '🐨'], ['z', 'Zoya', '🐸'], ['d', 'Dev', '🐱']];
+    state.userCache = { me: mk('me', 'Me', '🐼') };
+    ppl.forEach(([u, n, a]) => { state.userCache[u] = mk(u, n, a); window.__stubDocs['users/' + u] = mk(u, n, a); });
+    window.__stubDocs['users/me'] = mk('me', 'Me', '🐼');
+    state.following = ppl.map((p) => p[0]); state.followRequests = [];
+    state.orbitUids = ppl.map((p) => p[0]); state.orbitIncoming = []; state.orbitOutgoing = [];
+    state.eventCache = {}; state.eventOrder = []; state.recapOrder = []; state.recapDone = true;
+    document.getElementById('loading-screen').classList.add('hidden');
+    document.getElementById('login').classList.add('hidden');
+    document.querySelector('.app-frame').classList.remove('hidden');
+    window.switchScreen('home');
+    const out = {};
+
+    // Drawn, not fetched.
+    out.noIconFont = !document.querySelector('link[href*="boxicons"]');
+    const navIcons = [...document.querySelectorAll('.side-item i.bx')];
+    out.navDrawn = navIcons.length >= 3 && navIcons.every((i) => {
+      const cs = getComputedStyle(i);
+      const mask = cs.webkitMaskImage || cs.maskImage || '';
+      const box = i.getBoundingClientRect();
+      return /data:image\/svg/.test(mask) && box.width >= 12 && box.height >= 12;
+    });
+
+    // The inbox says when, and where each conversation stands.
+    window.__stubDocs['chats/me_r'] = { userUids: ['me', 'r'], status: 'unlocked', lastUpdated: now - 6e4, unreadByUid: 'me', initiatedByUid: 'r' };
+    window.__stubDocs['chats/a_me'] = { userUids: ['a', 'me'], status: 'unlocked', lastUpdated: now - 2e5, unreadByUid: '', initiatedByUid: 'me', typingUid: 'a' };
+    window.__stubDocs['chats/me_n'] = { userUids: ['me', 'n'], status: 'icebreaker', lastUpdated: now - 3e5, unreadByUid: '', initiatedByUid: 'me', icebreakerUsed: true };
+    window.showTab('chats');
+    chat.loadChatList();
+    await wait(400);
+    const rows = [...document.querySelectorAll('#chatList .chat-item')];
+    out.rowCount = rows.length;
+    out.allTimed = rows.length === 3 && rows.every((x) => (x.querySelector('.chat-when')?.innerText || '').trim().length > 0);
+    out.subs = rows.map((x) => x.querySelector('.chat-sub span')?.innerText.trim());
+    out.unreadMarked = rows[0]?.classList.contains('unread');
+
+    // Emoji: goes in at the caret, keeps the field focused on a laptop,
+    // and Escape puts the panel away.
+    chat.openChat('d_me', 'd');
+    await wait(400);
+    out.helloShown = !document.getElementById('threadHello').classList.contains('hidden');
+    const input = document.getElementById('msgInput');
+    input.value = 'ab';
+    input.focus();
+    input.setSelectionRange(1, 1);
+    const btn = document.getElementById('emojiBtn');
+    btn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+    btn.click();
+    await wait(100);
+    const panel = document.getElementById('emojiPanel');
+    out.panelOpen = !!panel && !panel.classList.contains('hidden');
+    const cell = panel.querySelector('.emoji-cell');
+    const picked = cell.dataset.emoji;
+    cell.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+    cell.click();
+    out.inserted = input.value === 'a' + picked + 'b';
+    out.caretAfter = input.selectionStart === 1 + picked.length;
+    out.focusKept = document.activeElement === input;
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    out.escCloses = panel.classList.contains('hidden');
+    btn.click();
+    out.recentHasIt = [...panel.querySelectorAll('.emoji-cell')].some((c) => c.dataset.emoji === picked)
+      && panel.querySelector('.emoji-tab.on')?.dataset.cat === 'recent';
+    // An opener fills the box; it does not send.
+    const w0 = window.__writes;
+    document.querySelector('#threadHello [data-opener]').click();
+    out.openerFills = /Hey/.test(input.value) && window.__writes === w0;
+    chat.closeChat({ silent: true });
+    await wait(50);
+    out.closedWithChat = panel.classList.contains('hidden') && document.getElementById('threadHello').classList.contains('hidden');
+
+    // The orbit: faces travel round the ring but are never turned.
+    prof.openProfileScreen('me');
+    await wait(900);
+    await wait(900);
+    const faces = [...document.querySelectorAll('.orbit-face')];
+    const angle = (el) => {
+      let m = new DOMMatrix();
+      const chain = [];
+      for (let n = el; n && !n.classList.contains('orbit-system'); n = n.parentElement) chain.unshift(n);
+      chain.forEach((n) => { const t = getComputedStyle(n).transform; if (t && t !== 'none') m = m.multiply(new DOMMatrix(t)); });
+      return Math.atan2(m.b, m.a) * 180 / Math.PI;
+    };
+    out.faceCount = faces.length;
+    out.angles = faces.map((f) => Math.round(angle(f)));
+    return out;
+  });
+
+  ok('no icon font is loaded at all', r.noIconFont);
+  ok('the sidebar icons are painted from the stylesheet', r.navDrawn);
+  ok('every inbox row says when', r.allTimed, JSON.stringify(r.subs));
+  ok('and where the conversation stands', JSON.stringify(r.subs) === JSON.stringify(['New message', 'typing…', 'Waiting for a reply']), JSON.stringify(r.subs));
+  ok('an unread conversation is marked', r.unreadMarked === true);
+  ok('an empty conversation greets you', r.helloShown);
+  ok('the emoji button opens the panel', r.panelOpen);
+  ok('an emoji goes in at the caret', r.inserted && r.caretAfter);
+  ok('and the field keeps its focus on a laptop', r.focusKept);
+  ok('Escape puts the panel away', r.escCloses);
+  ok('what you used shows up under Recent', r.recentHasIt);
+  ok('an opener fills the box and sends nothing', r.openerFills);
+  ok('closing the chat takes the panel and the greeting with it', r.closedWithChat);
+  ok('orbit faces are drawn', r.faceCount >= 6, String(r.faceCount));
+  ok('and every one of them is upright', r.angles.length > 0 && r.angles.every((a) => Math.abs(a) <= 2), JSON.stringify(r.angles));
+  ok('no errors from any of that', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ------------------------------------------------------------------ */
 group('one file for the browser, a phone on its side, and Send');
 {
   // The browser gets one file. It must be built from the js/ that is
