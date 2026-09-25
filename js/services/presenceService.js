@@ -162,7 +162,8 @@ export function setPresenceTargets(fn) {
   if (typeof fn === "function") visibleProvider = fn;
 }
 function refreshVisible() {
-  if (!visible) return;
+  // A tab in the background asks about nobody: nobody is looking.
+  if (!visible || (typeof document !== "undefined" && document.hidden)) return;
   primePresence(visibleProvider()).then((fetched) => { if (!fetched) changed(); });
 }
 

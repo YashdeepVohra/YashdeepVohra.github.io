@@ -1292,7 +1292,14 @@ html.kb-open .return-chip.floating { display: none; }
    sit side by side at poster scale with Caldera's dotted rule between
    them — the same 1.5px dotted detail as the one above the actions. */
 .poster-stats { display: flex; align-items: stretch; gap: var(--s-12); }
-.poster-stat { display: flex; align-items: flex-end; gap: 9px; }
+/* A STAT READS TOP TO BOTTOM: label, number, detail — "STARTS IN /
+   45 min / at 6:40 pm". The label and the detail used to be stacked
+   BESIDE the number, so the eye ran across the band and read
+   "STARTS IN 6:40 PM": a clock time, and the wrong one. Stacked, the
+   label belongs to the number under it and the time is plainly the
+   answer to "when". The labels of both stats share a top line and the
+   numbers share a baseline, so the pair still reads as one row. */
+.poster-stat { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; }
 .poster-stat + .poster-stat {
   padding-left: var(--s-12);
   border-left: 1.5px dotted color-mix(in srgb, var(--chip-ink) 34%, transparent);
@@ -1300,15 +1307,25 @@ html.kb-open .return-chip.floating { display: none; }
 .poster-value {
   font-family: var(--font-display);
   font-weight: var(--display-weight);
-  font-size: 38px; line-height: 0.82;
+  font-size: 36px; line-height: 0.9;
   letter-spacing: -0.045em;
-  text-transform: uppercase;
+  white-space: nowrap;
   color: var(--chip-ink);
 }
+/* The unit rides small beside its number: "45 min", "1h 40m". Set in
+   the functional face so it reads as a word, not as part of the figure. */
+.poster-unit {
+  font-family: var(--font);
+  font-weight: 700;
+  font-size: 14px;
+  letter-spacing: -0.01em;
+  margin-left: 2px;
+}
+.poster-stat + .poster-stat .poster-unit { font-size: 12.5px; }
 /* The second stat is the supporting fact, so it steps down a size —
    two numbers at the same scale is two headlines and no hierarchy. */
 .poster-stat + .poster-stat .poster-value { font-size: 27px; }
-.poster-side { display: flex; flex-direction: column; gap: 1px; min-width: 0; padding-bottom: 3px; }
+.poster-label { display: inline-flex; align-items: center; gap: 5px; }
 .poster-label, .poster-sub {
   font-family: var(--font-mono);
   font-size: 10px; letter-spacing: var(--track-mono); text-transform: uppercase;
@@ -1701,6 +1718,26 @@ html.kb-open .return-chip.floating { display: none; }
 .chat-sub > span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chat-sub.strong { color: var(--ink); font-weight: 600; }
 .chat-sub.live { color: var(--forest); font-style: italic; }
+/* The way to conversations past the live twenty (loadOlderChats). */
+.inbox-more {
+  width: 100%; margin: var(--s-8) 0 0;
+  padding: 11px 16px;
+  background: transparent; color: var(--forest);
+  border: 1.5px dashed var(--ash); box-shadow: none;
+  border-radius: var(--r-sm);
+  font-size: 14px; font-weight: 600;
+  justify-content: center;
+}
+.inbox-more:hover { background: var(--bone); border-color: var(--sage); filter: none; }
+/* How many are waiting, WhatsApp-style, where the plain dot used to be. */
+.unread-count {
+  flex: none;
+  min-width: 20px; height: 20px; padding: 0 6px;
+  display: inline-grid; place-items: center;
+  border-radius: var(--r-pill);
+  background: var(--forest); color: var(--on-accent);
+  font-size: 11.5px; font-weight: 700; font-style: normal; line-height: 1;
+}
 .chat-avatar {
   width: 44px; height: 44px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
@@ -3721,6 +3758,16 @@ img.fr-logo { background: none; object-fit: contain; }
    top of the band, stat at the bottom. */
 .stub .poster { height: var(--tear); }
 .stub .poster-type { display: flex; flex-direction: column; justify-content: space-between; }
+/* A stub's band is a fixed height (the notches are cut at --tear), and
+   its one stat — how many went — has no clock to confuse, so it keeps
+   the compact layout: the number, with its label and footnote beside. */
+.stub .poster-stat {
+  display: grid; grid-template-columns: auto auto; grid-template-rows: auto auto;
+  column-gap: 9px; row-gap: 1px; align-items: end;
+}
+.stub .poster-value { grid-column: 1; grid-row: 1 / span 2; font-size: 38px; line-height: 0.82; }
+.stub .poster-label { grid-column: 2; grid-row: 1; }
+.stub .poster-sub { grid-column: 2; grid-row: 2; padding-bottom: 3px; }
 
 /* Drained. The dots stay — a stub is still printed on something — but
    the colour goes out of them, which is what says "this is over"

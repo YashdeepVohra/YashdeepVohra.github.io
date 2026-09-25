@@ -601,24 +601,65 @@ function relTime(ms, now = Date.now()) {
  * only once you have decided you care.
  */
 function timeStat(e, now) {
-  const clock = clockTime(e.startTime);
-
   if (e.expiresAt <= now) {
-    return { label: "Ended", value: relTime(e.expiresAt, now).replace(" ago", ""), sub: "ago" };
+    return { label: "Ended", parts: durParts(now - e.expiresAt), sub: "ago" };
   }
   if (now >= e.startTime) {
-    // Live. The useful number is how long is left, not how long it has
+    // Live. The useful number is how long is LEFT, not how long it has
     // been running: you are deciding whether it is worth walking over.
-    const leftMins = Math.max(0, Math.round((e.expiresAt - now) / 60000));
-    const left = leftMins < 60 ? leftMins + "m" : Math.round(leftMins / 60) + "h";
-    return { label: "Happening", value: "Now", sub: left + " left", live: true };
+    const left = e.expiresAt - now;
+    return {
+      label: "Happening now",
+      parts: left < 60000 ? [["Ending", ""]] : durParts(left),
+      sub: "left \u00b7 till " + clockTime(e.expiresAt),
+      live: true
+    };
   }
-  const mins = Math.round((e.startTime - now) / 60000);
-  const value = mins < 1 ? "Now"
-    : mins < 60 ? mins + "m"
-    : mins < 1440 ? Math.round(mins / 60) + "h"
-    : Math.round(mins / 1440) + "d";
-  return { label: "Starts in", value, sub: clock };
+  if (e.startTime - now < 60000) {
+    return { label: "Starting", parts: [["Now", ""]], sub: dayClock(e.startTime, now) };
+  }
+  return { label: "Starts in", parts: durParts(e.startTime - now), sub: dayClock(e.startTime, now) };
+}
+
+/**
+ * A duration as [number, unit] pairs, the way a person says it:
+ * "45 min", "1h 40m", "3 hrs", "2 days". The number is set big and the
+ * unit small, so "45M" can never be read as forty-five million, or
+ * "STARTS IN 6:40" as a clock time.
+ */
+export function durParts(ms) {
+  const mins = Math.max(1, Math.round(ms / 60000));
+  if (mins < 60) return [[String(mins), "min"]];
+  if (mins < 600) {
+    const h = Math.floor(mins / 60), m = mins % 60;
+    return m ? [[String(h), "h"], [String(m), "m"]] : [[String(h), h === 1 ? "hr" : "hrs"]];
+  }
+  if (mins < 1440) return [[String(Math.round(mins / 60)), "hrs"]];
+  const d = Math.floor(mins / 1440);
+  return [[String(d), d === 1 ? "day" : "days"]];
+}
+
+/**
+ * WHEN, as a day and a time: "at 6:40 pm" today, "tomorrow 7:38 am",
+ * "Sat 7:38 am" this week, "3 Oct, 7:38 am" after that. The band used
+ * to give a bare clock time under "1D", which never said which day.
+ */
+export function dayClock(ms, now = Date.now()) {
+  const d = new Date(ms);
+  const t = new Date(now);
+  const day = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diffDays = Math.round((day(d) - day(t)) / 86400000);
+  const clock = clockTime(ms);
+  if (diffDays <= 0) return "at " + clock;
+  if (diffDays === 1) return "tomorrow " + clock;
+  if (diffDays < 7) return d.toLocaleDateString("en-GB", { weekday: "short" }) + " " + clock;
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" }) + ", " + clock;
+}
+
+/** The stat's big value as markup: numbers big, units small. */
+function partsHtml(parts) {
+  return (parts || []).map(([n, u]) =>
+    `${escapeHtml(n)}${u ? `<span class="poster-unit">${escapeHtml(u)}</span>` : ""}`).join(" ");
 }
 
 /**
@@ -641,19 +682,25 @@ function timeStat(e, now) {
  */
 function statBlock(s, { volatileTime = false } = {}) {
   if (!s) return "";
+  // READ TOP TO BOTTOM: what it is, the number, then the detail —
+  // "STARTS IN / 45 min / at 6:40 pm". The label used to sit BESIDE
+  // the number with the clock time under it, so the eye read across
+  // the band as "STARTS IN 6:40 PM" and got the wrong answer.
+  const parts = s.parts || [[String(s.value == null ? "" : s.value), s.unit || ""]];
+  const label = volatileTime
+    ? `<span class="poster-label" data-vt="label"></span>`
+    : `<span class="poster-label">${s.live ? `<span class="live-pip"></span>` : ""}${escapeHtml(s.label)}</span>`;
   const value = volatileTime
     ? `<span class="poster-value" data-vt="value"></span>`
-    : `<span class="poster-value">${escapeHtml(s.value)}</span>`;
+    : `<span class="poster-value">${partsHtml(parts)}</span>`;
   const sub = volatileTime
     ? `<span class="poster-sub" data-vt="sub"></span>`
     : (s.sub ? `<span class="poster-sub">${escapeHtml(s.sub)}</span>` : "");
   return `
     <span class="poster-stat">
+      ${label}
       ${value}
-      <span class="poster-side">
-        <span class="poster-label">${s.live ? `<span class="live-pip"></span>` : ""}${escapeHtml(s.label)}</span>
-        ${sub}
-      </span>
+      ${sub}
     </span>`;
 }
 
@@ -1058,7 +1105,15 @@ export function paintVolatile(listEl, now = Date.now()) {
     slots.forEach((slot) => {
       const kind = slot.getAttribute("data-vt");
       let text = "";
-      if (kind === "value") text = stat.value;
+      if (kind === "value" || kind === "label") {
+        // Markup, but only ever built from numbers and fixed words
+        // (partsHtml escapes anyway), and only written when it differs.
+        const html = kind === "value"
+          ? partsHtml(stat.parts)
+          : `${stat.live ? `<span class="live-pip"></span>` : ""}${escapeHtml(stat.label)}`;
+        if (slot.dataset.html !== html) { slot.innerHTML = html; slot.dataset.html = html; }
+        return;
+      }
       else if (kind === "sub") text = stat.sub || "";
       else if (kind === "ago") text = relTime(e.expiresAt, now);
       else if (kind === "leaves") text = relTime(now + (recapUntil(e, state.uid) - now), now);
@@ -1326,10 +1381,13 @@ export function renderEvents() {
       // is that somebody has to start.
       const goingCount = withoutBlocked(confirmedGoing).length;
       const goingStat = goingCount
-        ? { label: goingCount === 1 ? "going" : "going",
-            value: String(goingCount),
-            sub: isFull ? "full" : e.maxCapacity ? (e.maxCapacity - attendees) + " left" : "" }
-        : { label: "going", value: "\u2014", sub: "be first" };
+        ? { label: "Going",
+            parts: [[String(goingCount), e.maxCapacity ? "/" + e.maxCapacity : ""]],
+            // "4/6" already says there is a cap; how many spots are left
+            // is the capacity bar's job, right below. Only FULL is worth
+            // saying twice, because it changes what you can do.
+            sub: isFull ? "full" : "" }
+        : { label: "Going", parts: [["0", ""]], sub: "be the first" };
 
       liveCards.push({ id, html: `
         <article class="event card poster-card ${isLive ? "is-live" : ""}" id="event-${id}"${tagAttr} style="--vibe:${vibe}">

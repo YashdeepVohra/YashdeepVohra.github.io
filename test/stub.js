@@ -49,9 +49,13 @@ const docRef = (path) => ({
     // meant nothing under a SUBCOLLECTION was ever stored — and the
     // follow graph lives in users/{uid}/followers/{uid} now.
     if (data && typeof data === 'object' && path) {
+      // increment() lands for real too (the chat's unreadCount counts
+      // up with it), against whatever is stored when merging.
+      const prior = (opts && opts.merge && window.__stubDocs[path]) || {};
       const clean = Object.fromEntries(
         Object.entries(data)
-          .map(([k, v]) => [k, v && v.__op === 'now' ? stamp() : v])
+          .map(([k, v]) => [k, v && v.__op === 'now' ? stamp()
+            : v && v.__op === 'inc' ? (typeof prior[k] === 'number' ? prior[k] : 0) + v.v : v])
           .filter(([, v]) => !(v && v.__op))
       );
       window.__stubDocs[path] = (opts && opts.merge) ? Object.assign(window.__stubDocs[path] || {}, clean) : clean;
@@ -248,7 +252,7 @@ const collRef = (name, parent) => {
      whatever is actually sitting in __stubDocs directly under this
      path — which is what makes a SUBCOLLECTION behave like one, and
      the follow graph is subcollections now. */
-  const spec = { order: null, lim: 0 };
+  const spec = { order: null, lim: 0, after: null };
   const fromStore = () => {
     const prefix = base + '/';
     return Object.keys(window.__stubDocs)
@@ -262,6 +266,11 @@ const collRef = (name, parent) => {
       const [f, dir] = spec.order;
       rows.sort((a, b) => (dir === 'desc' ? -1 : 1) * (((a.__d || {})[f] || 0) - ((b.__d || {})[f] || 0)));
     }
+    // startAfter(aDocumentFromAPreviousPage), the way the inbox pages.
+    if (spec.after && spec.after.id) {
+      const at = rows.findIndex((r) => r.id === spec.after.id);
+      if (at >= 0) rows = rows.slice(at + 1);
+    }
     if (spec.lim) rows = rows.slice(0, spec.lim);
     return rows.map((r) => ({ id: r.id, data: () => r.__d }));
   };
@@ -269,7 +278,7 @@ const collRef = (name, parent) => {
     where: () => q, limitToLast: () => q,
     orderBy: (f, dir = 'asc') => { spec.order = [f, dir]; return q; },
     limit: (n) => { spec.lim = n; return q; },
-    endBefore: () => q, startAfter: () => q, startAt: () => q, endAt: () => q,
+    endBefore: () => q, startAfter: (d) => { spec.after = d; return q; }, startAt: () => q, endAt: () => q,
     get: () => Promise.resolve(snap(run())),
     onSnapshot: (cb) => {
       const fire = () => cb(snap(run()));

@@ -103,6 +103,9 @@ Each line is the whole rule. The file after it is the argument for it.
 - The inbox preview (`lastText`/`lastMsgId`/`lastSenderUid`) rides in the
   chat write every send already makes; the writer must name themselves
   as sender. Text is `messageRules.previewOf`.
+- The inbox listens to the newest 20 chats only; older pages are one
+  `get()` each ("Show older chats"). `unreadCount` counts up only while
+  the other side hasn't read, back to 0 on read; rules allow +1 at most.
 - Active now is `presence/{uid}`: a heartbeat while on screen, one-off
   cached gets for people on screen, never a listener. Hidden = the doc
   holds no time. `presenceService.js` has the numbers.
@@ -141,6 +144,9 @@ Each line is the whole rule. The file after it is the argument for it.
   TWO COLUMNS — type left, halftone right — because siblings cannot
   overlap and coordinates can always be out-grown. `.poster-type` keeps
   `min-width: max-content`.
+- A band stat reads TOP TO BOTTOM — label, number + small unit, detail
+  ("STARTS IN / 45 min / at 6:40 pm"); label, value and detail are all
+  volatile. A stub keeps the compact side-by-side layout (fixed --tear).
 - A stub keeps its vibe colour. Taking the colour out takes the
   information out.
 - Dark mode is tokens, not overrides. Never write a literal colour; add a
@@ -303,6 +309,7 @@ Decisions already made, with the reason, so they don't get undone:
 | Poster cards cost ~29% more DOM than the rows they replaced | measured: style recalc went 4.3ms -> 0.2ms, layout unchanged. The nodes cost nothing in a frame; the old transitions did |
 | A shared event card reads the event once, cached and de-duplicated | ten copies of one link in a thread are one read |
 | The receipt folds events already in the cache, debounced | a history collection would be a write per event |
+| Inbox: 20 chats live, older pages read once on request | a change to an old thread bills nobody; a long inbox costs what is on screen |
 | Inbox preview is a copy on the chat doc | the chat doc is already written on every send and already read by the inbox listener: 0 extra reads, 0 extra writes |
 | Active now: no listener, gets for the top 8 on screen, cached 3 min; heartbeat every 4 min while visible | a listener bills every watcher per heartbeat. This way ~8 reads per inbox look (≈ +7–9k/day at 300 DAU) and ~8 writes per half-hour session |
 

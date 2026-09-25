@@ -177,3 +177,29 @@ taken before and after must be BYTE-identical — a pure rename cannot
 move a pixel. Run the snapshot twice against unchanged code first, to
 show the harness itself is deterministic; otherwise the comparison
 means nothing. That is how the 134-replacement rename was signed off.
+
+### The band's stat reads top to bottom
+
+The time stat was a big number with its label and footnote stacked
+BESIDE it: `45M | STARTS IN / 6:40 PM`. Eyes read across a row, so
+people read "STARTS IN 6:40 PM" — a clock time — and "45M" as a code.
+Two fixes, both in the markup and the sheet:
+
+- The stat is a column: label, number, detail. "STARTS IN / 45 min /
+  at 6:40 pm", "HAPPENING NOW / 1h 30m / left · till 9:30 pm". The
+  labels of both stats share a top line and the numbers a baseline, so
+  the pair still reads as one row.
+- Numbers are big and units small (`durParts`): "45 min", "1h 40m",
+  "3 hrs", "2 days". The detail names the DAY when it isn't today
+  (`dayClock`): "tomorrow 7:38 am", "Tue 7:00 pm", "10 Oct, 9:05 am".
+  "1D / 7:38 AM" never said which day.
+
+The label is volatile now too (`data-vt="label"`): it used to be frozen
+in the markup, so a card built before its event started kept saying
+"Starts in" after it had begun, until something else rebuilt it.
+
+The going stat is "4/6" with "full" under it only when full; how many
+spots are left is the capacity bar's job, right below, and saying it
+twice was noise. Recap stubs keep the compact side-by-side stat: their
+band is a fixed height for the notches, and "7 PEOPLE WENT" has no
+clock in it to misread.

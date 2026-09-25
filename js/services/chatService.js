@@ -53,6 +53,13 @@ function lastFields(text, msgId) {
     lastMsgId: msgId
   };
 }
+/* How many messages are waiting for the other person. It only counts up
+   while they haven't read the last one (unreadByUid is still them);
+   the moment they open the chat it goes back to 0. The inbox says
+   "4+ new messages" from it instead of quoting just the newest. */
+function unreadCountAfterSend(data, otherUid) {
+  return data && data.unreadByUid === otherUid ? FieldValue.increment(1) : 1;
+}
 function followPreview(chatId, type, msgId, text) {
   if (type !== "direct" || !chatId) return;
   const data = state.currentChat === chatId ? state.currentChatData : null;
@@ -82,7 +89,10 @@ const OLDER_PAGE = 25;
 // re-read on every launch and billing a read per change for the rest of
 // time. Nobody scrolls past the last few dozen threads, and the sort
 // this used to do in memory is the one the server can do from an index.
-const INBOX_LIMIT = 40;
+// Twenty, live. Anything older is a button away and read once
+// (loadOlderChats), so a person with two hundred threads pays for the
+// twenty they can see, and a change to thread #150 bills nobody.
+const INBOX_LIMIT = 20;
 
 // One shared event is all "have we crossed paths" asks for. Without a
 // bound, somebody who joined forty things yesterday made their first
@@ -160,6 +170,7 @@ export async function sendDirectText(otherUid, text) {
       status,
       icebreakerUsed: false,
       unreadByUid: otherUid,
+      unreadCount: 1,
       typingUid: "",
       lastUpdated: Date.now(),
       ...last
@@ -171,7 +182,7 @@ export async function sendDirectText(otherUid, text) {
     const mine = status === "icebreaker" && data.initiatedByUid === state.uid;
     if (mine && data.icebreakerUsed === true) throw fail("icebreaker-used");
     usedIcebreaker = mine;
-    await chatRef.set({ unreadByUid: otherUid, lastUpdated: Date.now(), status, ...last }, { merge: true });
+    await chatRef.set({ unreadByUid: otherUid, unreadCount: unreadCountAfterSend(data, otherUid), lastUpdated: Date.now(), status, ...last }, { merge: true });
   }
 
   const msg = {
@@ -331,7 +342,7 @@ export function openChat(chatId, otherUid) {
 
     if (data.unreadByUid === state.uid) {
       db.collection("chats").doc(chatId)
-        .set({ unreadByUid: "" }, { merge: true })
+        .set({ unreadByUid: "", unreadCount: 0 }, { merge: true })
         .catch(() => {});
       state.currentChatData.unreadByUid = "";
     }
@@ -544,6 +555,7 @@ export async function sendMessage() {
         status,
         icebreakerUsed: false,
         unreadByUid: otherUid,
+        unreadCount: 1,
         typingUid: "",
         lastUpdated: Date.now(),
         ...last
@@ -561,6 +573,7 @@ export async function sendMessage() {
         && chatData.icebreakerUsed !== true;
       await chatRef.set({
         unreadByUid: otherUid,
+        unreadCount: unreadCountAfterSend(chatData, otherUid),
         lastUpdated: Date.now(),
         status,
         typingUid: "",
@@ -1904,6 +1917,138 @@ function setUnreadBadge(hasUnread) {
 }
 
 // ---------- Inbox ----------
+/* ---------------------------------------------------------------------
+   The chats list, painted from what we hold: the LIVE page (the newest
+   INBOX_LIMIT conversations, on a listener) plus any OLDER pages you
+   asked for with "Show older chats" (read once, never listened to).
+   ------------------------------------------------------------------- */
+let liveChats = [];
+let liveCursor = null;      // the last document of the live page
+let liveFull = false;       // the live page came back full: there may be more
+let olderChats = [];
+let olderCursor = null;
+let olderDone = false;
+let olderLoading = false;
+
+function paintInbox(list = document.getElementById("chatList")) {
+  if (!list) return;
+  let hasGlobalUnread = false;
+  let html = "";
+  const liveIds = new Set(liveChats.map((c) => c.id));
+  // A conversation that came back to life is in the live page now.
+  const all = [...liveChats, ...olderChats.filter((c) => !liveIds.has(c.id))];
+
+  all.forEach((chat) => {
+    const otherUid = (chat.userUids || []).find((u) => u !== state.uid);
+    const id = safeId(chat.id);
+    const otherId = safeId(otherUid);
+    if (!id || !otherId) return;
+
+    let isUnread = chat.unreadByUid === state.uid;
+    if (isUnread && state.currentChat === chat.id) {
+      db.collection("chats").doc(chat.id).set({ unreadByUid: "", unreadCount: 0 }, { merge: true }).catch(() => {});
+      isUnread = false;
+    }
+    if (isUnread) hasGlobalUnread = true;
+
+    // The second line: typing beats everything; then the last
+    // message (a copy on the chat document, so no read); then, for
+    // a chat from before previews existed, where it stands.
+    let sub = "@" + escapeHtml(usernameFor(otherUid));
+    let subClass = "";
+    const hasPreview = typeof chat.lastMsgId === "string" && chat.lastMsgId !== "";
+    // Several waiting: say how many rather than quote only the
+    // newest, which reads as if that was all they said.
+    const waiting = isUnread ? Math.max(1, Number(chat.unreadCount) || 1) : 0;
+    if (chat.typingUid === otherUid) { sub = "typing\u2026"; subClass = " live"; }
+    else if (waiting >= 2) {
+      sub = waiting >= 4 ? "4+ new messages" : `${waiting} new messages`;
+      subClass = " strong";
+    }
+    else if (hasPreview) {
+      const mine = chat.lastSenderUid === state.uid;
+      const body = chat.lastText ? escapeHtml(chat.lastText) : "<em>Message deleted</em>";
+      sub = (mine ? "You: " : "") + body;
+      if (isUnread) subClass = " strong";
+    }
+    else if (isUnread) { sub = "New message"; subClass = " strong"; }
+    else if (chat.status === "icebreaker" && chat.initiatedByUid === state.uid && chat.icebreakerUsed) sub = "Waiting for a reply";
+    else if (chat.status === "icebreaker" && chat.initiatedByUid === otherUid) { sub = "Wants to chat"; subClass = " strong"; }
+
+    html += `
+      <div class="chat-item${isUnread ? " unread" : ""}" data-uid="${otherId}" onclick="window.openChat('${id}', '${otherId}')">
+        <div class="chat-face">
+          <div class="chat-avatar">${renderAvatar(avatarFor(otherUid))}</div>
+          <span class="presence-dot${activityOf(otherUid).active ? "" : " hidden"}" aria-hidden="true"></span>
+        </div>
+        <div class="chat-main">
+          <div class="chat-top">
+            <span class="chat-name">${escapeHtml(displayNameFor(otherUid))}</span>
+            <span class="chat-when">${escapeHtml(formatInboxTime(chat.lastUpdated))}</span>
+          </div>
+          <div class="chat-sub${subClass}">
+            <span>${sub}</span>
+            ${isUnread ? `<span class="unread-count" aria-label="${waiting} unread">${waiting > 9 ? "9+" : waiting}</span>` : ""}
+          </div>
+        </div>
+      </div>`;
+  });
+
+
+  if (liveFull && !olderDone) {
+    html += `<button type="button" class="inbox-more" id="inboxMore">${olderLoading ? "Loading\u2026" : "Show older chats"}</button>`;
+  }
+  list.innerHTML = html;
+  list.querySelector("#inboxMore")?.addEventListener("click", loadOlderChats);
+
+  // Only the conversations near the top are worth asking about,
+  // and only answers older than a few minutes are asked again.
+  inboxUids = all.map((c) => (c.userUids || []).find((u) => u !== state.uid)).filter(Boolean);
+  if (inboxOnScreen()) primePresence(inboxUids.slice(0, MAX_FETCH));
+
+  setUnreadBadge(hasGlobalUnread);
+  setTitleUnread(hasGlobalUnread);
+}
+
+/**
+ * The next page of conversations, older than anything on screen. A
+ * one-off read of at most INBOX_LIMIT documents — not a listener, so an
+ * old thread nobody is looking at never bills a read again. If one of
+ * them gets a new message it jumps into the live page by itself.
+ */
+export async function loadOlderChats() {
+  if (olderLoading || olderDone || !state.uid) return;
+  const cursor = olderCursor || liveCursor;
+  if (!cursor) return;
+  olderLoading = true;
+  paintInbox();
+  try {
+    const snap = await db.collection("chats")
+      .where("userUids", "array-contains", state.uid)
+      .orderBy("lastUpdated", "desc")
+      .startAfter(cursor)
+      .limit(INBOX_LIMIT)
+      .get();
+    const page = [];
+    snap.forEach((doc) => {
+      const data = doc.data();
+      const other = (data.userUids || []).find((u) => u !== state.uid);
+      if (isBlocked(other)) return;
+      page.push({ id: doc.id, ...data });
+    });
+    await primeUsers(page.map((c) => (c.userUids || []).find((u) => u !== state.uid)).filter(Boolean)).catch(() => {});
+    olderChats = olderChats.concat(page.filter((c) => !olderChats.some((o) => o.id === c.id)));
+    if (snap.docs.length) olderCursor = snap.docs[snap.docs.length - 1];
+    if (snap.docs.length < INBOX_LIMIT) olderDone = true;
+  } catch (e) {
+    console.error("Older chats failed:", e.code || e.message);
+    toast("Couldn't load older chats.");
+  } finally {
+    olderLoading = false;
+    paintInbox();
+  }
+}
+
 export function loadChatList() {
   if (state.chatListUnsubscribe) state.chatListUnsubscribe();
 
@@ -1972,67 +2117,10 @@ export function loadChatList() {
           return;
         }
 
-        let hasGlobalUnread = false;
-        let html = "";
-
-        chats.forEach((chat) => {
-          const otherUid = (chat.userUids || []).find((u) => u !== state.uid);
-          const id = safeId(chat.id);
-          const otherId = safeId(otherUid);
-          if (!id || !otherId) return;
-
-          let isUnread = chat.unreadByUid === state.uid;
-          if (isUnread && state.currentChat === chat.id) {
-            db.collection("chats").doc(chat.id).set({ unreadByUid: "" }, { merge: true }).catch(() => {});
-            isUnread = false;
-          }
-          if (isUnread) hasGlobalUnread = true;
-
-          // The second line: typing beats everything; then the last
-          // message (a copy on the chat document, so no read); then, for
-          // a chat from before previews existed, where it stands.
-          let sub = "@" + escapeHtml(usernameFor(otherUid));
-          let subClass = "";
-          const hasPreview = typeof chat.lastMsgId === "string" && chat.lastMsgId !== "";
-          if (chat.typingUid === otherUid) { sub = "typing\u2026"; subClass = " live"; }
-          else if (hasPreview) {
-            const mine = chat.lastSenderUid === state.uid;
-            const body = chat.lastText ? escapeHtml(chat.lastText) : "<em>Message deleted</em>";
-            sub = (mine ? "You: " : "") + body;
-            if (isUnread) subClass = " strong";
-          }
-          else if (isUnread) { sub = "New message"; subClass = " strong"; }
-          else if (chat.status === "icebreaker" && chat.initiatedByUid === state.uid && chat.icebreakerUsed) sub = "Waiting for a reply";
-          else if (chat.status === "icebreaker" && chat.initiatedByUid === otherUid) { sub = "Wants to chat"; subClass = " strong"; }
-
-          html += `
-            <div class="chat-item${isUnread ? " unread" : ""}" data-uid="${otherId}" onclick="window.openChat('${id}', '${otherId}')">
-              <div class="chat-face">
-                <div class="chat-avatar">${renderAvatar(avatarFor(otherUid))}</div>
-                <span class="presence-dot${activityOf(otherUid).active ? "" : " hidden"}" aria-hidden="true"></span>
-              </div>
-              <div class="chat-main">
-                <div class="chat-top">
-                  <span class="chat-name">${escapeHtml(displayNameFor(otherUid))}</span>
-                  <span class="chat-when">${escapeHtml(formatInboxTime(chat.lastUpdated))}</span>
-                </div>
-                <div class="chat-sub${subClass}">
-                  <span>${sub}</span>
-                  ${isUnread ? `<span class="unread-pulse-dot" aria-label="Unread"></span>` : ""}
-                </div>
-              </div>
-            </div>`;
-        });
-
-        list.innerHTML = html;
-
-        // Only the conversations near the top are worth asking about,
-        // and only answers older than a few minutes are asked again.
-        inboxUids = chats.map((c) => (c.userUids || []).find((u) => u !== state.uid)).filter(Boolean);
-        if (inboxOnScreen()) primePresence(inboxUids.slice(0, MAX_FETCH));
-
-        setUnreadBadge(hasGlobalUnread);
-        setTitleUnread(hasGlobalUnread);
+        liveChats = chats;
+        liveCursor = snapshot.docs.length ? snapshot.docs[snapshot.docs.length - 1] : null;
+        liveFull = snapshot.docs.length >= INBOX_LIMIT;
+        paintInbox(list);
       },
       (error) => {
         // A Firestore listener that errors is DEAD: it never retries on
@@ -2118,7 +2206,7 @@ export function clearInboxSearch() {
 
 /** Re-render the inbox from the live listener's last snapshot. */
 function renderInboxFromCache() {
-  // Simplest correct thing: re-attach. The listener fires immediately
-  // with the cached snapshot, so this costs nothing.
+  // Repaint what the listener already gave us: no re-attach, no read.
+  if (state.chatListUnsubscribe && liveChats.length) return paintInbox();
   loadChatList();
 }

@@ -405,3 +405,23 @@ reads are billed, so it would double the reads above. If that ever
 matters more than the reads, add
 `get(/databases/$(database)/documents/presence/$(uid())).data.visible == true`
 to `allow get`.
+
+### "4+ new messages", and an inbox that stays cheap at any length
+
+`unreadCount` on the chat counts messages the other person hasn't read.
+A send increments it only while `unreadByUid` is still them (they
+haven't opened it since your last one); otherwise it restarts at 1.
+Opening the chat sets it back to 0 in the same write that clears
+`unreadByUid`. The rules allow 0, or at most one more than it was, so
+nobody can make a chat claim "99 new messages". The row says the
+message itself for one, "2 new messages" / "3 new messages", then
+"4+ new messages", with a count badge beside it.
+
+The inbox listener covers the newest 20 conversations (`INBOX_LIMIT`),
+down from 40. A listener bills a read for every change to every
+document it covers, so every thread in it is a thread whose typing
+indicator and every message costs a read for as long as the app is
+open. Older conversations are behind "Show older chats": one `get()`
+of the next 20, never listened to. A thread in there that gets a new
+message moves into the live 20 by itself (its `lastUpdated` jumps), and
+the painter drops the stale copy.

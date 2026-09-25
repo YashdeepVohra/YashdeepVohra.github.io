@@ -993,6 +993,9 @@ service cloud.firestore {
       allow create: if inThisChat()
         && !exists(/databases/$(database)/documents/blocks/$(chatId))
         && previewOk(request.resource.data)
+        && (request.resource.data.get('unreadCount', 0) is int
+            && request.resource.data.get('unreadCount', 0) >= 0
+            && request.resource.data.get('unreadCount', 0) <= 1)
         && uid() in request.resource.data.userUids
         && request.resource.data.userUids.size() == 2
         && request.resource.data.userUids[0] < request.resource.data.userUids[1]
@@ -1005,7 +1008,13 @@ service cloud.firestore {
 
       allow update: if inThisChat()
         && changedKeys().hasOnly(['unreadByUid', 'typingUid', 'status', 'lastUpdated', 'icebreakerUsed',
-                                  'lastText', 'lastMsgId', 'lastSenderUid'])
+                                  'lastText', 'lastMsgId', 'lastSenderUid', 'unreadCount'])
+        // How many are waiting: back to 0 on reading, or up by at most
+        // one per write. Nobody can make a chat say "99 new messages".
+        && (!(changedKeys().hasAny(['unreadCount']))
+            || (request.resource.data.unreadCount is int
+                && request.resource.data.unreadCount >= 0
+                && request.resource.data.unreadCount <= resource.data.get('unreadCount', 0) + 1))
         && (!(changedKeys().hasAny(['lastText', 'lastMsgId', 'lastSenderUid']))
             || previewOk(request.resource.data))
         // The icebreaker flag only ever goes from unset to true, and

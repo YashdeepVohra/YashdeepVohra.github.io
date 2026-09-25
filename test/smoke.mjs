@@ -2481,7 +2481,7 @@ group('the minute tick');
   // The whole point of the tick: the clock must still move.
   ok('but the countdowns still tick down',
      tick.statsBefore.join() !== tick.statsAfter.join()
-     && /^\d+m$/i.test(tick.statsAfter[1] || ''),
+     && /^\d+\s?min$/i.test(tick.statsAfter[1] || ''),
      JSON.stringify({ before: tick.statsBefore, after: tick.statsAfter }));
   ok('and it costs no reads and no writes',
      tick.reads === 0 && tick.writes === 0,
@@ -3377,7 +3377,11 @@ group('everything scrolls to its bottom');
       const found = await dead();
       // Then scroll everything there is to scroll and see whether the
       // last thing on the screen can be got to.
-      for (let i = 0; i < 8; i++) {
+      // Enough wheel to cover the whole feed however tall a card is:
+      // the band grew a line when its stat went vertical, and fourteen
+      // cards outran the old fixed 4800px.
+      const tall = await p.evaluate(() => document.documentElement.scrollHeight);
+      for (let i = 0; i < Math.max(8, Math.ceil(tall / 600) + 2); i++) {
         await p.mouse.move(width / 2, height * 0.6);
         await p.mouse.wheel(0, 600);
         await p.waitForTimeout(90);
@@ -3864,6 +3868,140 @@ group('previews, active now, clock times and quiet links');
   ok('hovering a link gives the browser no URL to print', r.hoverHref === false);
   ok('right-click still gets the real link', r.rightClickHref === 'https://example.com/x', String(r.rightClickHref));
   ok('and it goes quiet again when the pointer leaves', r.afterLeave === false);
+  ok('no errors from any of that', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ------------------------------------------------------------------ */
+group('the event band reads top to bottom, and the inbox counts');
+{
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 900 } });
+  const pg = await ctx.newPage();
+  const errs = [];
+  pg.on('pageerror', (e) => errs.push(e.message));
+  await pg.addInitScript({ path: fileURLToPath(new URL('./stub.js', import.meta.url)) });
+  await pg.goto(APP_URL, { waitUntil: 'domcontentloaded' });
+  await pg.waitForTimeout(1500);
+
+  const r = await pg.evaluate(async () => {
+    const wait = (ms) => new Promise((res) => setTimeout(res, ms));
+    const { state } = await import('/js/state/store.js');
+    const ev = await import('/js/services/eventsService.js');
+    const chat = await import('/js/services/chatService.js');
+    const out = {};
+    const H = 36e5;
+
+    // ---- Pure: durations and days, the way a person says them ----
+    out.durs = [5 * 6e4, 45 * 6e4, 60 * 6e4, 100 * 6e4, 11 * H, 30 * H, 72 * H]
+      .map((ms) => ev.durParts(ms).map(([n, u]) => n + u).join(' '));
+    const base = new Date(2026, 8, 26, 14, 0).getTime();   // a Saturday, 2 pm
+    out.days = [
+      ev.dayClock(new Date(2026, 8, 26, 18, 40).getTime(), base),
+      ev.dayClock(new Date(2026, 8, 27, 7, 38).getTime(), base),
+      ev.dayClock(new Date(2026, 8, 29, 19, 0).getTime(), base),
+      ev.dayClock(new Date(2026, 9, 10, 9, 5).getTime(), base)
+    ];
+
+    // ---- On a card ----
+    const now = Date.now();
+    window.__authSingleton.currentUser = { uid: 'me' };
+    state.uid = 'me'; state.blockedUids = []; state.privacyChosen = true;
+    const mk = (u, n) => ({ uid: u, username: u, displayName: n, avatar: '🦊', followers: [], following: [], vouchedBy: [] });
+    state.userCache = { me: mk('me', 'Me'), a: mk('a', 'Riya') };
+    state.following = []; state.orbitUids = [];
+    const E = (id, start, dur, extra = {}) => Object.assign({ id, hostUid: 'a', title: id, place: 'Lawn', description: '', tag: '☕ Chill',
+      startTime: now + start, expiresAt: now + start + dur, participantUids: ['a'], hypedUids: [], pendingUids: [], unconfirmedUids: [],
+      requiresApproval: false, maxCapacity: null, circleId: 'main' }, extra);
+    const evs = [E('soon', 45 * 6e4 + 20e3, 2 * H), E('live', -10 * 6e4, 100 * 6e4 + 20e3), E('capped', 3 * H, H, { maxCapacity: 6, participantUids: ['a', 'me'] })];
+    state.eventCache = {}; evs.forEach((e) => { state.eventCache[e.id] = e; });
+    state.eventOrder = evs.map((e) => e.id); state.recapOrder = []; state.recapDone = true; state.currentLiveFilter = 'All';
+    document.getElementById('loading-screen').classList.add('hidden');
+    document.getElementById('login').classList.add('hidden');
+    document.querySelector('.app-frame').classList.remove('hidden');
+    window.switchScreen('home');
+    ev.renderEvents();
+    await wait(300);
+    const stat = (id, i = 0) => {
+      const st = document.querySelectorAll(`#event-${id} .poster-stat`)[i];
+      if (!st) return null;
+      const q = (c) => st.querySelector(c);
+      const lr = q('.poster-label').getBoundingClientRect(), vr = q('.poster-value').getBoundingClientRect();
+      const sr = q('.poster-sub') ? q('.poster-sub').getBoundingClientRect() : null;
+      return {
+        label: q('.poster-label').innerText.trim(), value: q('.poster-value').innerText.trim(),
+        sub: q('.poster-sub') ? q('.poster-sub').innerText.trim() : '',
+        stacked: lr.bottom <= vr.top + 1 && (!sr || vr.bottom <= sr.top + 1)
+      };
+    };
+    out.soon = stat('soon');
+    out.live = stat('live');
+    out.capped = stat('capped', 1);
+
+    // A minute past its start, the SAME card says it is on — the label
+    // is volatile too now, not frozen in the markup at "Starts in".
+    const realNow = Date.now;
+    Date.now = () => realNow() + 47 * 6e4;
+    ev.renderEvents();
+    await wait(200);
+    out.flipped = stat('soon');
+    Date.now = realNow;
+    ev.renderEvents();
+
+    // ---- The inbox: counts, and paging ----
+    const t = Date.now();
+    for (let i = 0; i < 25; i++) {
+      const u = 'u' + String(i).padStart(2, '0');
+      state.userCache[u] = mk(u, 'Person ' + i);
+      window.__stubDocs['users/' + u] = mk(u, 'Person ' + i);
+      window.__stubDocs['chats/me_' + u] = { userUids: ['me', u], status: 'unlocked', lastUpdated: t - i * 6e4, unreadByUid: '', initiatedByUid: u, lastText: 'hi ' + i, lastSenderUid: u, lastMsgId: 'm' + i };
+    }
+    Object.assign(window.__stubDocs['chats/me_u00'], { unreadByUid: 'me', unreadCount: 6 });
+    Object.assign(window.__stubDocs['chats/me_u01'], { unreadByUid: 'me', unreadCount: 2 });
+    Object.assign(window.__stubDocs['chats/me_u02'], { unreadByUid: 'me', unreadCount: 1 });
+    window.showTab('chats');
+    chat.loadChatList();
+    await wait(500);
+    const rows = () => [...document.querySelectorAll('#chatList .chat-item')];
+    const sub = (u) => document.querySelector(`#chatList .chat-item[data-uid="${u}"] .chat-sub span`)?.innerText.trim();
+    const badge = (u) => document.querySelector(`#chatList .chat-item[data-uid="${u}"] .unread-count`)?.innerText.trim();
+    out.counts = { six: sub('u00'), two: sub('u01'), one: sub('u02'), sixBadge: badge('u00') };
+    out.firstPage = rows().length;
+    out.hasMore = !!document.getElementById('inboxMore');
+    window.__readPaths = [];
+    const readsBefore = window.__reads;
+    document.getElementById('inboxMore').click();
+    await wait(400);
+    out.afterMore = rows().length;
+    out.moreGone = !document.getElementById('inboxMore');
+    out.olderReads = window.__reads - readsBefore;
+    out.noDupes = new Set(rows().map((x) => x.getAttribute('data-uid'))).size === rows().length;
+
+    // ---- Sending counts up while they haven't read it ----
+    await chat.sendDirectText('u10', 'one');
+    await chat.sendDirectText('u10', 'two');
+    await chat.sendDirectText('u10', 'three');
+    out.sentCount = window.__stubDocs['chats/me_u10'].unreadCount;
+    out.sentWaiting = window.__stubDocs['chats/me_u10'].unreadByUid;
+    return out;
+  });
+
+  ok('durations are said in words', JSON.stringify(r.durs) === JSON.stringify(['5min', '45min', '1hr', '1h 40m', '11hrs', '1day', '3days']), JSON.stringify(r.durs));
+  ok('and when is a day and a time', JSON.stringify(r.days) === JSON.stringify(['at 6:40 pm', 'tomorrow 7:38 am', 'Tue 7:00 pm', '10 Oct, 9:05 am']), JSON.stringify(r.days));
+  ok('an upcoming band reads "Starts in / 45 min / at …"',
+     !!r.soon && /starts in/i.test(r.soon.label) && /^45\s?min$/i.test(r.soon.value) && /^at \d{1,2}:\d\d [ap]m$/i.test(r.soon.sub),
+     JSON.stringify(r.soon));
+  ok('label, number and detail are stacked, not side by side', r.soon?.stacked && r.live?.stacked, JSON.stringify([r.soon, r.live]));
+  ok('a live band says how long is left and until when',
+     !!r.live && /happening now/i.test(r.live.label) && /^1\s?h\s?30\s?m$/i.test(r.live.value) && /^left · till \d{1,2}:\d\d [ap]m$/i.test(r.live.sub),
+     JSON.stringify(r.live));
+  ok('a capped event shows going out of how many', r.capped && /^2\s?\/6$/.test(r.capped.value), JSON.stringify(r.capped));
+  ok('when it starts, the same card says it is on', /happening now/i.test(r.flipped?.label || ''), JSON.stringify(r.flipped));
+  ok('several waiting say how many: "4+ new messages"', r.counts.six === '4+ new messages' && r.counts.sixBadge === '6', JSON.stringify(r.counts));
+  ok('two say "2 new messages", one shows the message', r.counts.two === '2 new messages' && r.counts.one === 'hi 2', JSON.stringify(r.counts));
+  ok('the live inbox is twenty conversations', r.firstPage === 20 && r.hasMore, JSON.stringify({ n: r.firstPage, more: r.hasMore }));
+  ok('older ones are a button away, read once, no duplicates',
+     r.afterMore === 25 && r.moreGone && r.noDupes && r.olderReads <= 5, JSON.stringify({ n: r.afterMore, gone: r.moreGone, reads: r.olderReads }));
+  ok('sending counts up while they have not read it', r.sentCount === 3 && r.sentWaiting === 'u10', JSON.stringify({ c: r.sentCount, w: r.sentWaiting }));
   ok('no errors from any of that', errs.length === 0, errs.join(' | '));
   await ctx.close();
 }
