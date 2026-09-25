@@ -597,9 +597,91 @@ div.login-mark { background: var(--forest); }
    being printed, screenshotted or rendered on a cheap panel. */
 /* A drawn icon sits exactly where a font glyph did: 1em square, in the
    text colour, so the font-size already on every icon button sizes it.
-   Load-bearing icons are drawn so that a slow network, which now loads
-   boxicons last, never leaves an empty circle where a button should be. */
+   Load-bearing icons are drawn so that a slow network never leaves an
+   empty circle where a button should be. */
 .ico { width: 1em; height: 1em; flex-shrink: 0; display: block; }
+
+/* =====================================================================
+   ICONS — our own set, drawn in this sheet
+   ---------------------------------------------------------------------
+   Every `<i class="bx bx-NAME">` in the markup and the JS is painted
+   here: one 24px line drawing per name (2px stroke, round ends, the
+   same weight as the hand-drawn .ico glyphs), used as a MASK over
+   `currentColor`. So an icon is sized by font-size and coloured by
+   color, exactly as the Boxicons font was, and every existing rule
+   that targets an `i` still works — but nothing is fetched. The font
+   came from unpkg after the first paint, so on a slow network the nav,
+   the chat buttons and the empty states were blank circles until it
+   arrived, and some names (bx-hot) never existed in it at all.
+
+   Adding one: draw it on a 24 grid, stroke #000, put it below as
+   `.bx-NAME { --ic: url("data:image/svg+xml,...") }`. The class names
+   stay Boxicons' so no call site had to change.
+   ===================================================================== */
+.bx {
+  display: inline-block;
+  width: 1em; height: 1em;
+  flex-shrink: 0;
+  vertical-align: -0.14em;
+  font-style: normal;
+  line-height: 1;
+  background-color: currentColor;
+  -webkit-mask: var(--ic) center / contain no-repeat;
+          mask: var(--ic) center / contain no-repeat;
+}
+.bx-spin { animation: spin 0.9s linear infinite; }
+.bx-flashing { animation: icFlash 1.4s ease-in-out infinite; }
+@keyframes icFlash { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .bx-flashing { animation: none; } }
+.bx-time-five { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7v5l3.2 2'/%3E%3C/svg%3E"); }
+.bx-check { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E"); }
+.bx-x { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6.5 6.5l11 11M17.5 6.5l-11 11'/%3E%3C/svg%3E"); }
+.bx-message-rounded-dots { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20.5 11.5a8.5 8.5 0 0 1-12.4 7.6L3.6 20.4l1.3-4.2A8.5 8.5 0 1 1 20.5 11.5z'/%3E%3Ccircle cx='8.3' cy='11.5' r='1.15' fill='%23000' stroke='none'/%3E%3Ccircle cx='12' cy='11.5' r='1.15' fill='%23000' stroke='none'/%3E%3Ccircle cx='15.7' cy='11.5' r='1.15' fill='%23000' stroke='none'/%3E%3C/svg%3E"); }
+.bxs-message-rounded-dots { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20.5 11.5a8.5 8.5 0 0 1-12.4 7.6L3.6 20.4l1.3-4.2A8.5 8.5 0 1 1 20.5 11.5z' fill='%23000'/%3E%3C/svg%3E"); }
+.bx-badge-check { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 2.6l2.3 1.7 2.8-.2 1 2.7 2.4 1.5-.8 2.7.8 2.7-2.4 1.5-1 2.7-2.8-.2L12 21.4l-2.3-1.7-2.8.2-1-2.7-2.4-1.5.8-2.7-.8-2.7 2.4-1.5 1-2.7 2.8.2z'/%3E%3Cpath d='M8.8 12.2l2.2 2.2 4.3-4.5'/%3E%3C/svg%3E"); }
+.bxs-badge-check { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cdefs%3E%3Cmask id='m'%3E%3Crect width='24' height='24' fill='%23fff'/%3E%3Cpath d='M8.6 12.2l2.4 2.4 4.5-4.7' fill='none' stroke='%23000' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/mask%3E%3C/defs%3E%3Cpath d='M12 2.6l2.3 1.7 2.8-.2 1 2.7 2.4 1.5-.8 2.7.8 2.7-2.4 1.5-1 2.7-2.8-.2L12 21.4l-2.3-1.7-2.8.2-1-2.7-2.4-1.5.8-2.7-.8-2.7 2.4-1.5 1-2.7 2.8.2z' fill='%23000' stroke='none' mask='url(%23m)'/%3E%3C/svg%3E"); }
+.bx-user { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='8' r='4'/%3E%3Cpath d='M4.5 20.5c.8-4 3.8-6.3 7.5-6.3s6.7 2.3 7.5 6.3'/%3E%3C/svg%3E"); }
+.bx-user-plus { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='9' cy='8' r='3.6'/%3E%3Cpath d='M2.5 20c.6-3.6 3.2-5.6 6.5-5.6s5.9 2 6.5 5.6'/%3E%3Cpath d='M19 8v6M16 11h6'/%3E%3C/svg%3E"); }
+.bx-user-check { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='9' cy='8' r='3.6'/%3E%3Cpath d='M2.5 20c.6-3.6 3.2-5.6 6.5-5.6s5.9 2 6.5 5.6'/%3E%3Cpath d='M16 11.3l2 2 3.6-3.9'/%3E%3C/svg%3E"); }
+.bx-user-minus { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='9' cy='8' r='3.6'/%3E%3Cpath d='M2.5 20c.6-3.6 3.2-5.6 6.5-5.6s5.9 2 6.5 5.6'/%3E%3Cpath d='M16 11h6'/%3E%3C/svg%3E"); }
+.bx-user-voice { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='9' cy='8' r='3.6'/%3E%3Cpath d='M2.5 20c.6-3.6 3.2-5.6 6.5-5.6s5.9 2 6.5 5.6'/%3E%3Cpath d='M17.4 6.3a4.2 4.2 0 0 1 0 5.4M20.2 4a7.6 7.6 0 0 1 0 10'/%3E%3C/svg%3E"); }
+.bx-group { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='9' cy='8.2' r='3.4'/%3E%3Cpath d='M2.8 19.8c.6-3.4 3-5.4 6.2-5.4s5.6 2 6.2 5.4'/%3E%3Cpath d='M15.6 5.1a3.3 3.3 0 0 1 0 6.3M17.6 14.7c2 .6 3.3 2.4 3.7 5.1'/%3E%3C/svg%3E"); }
+.bx-reply { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9.5 6.5 4.5 11.5l5 5'/%3E%3Cpath d='M4.5 11.5h9a6.5 6.5 0 0 1 6.5 6.5v1'/%3E%3C/svg%3E"); }
+.bx-loader-alt { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3a9 9 0 1 0 9 9'/%3E%3C/svg%3E"); }
+.bx-pin { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 3.5h6M10 3.5v5.3L6.8 12.6V14h10.4v-1.4L14 8.8V3.5M12 14v6.5'/%3E%3C/svg%3E"); }
+.bx-map-pin { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 21.2s-6.6-5.7-6.6-11.2a6.6 6.6 0 0 1 13.2 0c0 5.5-6.6 11.2-6.6 11.2z'/%3E%3Ccircle cx='12' cy='10' r='2.4'/%3E%3C/svg%3E"); }
+.bx-edit-alt { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 20h4.2L19.1 9.1a2.9 2.9 0 0 0-4.2-4.2L4 15.8V20z'/%3E%3Cpath d='M13.4 6.4l4.2 4.2'/%3E%3C/svg%3E"); }
+.bx-chevron-right { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9.5 5.5 16 12l-6.5 6.5'/%3E%3C/svg%3E"); }
+.bx-block { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='8.8'/%3E%3Cpath d='M5.8 5.8l12.4 12.4'/%3E%3C/svg%3E"); }
+.bx-lock-alt { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='5' y='10.5' width='14' height='10' rx='2.6'/%3E%3Cpath d='M8 10.5V8a4 4 0 0 1 8 0v2.5M12 14.4v2.3'/%3E%3C/svg%3E"); }
+.bxs-lock-alt { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='5' y='10.5' width='14' height='10' rx='2.6' fill='%23000'/%3E%3Cpath d='M8 10.5V8a4 4 0 0 1 8 0v2.5'/%3E%3C/svg%3E"); }
+.bx-lock-open-alt { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='5' y='10.5' width='14' height='10' rx='2.6'/%3E%3Cpath d='M8 10.5V8a4 4 0 0 1 7.7-1.6M12 14.4v2.3'/%3E%3C/svg%3E"); }
+.bxl-google { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3.5' y='4.5' width='17' height='15' rx='3'/%3E%3Ccircle cx='9' cy='10' r='1.8'/%3E%3Cpath d='M20.5 15.5l-4.8-4.8-8.7 8.8'/%3E%3C/svg%3E"); }
+.bx-trash { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 7h16M9.5 7V4.5h5V7M6 7l1 12.5A1.6 1.6 0 0 0 8.6 21h6.8a1.6 1.6 0 0 0 1.6-1.5L18 7M10 11v6M14 11v6'/%3E%3C/svg%3E"); }
+.bx-plus { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 5v14M5 12h14'/%3E%3C/svg%3E"); }
+.bx-planet { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='3.2' fill='%23000' stroke='none'/%3E%3Cpath d='M19.80 9.16A8.3 8.3 0 0 1 8.23 19.40M4.60 15.77A8.3 8.3 0 0 1 14.84 4.20'/%3E%3Ccircle cx='17.87' cy='6.13' r='2.4' fill='%23000' stroke='none'/%3E%3Ccircle cx='6.13' cy='17.87' r='1.7' fill='%23000' stroke='none'/%3E%3C/svg%3E"); }
+.bx-history { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.6 12a8.4 8.4 0 1 0 2.5-6'/%3E%3Cpath d='M3.5 4.2v4.3h4.3'/%3E%3Cpath d='M12 7.8V12l3 2'/%3E%3C/svg%3E"); }
+.bx-check-double { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 12.5l4 4L15 8'/%3E%3Cpath d='M11 16l1 1 9-9.5'/%3E%3C/svg%3E"); }
+.bx-check-circle { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M8 12.3l2.8 2.8 5.2-5.6'/%3E%3C/svg%3E"); }
+.bx-bolt-circle { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='2.4' fill='%23000' stroke='none'/%3E%3Cpath d='M8.3 8.3a5.2 5.2 0 0 0 0 7.4M15.7 8.3a5.2 5.2 0 0 1 0 7.4M5.3 5.3a9.4 9.4 0 0 0 0 13.4M18.7 5.3a9.4 9.4 0 0 1 0 13.4'/%3E%3C/svg%3E"); }
+.bxs-hot { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23000'%3E%3Cpath d='M12 22a6.5 6.5 0 0 0 6.5-6.5c0-2-1-3.8-2.9-5.3 0 0 .2 2.4-1.5 2.9.1-2.9-1.8-5.8-4.7-7.6.5 3.8-1.9 4.8-2.9 6.7a6.5 6.5 0 0 0-1 3.3A6.5 6.5 0 0 0 12 22Z'/%3E%3C/svg%3E"); }
+.bx-hot { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 22a6.5 6.5 0 0 0 6.5-6.5c0-2-1-3.8-2.9-5.3 0 0 .2 2.4-1.5 2.9.1-2.9-1.8-5.8-4.7-7.6.5 3.8-1.9 4.8-2.9 6.7a6.5 6.5 0 0 0-1 3.3A6.5 6.5 0 0 0 12 22Z' stroke-width='1.8'/%3E%3C/svg%3E"); }
+.bxl-youtube { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2.5' y='5.5' width='19' height='13' rx='4'/%3E%3Cpath d='M10.3 9.3v5.4l4.6-2.7z' fill='%23000'/%3E%3C/svg%3E"); }
+.bxl-spotify { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 18V6.2l11-2.2v11.8'/%3E%3Ccircle cx='6.5' cy='18' r='2.5'/%3E%3Ccircle cx='17.5' cy='15.8' r='2.5'/%3E%3C/svg%3E"); }
+.bx-slider-alt { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 7h9M17 7h3M4 17h3M11 17h9'/%3E%3Ccircle cx='15' cy='7' r='2'/%3E%3Ccircle cx='9' cy='17' r='2'/%3E%3C/svg%3E"); }
+.bx-search { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='6.5'/%3E%3Cpath d='M16 16l4 4'/%3E%3C/svg%3E"); }
+.bx-search-alt { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='6.5'/%3E%3Cpath d='M16 16l4 4'/%3E%3C/svg%3E"); }
+.bx-message-square-x { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 4.5h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9.5L5 20.5V6.5a2 2 0 0 1 1-2z'/%3E%3Cpath d='M10 8.5l4 4M14 8.5l-4 4'/%3E%3C/svg%3E"); }
+.bx-log-out { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9.5 4.5H6.5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h3'/%3E%3Cpath d='M15 8l4 4-4 4M19 12H9.5'/%3E%3C/svg%3E"); }
+.bx-left-arrow-alt { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M19 12H5M11 5.5 4.5 12l6.5 6.5'/%3E%3C/svg%3E"); }
+.bx-ghost { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 20.5V11a7 7 0 0 1 14 0v9.5l-2.3-1.6-2.4 1.6-2.3-1.6-2.3 1.6-2.4-1.6z'/%3E%3Ccircle cx='9.5' cy='10.8' r='1.15' fill='%23000' stroke='none'/%3E%3Ccircle cx='14.5' cy='10.8' r='1.15' fill='%23000' stroke='none'/%3E%3C/svg%3E"); }
+.bx-flag { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5.5 21V4M5.5 4.5h11.5l-2.3 4.2 2.3 4.2H5.5'/%3E%3C/svg%3E"); }
+.bx-error-circle { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7.6v5.2'/%3E%3Ccircle cx='12' cy='16.3' r='1.2' fill='%23000' stroke='none'/%3E%3C/svg%3E"); }
+.bx-copy { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='8.5' y='8.5' width='12' height='12' rx='2.5'/%3E%3Cpath d='M15.5 8.5V6a2.5 2.5 0 0 0-2.5-2.5H6A2.5 2.5 0 0 0 3.5 6v7A2.5 2.5 0 0 0 6 15.5h2.5'/%3E%3C/svg%3E"); }
+.bx-cog { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12.91 2.74 L14.70 3.10 L15.35 5.74 L16.50 6.51 L19.19 6.10 L20.20 7.62 L18.79 9.94 L19.07 11.30 L21.26 12.91 L20.90 14.70 L18.26 15.35 L17.49 16.50 L17.90 19.19 L16.38 20.20 L14.06 18.79 L12.70 19.07 L11.09 21.26 L9.30 20.90 L8.65 18.26 L7.50 17.49 L4.81 17.90 L3.80 16.38 L5.21 14.06 L4.93 12.70 L2.74 11.09 L3.10 9.30 L5.74 8.65 L6.51 7.50 L6.10 4.81 L7.62 3.80 L9.94 5.21 L11.30 4.93Z'/%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3C/svg%3E"); }
+.bx-calendar-star { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3.5' y='5' width='17' height='15.5' rx='2.5'/%3E%3Cpath d='M3.5 10h17M8 3v4M16 3v4'/%3E%3Cpath d='M12.00 12.30 L12.79 14.31 L14.95 14.44 L13.28 15.82 L13.82 17.91 L12.00 16.75 L10.18 17.91 L10.72 15.82 L9.05 14.44 L11.21 14.31Z' stroke-width='1.6'/%3E%3C/svg%3E"); }
+.bx-calendar-check { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3.5' y='5' width='17' height='15.5' rx='2.5'/%3E%3Cpath d='M3.5 10h17M8 3v4M16 3v4'/%3E%3Cpath d='M9 15.2l2.1 2.1 4-4.2'/%3E%3C/svg%3E"); }
+.bx-smile { --ic: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M8.3 14.2a4.6 4.6 0 0 0 7.4 0'/%3E%3Ccircle cx='9' cy='9.8' r='1.2' fill='%23000' stroke='none'/%3E%3Ccircle cx='15' cy='9.8' r='1.2' fill='%23000' stroke='none'/%3E%3C/svg%3E"); }
 
 /* The firefly (logo.svg) — an identity, so it is the same drawing in
    both themes and never takes a colour from the tokens. */
@@ -1556,6 +1638,8 @@ div.login-mark { background: var(--forest); }
 }
 .empty-state i { font-size: 34px; display: block; margin-bottom: var(--s-8); color: var(--sage); }
 .empty-state p { margin: 0; font-size: 14.5px; }
+.inbox-empty { padding-top: var(--s-24); }
+.inbox-empty p { max-width: 300px; margin: 0 auto; }
 
 /* =====================================================================
    CHAT
@@ -1573,6 +1657,27 @@ div.login-mark { background: var(--forest); }
 }
 .chat-item:hover { transform: translateX(3px); border-color: var(--sage); }
 .chat-item:active { transform: scale(0.99); }
+.chat-item { border: 1px solid var(--border); }
+.chat-item.unread { background: var(--unread-bg); border-color: color-mix(in srgb, var(--forest) 30%, var(--border)); }
+.chat-item .chat-avatar { background: transparent; border: 1px solid var(--border); padding: 0; overflow: hidden; }
+.chat-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.chat-top { display: flex; align-items: baseline; gap: var(--s-8); }
+.chat-top .chat-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-item.unread .chat-name { font-weight: 800; }
+.chat-when {
+  flex: none;
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.02em;
+  color: var(--fog);
+}
+.chat-item.unread .chat-when { color: var(--forest); font-weight: 600; }
+.chat-sub {
+  display: flex; align-items: center; gap: var(--s-8);
+  font-size: 13.5px; color: var(--fog);
+  min-width: 0;
+}
+.chat-sub > span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-sub.strong { color: var(--ink); font-weight: 600; }
+.chat-sub.live { color: var(--forest); font-style: italic; }
 .chat-avatar {
   width: 44px; height: 44px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
@@ -1672,6 +1777,40 @@ div.login-mark { background: var(--forest); }
 }
 
 #messages { flex: 1; overflow-y: auto; overflow-x: hidden; padding: var(--s-20) var(--s-16); display: flex; flex-direction: column; }
+
+/* ---- An empty conversation ---- */
+.thread-hello {
+  position: absolute;
+  left: 50%; top: 42%;
+  transform: translate(-50%, -50%);
+  width: min(320px, calc(100% - 32px));
+  display: flex; flex-direction: column; align-items: center;
+  text-align: center;
+  pointer-events: none;
+  animation: fadeIn 0.3s var(--ease);
+}
+.thread-hello > * { pointer-events: auto; }
+.hello-face {
+  width: 76px; height: 76px;
+  display: grid; place-items: center;
+  border-radius: 50%; overflow: hidden; position: relative;
+  background: var(--wash); border: 1.5px solid var(--ash);
+  font-size: 36px; margin-bottom: var(--s-12);
+}
+.hello-face > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.hello-name { font-family: var(--font-display); font-weight: var(--display-weight); font-size: 20px; letter-spacing: -0.02em; color: var(--ink); }
+.hello-handle { font-family: var(--font-mono); font-size: 12px; color: var(--fog); margin-top: 2px; }
+.hello-note { margin: var(--s-12) 0 var(--s-12); font-size: 14px; color: var(--fog); }
+.hello-openers { display: flex; flex-wrap: wrap; gap: var(--s-8); justify-content: center; }
+.thread-hello .hello-opener {
+  width: auto; margin: 0;
+  padding: 8px 14px;
+  background: var(--paper); color: var(--ink);
+  border: 1.5px solid var(--ash); box-shadow: none;
+  border-radius: var(--r-pill);
+  font-size: 14px; font-weight: 600;
+}
+.thread-hello .hello-opener:hover { border-color: var(--forest); color: var(--forest); background: var(--paper); filter: none; }
 
 .date-wrapper { text-align: center; margin: var(--s-20) 0 var(--s-12); }
 .date-separator { display: inline-block; padding: 5px 14px; border-radius: var(--r-pill); background: var(--bone); font-size: 12px; font-weight: 600; color: var(--fog); }
@@ -1875,7 +2014,6 @@ div.login-mark { background: var(--forest); }
   flex: none; cursor: pointer; color: var(--fog);
   font-size: 22px; line-height: 1; padding: 0 2px;
 }
-.input-wrapper.editing input { border-color: var(--mint); }
 
 /* ---- The message sheet ---- */
 .modal-content.action-sheet { max-width: 340px; padding: var(--s-20); text-align: left; }
@@ -1958,7 +2096,99 @@ div.login-mark { background: var(--forest); }
 }
 .input-wrapper { display: flex; gap: var(--s-8); width: 100%; align-items: center; }
 .input-wrapper input { margin-bottom: 0; }
-.input-wrapper button { width: 46px; height: 46px; flex-shrink: 0; padding: 0; font-size: 19px; border-radius: 50%; }
+.input-wrapper > button { width: 46px; height: 46px; flex-shrink: 0; padding: 0; font-size: 19px; border-radius: 50%; }
+
+/* The field and the emoji button are ONE pill: the border and the
+   focus ring move from the input to the wrapper, so the button sits
+   inside the field the way it does in every messenger. */
+.chat-footer { position: relative; }
+.composer-field {
+  flex: 1; min-width: 0;
+  display: flex; align-items: center;
+  background: var(--paper);
+  border: 1.5px solid var(--ash);
+  border-radius: var(--r-pill);
+  padding-left: 4px;
+  transition: border-color var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
+}
+.composer-field:focus-within { border-color: var(--forest); box-shadow: var(--glow); }
+.composer-field input,
+.composer-field input:focus {
+  flex: 1; min-width: 0;
+  border: none; box-shadow: none; background: transparent;
+  padding-left: 6px;
+}
+.composer-field .composer-emoji {
+  width: 38px; height: 38px; flex: none;
+  padding: 0; margin: 0;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: transparent; border: none; box-shadow: none;
+  color: var(--fog); font-size: 22px;
+}
+.composer-emoji:hover, .composer-emoji.on { color: var(--forest); background: var(--bone); filter: none; }
+.composer-emoji:active:not(:disabled) { transform: scale(0.92); filter: none; }
+.input-wrapper.editing .composer-field { border-color: var(--mint); }
+
+/* ---- The emoji panel: a popover above the composer ---- */
+.emoji-panel {
+  position: absolute;
+  left: var(--s-16); bottom: calc(100% + 8px);
+  z-index: 20;
+  width: min(360px, calc(100% - var(--s-16) * 2));
+  height: 316px;
+  display: flex; flex-direction: column;
+  background: var(--paper);
+  border: 1.5px solid var(--ash);
+  border-radius: 20px;
+  box-shadow: var(--lift-3);
+  overflow: hidden;
+  animation: riseIn 0.22s var(--spring);
+}
+.emoji-tabs {
+  display: flex; gap: 2px; flex: none;
+  padding: 6px 6px 4px;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+}
+.emoji-panel .emoji-tab {
+  width: 36px; height: 34px; flex: none;
+  padding: 0; margin: 0;
+  display: grid; place-items: center;
+  background: transparent; border: none; box-shadow: none;
+  border-radius: 10px;
+  font-size: 18px; line-height: 1;
+  opacity: 0.6;
+}
+.emoji-panel .emoji-tab:hover { background: var(--bone); opacity: 0.95; filter: none; }
+.emoji-panel .emoji-tab.on { background: var(--wash); opacity: 1; filter: none; }
+.emoji-title {
+  flex: none;
+  padding: 8px 12px 2px;
+  font-family: var(--font-mono);
+  font-size: 10.5px; letter-spacing: var(--track-mono); text-transform: uppercase;
+  color: var(--fog);
+}
+.emoji-grid {
+  flex: 1; min-height: 0;
+  overflow-y: auto; overscroll-behavior: contain;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
+  align-content: start;
+  padding: 4px 8px 10px;
+}
+.emoji-panel .emoji-cell {
+  width: 100%; height: 38px;
+  padding: 0; margin: 0;
+  display: grid; place-items: center;
+  background: transparent; border: none; box-shadow: none;
+  border-radius: 10px;
+  font-size: 23px; line-height: 1;
+  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+}
+.emoji-panel .emoji-cell:hover { background: var(--bone); filter: none; transform: scale(1.12); }
+.emoji-panel .emoji-cell:active:not(:disabled) { transform: scale(0.9); filter: none; }
+.emoji-empty { grid-column: 1 / -1; margin: var(--s-24) var(--s-12); text-align: center; font-size: 13.5px; color: var(--fog); }
 .unread-pulse-dot { width: 9px; height: 9px; flex-shrink: 0; margin-left: auto; background: var(--mint); border-radius: 50%; }
 
 /* =====================================================================
@@ -2790,7 +3020,15 @@ html:not(.kb-open) .chat-footer {
   background: var(--paper);
   box-shadow: var(--lift-1);
   cursor: pointer;
-  animation: orbitSpin var(--dur) linear infinite;
+  /* UPRIGHT, ALWAYS. The face sits in a slot that is itself turned by
+     --a to place it round the ring, so cancelling the ring's spin alone
+     left every face tilted by its slot's angle — the one at the bottom
+     was upside down, and a photo went round with the ring. The face's
+     own turn starts at -a, so slot + ring + face add to zero at every
+     frame and a picture only travels, never rotates. Standing still
+     (reduced motion, a weak phone) it keeps the -a on its own. */
+  transform: rotate(calc(-1 * var(--a, 0deg)));
+  animation: faceSpin var(--dur) linear infinite;
   transition: box-shadow 0.18s var(--ease);
 }
 .orbit-face:hover { box-shadow: 0 0 0 2px var(--forest), var(--lift-2); }
@@ -2808,6 +3046,10 @@ html:not(.kb-open) .chat-footer {
 }
 
 @keyframes orbitSpin { to { transform: rotate(360deg); } }
+@keyframes faceSpin {
+  from { transform: rotate(calc(-1 * var(--a, 0deg))); }
+  to   { transform: rotate(calc(360deg - var(--a, 0deg))); }
+}
 @keyframes outPulse {
   0%   { transform: scale(1);    opacity: 0.75; }
   70%  { transform: scale(1.55); opacity: 0; }

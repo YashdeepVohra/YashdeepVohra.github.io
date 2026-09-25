@@ -326,3 +326,32 @@ makes a portrait viewport wider than it is tall. Under that class,
 animations paused. It is visibility and not display, so every scroll
 position and half-typed message is still there when the phone turns
 back.
+
+### Icons are drawn in the stylesheet, not fetched
+
+Boxicons arrived from unpkg after the first paint, deliberately, so it
+could never hold the page up. The price was that on a slow network the
+bottom nav, the Chat button, every empty state and every sheet row
+showed blank circles until it came — and on a failed load, forever.
+The inline SVGs added for icon-only buttons fixed the worst of it and
+introduced a second, different-looking set beside the font.
+
+Now there is one set. Each `bx-NAME` class the app uses has a rule in
+style.css holding a 24px line drawing (2px stroke, round ends) as a
+data-URI, and `.bx` paints `currentColor` through it as a mask. Because
+it is a mask over a background colour, an icon is sized by `font-size`
+and coloured by `color` exactly as the font glyph was, so no call site
+and no existing `i` rule had to change. The smoke group "icons, the
+orbit, the emoji picker and the inbox" reads every `bx-` name out of
+index.html and js/ and fails if style.css does not draw it.
+
+### Orbit faces are upright
+
+Each face sits in a `.orbit-slot` turned by `--a` to place it round
+the ring, and the ring spins. The face used to counter-spin by the
+ring's amount only, which left it turned by its slot's angle: the face
+at the bottom of the ring was upside down, the ones at the sides lay on
+their ears, and a profile photo visibly rotated. `faceSpin` starts at
+`rotate(-a)`, so slot + ring + face sum to zero on every frame, and the
+static `transform` does the same when the animation is off (reduced
+motion, a weak phone).

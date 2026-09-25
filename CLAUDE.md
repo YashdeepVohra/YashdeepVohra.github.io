@@ -179,15 +179,18 @@ Each line is the whole rule. The file after it is the argument for it.
 - `button { display: flex; padding: 13px 24px; width: 100% }` is in the
   base sheet, and specificity beats source order. Anything you turn into
   a button must shed all three.
-- Boxicons has no `bx-hot`. Check a class exists; anything load-bearing
-  is inline SVG — and a button with an icon and NO label (hype, share)
-  must be drawn, or a font that fails to load leaves nothing there.
+- There is no icon font. Every `bx-*` class is drawn in style.css (ICONS:
+  a 24px line drawing as a mask over currentColor); a new name needs a
+  new rule there, and the smoke suite fails on one that has none.
+  Icon-only buttons (hype, share, emoji) are inline SVG.
 - No scrollbar is ever drawn (top of `style.css`); scrolling still works.
   A full-screen layer on a phone paints canvas round itself so the app
   never shows through while the keyboard settles.
 - Zoom is off everywhere, on purpose. The keyboard is handled by the
   visual viewport, not `innerHeight`.
-- Send cancels its own mousedown, so the keyboard never drops; nothing
+- Orbit faces start their counter-spin at `-var(--a)` (`faceSpin`), so a
+  face travels round the ring but is never turned.
+- Send, the emoji button and every emoji cell cancel their own mousedown, so the keyboard never drops; nothing
   inside a fixed layer may `scrollIntoView` (on iOS it scrolls the page).
 - Phones are portrait only. A web page cannot lock rotation, so a phone
   on its side gets `.rotate-cover` and the app behind it stops painting.

@@ -17,7 +17,7 @@
 
 import { auth, db, FieldValue } from '../config/firebase.js';
 import { state } from '../state/store.js';
-import { renderAvatar, formatTime, formatMessage, escapeHtml, safeId, msOf } from '../utils/formatters.js';
+import { renderAvatar, formatTime, formatInboxTime, formatMessage, escapeHtml, safeId, msOf } from '../utils/formatters.js';
 import { switchScreen, showTab, showNotification, toggleTime, toast, setPageTitle, setTitleUnread } from '../utils/ui.js';
 import { askConfirm } from '../utils/confirm.js';
 import { openOverlay, closeOverlay, isOverlayOpen } from '../utils/overlays.js';
@@ -34,6 +34,7 @@ import { isMutualFollow } from './followService.js';
 import { vibeColor } from './eventsService.js';
 import { inRecap } from './recapRules.js';
 import { searchPeople } from './searchService.js';
+import { closeEmojiPicker } from '../interactions/emojiPicker.js';
 import {
   primeUsers, fetchUser, displayNameFor, usernameFor, avatarFor,
   resolveUsernameToUid, directChatId, normalizeUsername
@@ -386,6 +387,8 @@ export function closeChat({ silent = false } = {}) {
   state.replyingToMessage = null;
   state.editingMessage = null;
   closeMessageActions();
+  closeEmojiPicker();
+  paintThreadHello(false);
 
   document.querySelector(".topbar")?.classList.remove("hidden");
   if (!silent) switchScreen("home");
@@ -1461,9 +1464,41 @@ function forgetPaintedMessages() {
 // The chat whose icebreaker unlock is already on its way.
 let unlockingChat = "";
 
+/* A thread with nothing in it yet: who it is with, and three openers
+   that fill the box (never send — the first message to a stranger is
+   the only one they get until they reply, so it stays yours to write). */
+const OPENERS = ["Hey! \u{1F44B}", "Are you going?", "What's the plan?"];
+function paintThreadHello(empty) {
+  const el = document.getElementById("threadHello");
+  if (!el) return;
+  const show = empty && state.currentChatType === "direct" && !!state.currentOtherUid;
+  el.classList.toggle("hidden", !show);
+  if (!show) { el.innerHTML = ""; return; }
+  const uid = state.currentOtherUid;
+  el.innerHTML = `
+    <div class="hello-face">${renderAvatar(avatarFor(uid))}</div>
+    <b class="hello-name">${escapeHtml(displayNameFor(uid))}</b>
+    <small class="hello-handle">@${escapeHtml(usernameFor(uid))}</small>
+    <p class="hello-note">Say hi — start with one of these, or write your own.</p>
+    <div class="hello-openers">
+      ${OPENERS.map((t, i) => `<button type="button" class="hello-opener" data-opener="${i}">${escapeHtml(t)}</button>`).join("")}
+    </div>`;
+  el.querySelectorAll("[data-opener]").forEach((b) => {
+    b.addEventListener("mousedown", (e) => e.preventDefault());
+    b.addEventListener("click", () => {
+      const input = document.getElementById("msgInput");
+      if (!input) return;
+      input.value = OPENERS[Number(b.getAttribute("data-opener"))] || "";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      if (!(window.matchMedia && matchMedia("(pointer: coarse)").matches)) input.focus();
+    });
+  });
+}
+
 function renderMessages(msgs, { keepScroll = null } = {}) {
   const box = document.getElementById("messages");
   if (!box) return;
+  paintThreadHello(!msgs.length);
 
   state.myMessageCount = 0;
   let theirMessageCount = 0;
@@ -1863,7 +1898,7 @@ export function loadChatList() {
         }
 
         if (!chats.length) {
-          list.innerHTML = `<div class="empty-state" style="padding-top: 20px;"><i class='bx bx-message-square-x'></i><p>No messages yet.</p></div>`;
+          list.innerHTML = `<div class="empty-state inbox-empty"><i class='bx bx-message-rounded-dots'></i><h4>No conversations yet</h4><p>Find someone by their handle above, or tap Chat on any event to talk to the people going.</p></div>`;
           setUnreadBadge(false);
           setTitleUnread(false);
           return;
@@ -1885,13 +1920,30 @@ export function loadChatList() {
           }
           if (isUnread) hasGlobalUnread = true;
 
+          // The second line says where the conversation STANDS, from
+          // fields already on the chat document — no extra read. There
+          // is no last-message preview on purpose: that would be a new
+          // field written on every send, and a rules change.
+          let sub = "@" + escapeHtml(usernameFor(otherUid));
+          let subClass = "";
+          if (chat.typingUid === otherUid) { sub = "typing\u2026"; subClass = " live"; }
+          else if (isUnread) { sub = "New message"; subClass = " strong"; }
+          else if (chat.status === "icebreaker" && chat.initiatedByUid === state.uid && chat.icebreakerUsed) sub = "Waiting for a reply";
+          else if (chat.status === "icebreaker" && chat.initiatedByUid === otherUid) { sub = "Wants to chat"; subClass = " strong"; }
+
           html += `
-            <div class="chat-item" onclick="window.openChat('${id}', '${otherId}')" style="${isUnread ? "background: var(--unread-bg); border-left: 4px solid var(--primary);" : ""}">
-              <div class="chat-avatar" style="background: transparent; border: 1px solid var(--border); padding: 0; overflow: hidden;">
-                  ${renderAvatar(avatarFor(otherUid))}
+            <div class="chat-item${isUnread ? " unread" : ""}" onclick="window.openChat('${id}', '${otherId}')">
+              <div class="chat-avatar">${renderAvatar(avatarFor(otherUid))}</div>
+              <div class="chat-main">
+                <div class="chat-top">
+                  <span class="chat-name">${escapeHtml(displayNameFor(otherUid))}</span>
+                  <span class="chat-when">${escapeHtml(formatInboxTime(chat.lastUpdated))}</span>
+                </div>
+                <div class="chat-sub${subClass}">
+                  <span>${sub}</span>
+                  ${isUnread ? `<span class="unread-pulse-dot" aria-label="Unread"></span>` : ""}
+                </div>
               </div>
-              <div class="chat-name" style="${isUnread ? "font-weight: 800;" : ""} flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(displayNameFor(otherUid))}</div>
-              ${isUnread ? `<div class="unread-pulse-dot"></div>` : ""}
             </div>`;
         });
 

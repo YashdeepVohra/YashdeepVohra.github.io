@@ -120,10 +120,8 @@
        headings ask for weight 800, the fallback is already heavy, so
        the swap changes letterforms rather than weight. -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300..800&family=Archivo:wght@800&display=swap" rel="stylesheet">
-  <!-- Icons load without holding up the first paint. Anything
-       load-bearing is inline SVG, so a slow unpkg costs a few glyphs
-       for a moment, never the whole page. -->
-  <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet" media="print" onload="this.media='all'">
+  <!-- No icon font. Every icon is drawn in style.css (see ICONS there),
+       so there is nothing to fetch and nothing to arrive late. -->
 
   <!-- SLOW NETWORKS. Three things, because on campus 3G each one alone
        was the difference between an app and "The app didn't start":
@@ -265,7 +263,7 @@
       <div id="sideBadge" class="side-badge hidden"></div>
     </button>
     <button class="side-item" onclick="openOrbitScreen()">
-      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><ellipse cx="12" cy="12" rx="10" ry="3.4" transform="rotate(-25 12 12)"/></svg> Orbit
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3.2" fill="currentColor" stroke="none"/><path d="M19.80 9.16A8.3 8.3 0 0 1 8.23 19.40M4.60 15.77A8.3 8.3 0 0 1 14.84 4.20"/><circle cx="17.87" cy="6.13" r="2.4" fill="currentColor" stroke="none"/><circle cx="6.13" cy="17.87" r="1.7" fill="currentColor" stroke="none"/></svg> Orbit
       <div class="side-badge orbit-badge hidden"></div>
     </button>
     <button class="sidebar-create" onclick="openCreateScreen()">+ New Event</button>
@@ -286,7 +284,7 @@
     <div class="topbar-actions">
       <button class="icon-btn" onclick="openSearch()" aria-label="Search"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg></button>
       <button class="icon-btn has-badge" onclick="openOrbitScreen()" aria-label="Orbit">
-        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><ellipse cx="12" cy="12" rx="10" ry="3.4" transform="rotate(-25 12 12)"/></svg>
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3.2" fill="currentColor" stroke="none"/><path d="M19.80 9.16A8.3 8.3 0 0 1 8.23 19.40M4.60 15.77A8.3 8.3 0 0 1 14.84 4.20"/><circle cx="17.87" cy="6.13" r="2.4" fill="currentColor" stroke="none"/><circle cx="6.13" cy="17.87" r="1.7" fill="currentColor" stroke="none"/></svg>
         <span class="nav-badge orbit-badge hidden"></span>
       </button>
       <button class="profileBtn hidden" onclick="window.openProfileScreen()" id="topAvatar">👤</button>
@@ -360,7 +358,7 @@
     <div class="rail-card">
       <div class="rail-title">Out today</div>
       <div class="rail-stat" id="railPeopleCount">0</div>
-      <p class="rail-note">students joined something</p>
+      <p class="rail-note">people joined something</p>
     </div>
     <div class="rail-card">
       <div class="rail-title">Jump to a vibe</div>
@@ -401,6 +399,10 @@
     <div id="pinnedBar" class="pinned-bar hidden"></div>
 
     <div id="messages"></div>
+    <!-- An empty conversation says who it is with and gives you a first
+         line to tap. Outside #messages on purpose: the thread is diffed,
+         and nothing that isn't a message may live in it. -->
+    <div id="threadHello" class="thread-hello hidden" aria-live="polite"></div>
 
     <div class="chat-footer">
       <div id="icebreakerMsg" class="hidden" style="width:100%; text-align:center; font-size:13px; font-weight:700; padding:10px;">
@@ -408,7 +410,13 @@
       </div>
       <div id="replyPreviewContainer" style="width:100%;"></div>
       <div id="inputWrapper" class="input-wrapper">
-        <input id="msgInput" placeholder="Message..." autocomplete="off" oninput="handleTyping()" onkeydown="if(event.key === 'Enter') sendMessage()" />
+        <!-- The field and its emoji button are one pill. The button is
+             drawn (no font to wait for) and, like Send, never takes
+             focus off the field: see interactions/emojiPicker.js. -->
+        <div class="composer-field">
+          <button id="emojiBtn" class="composer-emoji" type="button" aria-label="Emoji" aria-expanded="false" aria-controls="emojiPanel" title="Emoji"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.3 14.2a4.6 4.6 0 0 0 7.4 0"/><circle cx="9" cy="9.8" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="9.8" r="1.2" fill="currentColor" stroke="none"/></svg></button>
+          <input id="msgInput" placeholder="Message..." autocomplete="off" oninput="handleTyping()" onkeydown="if(event.key === 'Enter') sendMessage()" />
+        </div>
         <!-- mousedown is cancelled so a tap on Send never takes focus off
              the field: on iOS that blur dropped the keyboard, and the
              page it had scrolled up stayed up, leaving the composer

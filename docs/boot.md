@@ -35,9 +35,11 @@ stacked up:
   their own `import('/js/…')` reaches the same module instances. They
   check the real bundle separately: it boots, and it is the only app
   script fetched.
-- boxicons loads with `media="print" onload="this.media='all'"`, so it
-  never holds up the first paint. That is why every icon-only button is
-  drawn (`.ico`, inline SVG). A slow unpkg used to leave empty circles.
+- There is no icon font any more. Boxicons came from unpkg after the
+  first paint and a slow network left empty circles in the nav and the
+  chat until it arrived. Every `bx-*` class is now drawn in style.css
+  (ICONS: a mask over currentColor), and icon-only buttons are `.ico`
+  inline SVG. Nothing icon-shaped is fetched.
 - The watchdog only fails on something that FAILED: a script whose
   download errored (seen in the capture phase on window), or our own code
   throwing before boot. A network failure reloads once by itself

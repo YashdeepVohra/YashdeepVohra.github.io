@@ -101,6 +101,27 @@ export function formatTime(value) {
   return `${messageDate.toLocaleDateString([], { month: "short", day: "numeric" })} at ${timeString}`;
 }
 
+/**
+ * The short stamp at the right of an inbox row, the way every
+ * messenger writes it: "4:12 pm" today, "Yesterday", a weekday within
+ * the week, then a date. Deliberately NOT "5m ago": the inbox is only
+ * repainted when a chat changes, so a relative time would sit there
+ * going stale; this one is right until midnight.
+ */
+export function formatInboxTime(value, now = Date.now()) {
+  const ms = msOf(value);
+  if (!ms) return "";
+  const d = new Date(ms);
+  const today = new Date(now);
+  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+  const DAY = 86400000;
+  if (ms >= startOfToday) return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  if (ms >= startOfToday - DAY) return "Yesterday";
+  if (ms >= startOfToday - 6 * DAY) return d.toLocaleDateString([], { weekday: "short" });
+  if (d.getFullYear() === today.getFullYear()) return d.toLocaleDateString([], { month: "short", day: "numeric" });
+  return d.toLocaleDateString([], { month: "short", day: "numeric", year: "2-digit" });
+}
+
 // ---------- MESSAGE BODIES ----------
 function decodeEntities(escaped) {
   // Turn an escaped URL back into a real one for use in href/src.
