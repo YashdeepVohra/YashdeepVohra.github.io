@@ -208,3 +208,37 @@ export function pinPayload(msg, byUid, now = Date.now()) {
     at: now
   };
 }
+
+// ---------------------------------------------------------------------
+// THE INBOX PREVIEW
+// ---------------------------------------------------------------------
+// The line under a name in the chats list. It is a COPY on the chat
+// document (lastText), written in the same write that already bumps
+// lastUpdated on every send, so showing it costs no read at all.
+//
+// PREVIEW_MAX is mirrored in firestore.rules (the chat's lastText bound,
+// which allows a little more so a trailing "…" always fits).
+//
+// A link to one of our events says "Shared an event" rather than
+// printing a URL nobody can read at that size; any other bare link says
+// "Shared a link". `isOurEvent` is passed in so this file keeps no
+// imports.
+export const PREVIEW_MAX = 90;
+
+export function previewOf(text, { isOurEvent = () => false } = {}) {
+  const raw = String(text || "");
+  const urls = raw.match(/https?:\/\/[^\s<]+/g) || [];
+  const sharedEvent = urls.some((u) => isOurEvent(u));
+  let rest = raw;
+  urls.forEach((u) => { if (isOurEvent(u)) rest = rest.split(u).join(" "); });
+  rest = rest.replace(/\s+/g, " ").trim();
+
+  let out;
+  if (sharedEvent) out = rest ? `${rest} · shared an event` : "Shared an event";
+  else if (!rest) out = "";
+  else if (urls.length === 1 && rest === urls[0]) out = "Shared a link";
+  else out = rest;
+
+  if (out.length > PREVIEW_MAX) out = out.slice(0, PREVIEW_MAX - 1).trimEnd() + "…";
+  return out;
+}

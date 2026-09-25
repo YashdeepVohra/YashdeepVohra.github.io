@@ -100,6 +100,13 @@ Each line is the whole rule. The file after it is the argument for it.
 - How long Recap keeps an event is `recapRules.js`. Change the numbers
   there and in the smoke cases, nowhere else.
 - Blocking is total: filter `isBlocked` everywhere, lists and counts alike.
+- The inbox preview (`lastText`/`lastMsgId`/`lastSenderUid`) rides in the
+  chat write every send already makes; the writer must name themselves
+  as sender. Text is `messageRules.previewOf`.
+- Active now is `presence/{uid}`: a heartbeat while on screen, one-off
+  cached gets for people on screen, never a listener. Hidden = the doc
+  holds no time. `presenceService.js` has the numbers.
+- Every clock time on screen goes through `clockTime()` (en-IN gave "0:58").
 - The icebreaker is for STRANGERS: people who follow each other have no
   first-message limit, on a new thread or an old one.
 - A locked profile fetches nothing and paints nothing — `isProfileLocked`
@@ -248,14 +255,16 @@ Each line is the whole rule. The file after it is the argument for it.
   path would 404. Don't "tidy" it.
 - A link is ours only if the host is livesociya.com, a subdomain of it,
   localhost or 127.0.0.1, over http(s). Never `includes()`.
-- In chat an event link becomes a card but stays a real `<a href>`.
+- In chat an event link becomes a card; links carry `data-href`, never
+  `href`, so a laptop doesn't print the URL on hover (`utils/quietLinks.js`
+  arms it for right-click, middle-click and keyboard).
 - A finished event has THREE states: on, over but still in Recap, and
   gone. Ask `inRecap()` before swapping a tab; say so instead of
   travelling to an empty one.
-- View closes the chat, opens the event's tab and leaves a `returnChip`
-  — the same at every width. The chip is a row at the TOP of the feed
-  column, never a floating overlay: floating covered the card action
-  row, and its desktop offset broke as soon as the frame centred.
+- View closes the chat, opens the event's tab and leaves a `returnChip`.
+  On a laptop it is the first row of the feed column (a floating one
+  broke when the frame centred); on a phone it floats bottom-left,
+  level with the + button, in the strip the feed's padding keeps clear.
 - A cross-origin iframe's scrollbars are reachable only through
   `scrolling="no"`.
 - Share is PICK, THEN SEND: ticking a person sends nothing. Every send
@@ -294,6 +303,8 @@ Decisions already made, with the reason, so they don't get undone:
 | Poster cards cost ~29% more DOM than the rows they replaced | measured: style recalc went 4.3ms -> 0.2ms, layout unchanged. The nodes cost nothing in a frame; the old transitions did |
 | A shared event card reads the event once, cached and de-duplicated | ten copies of one link in a thread are one read |
 | The receipt folds events already in the cache, debounced | a history collection would be a write per event |
+| Inbox preview is a copy on the chat doc | the chat doc is already written on every send and already read by the inbox listener: 0 extra reads, 0 extra writes |
+| Active now: no listener, gets for the top 8 on screen, cached 3 min; heartbeat every 4 min while visible | a listener bills every watcher per heartbeat. This way ~8 reads per inbox look (≈ +7–9k/day at 300 DAU) and ~8 writes per half-hour session |
 
 The remaining lever, if reads ever bite: drop `LIVE_LIMIT` to ~30.
 

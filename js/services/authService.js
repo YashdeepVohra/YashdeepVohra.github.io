@@ -28,6 +28,7 @@ import { loadOrbit } from './orbitService.js';
 import { loadMyProfile } from './followService.js';
 import { refreshSocialUI } from '../utils/ui.js';
 import { loadChatList } from './chatService.js';
+import { startPresence, stopPresence } from './presenceService.js';
 
 const REDIRECT_KEY = "isRedirecting";
 
@@ -309,6 +310,11 @@ export function initializeUserApp(userData) {
 
   loadChatList();
 
+  // Your own "Active now": one read for your setting, then a heartbeat
+  // while the app is on screen. Nothing is read about anybody else
+  // until they are on your screen (presenceService.js).
+  startPresence();
+
   /* The feed does NOT wait for the circle document.
      It never needed to: which circle you are in is `circleId` on your
      own profile, and that arrived with the read that got you here —
@@ -500,6 +506,7 @@ export async function claimUsername() {
 }
 
 export function logout() {
+  stopPresence();
   clearOverlays();
   setLoading(true);
   switchScreen(null);

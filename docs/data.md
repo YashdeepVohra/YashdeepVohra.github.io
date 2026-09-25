@@ -361,3 +361,47 @@ orbit button until you follow.
 are `bio` (160) and `interests` (≤5, fixed list
 in `js/services/aboutRules.js`, mirrored in the rules). They ride on
 the profile document, so they cost no extra reads.
+
+### The inbox preview is a copy, on purpose
+
+`lastText`, `lastMsgId` and `lastSenderUid` on `chats/{id}`. They go in
+the SAME write that already sets `unreadByUid` and `lastUpdated` on every
+send, and the inbox listener already reads that document, so previews
+cost nothing. The alternative — reading the newest message of every
+conversation — is a read per row per inbox open.
+
+`lastMsgId` is what lets an edit or a delete follow the preview: only if
+the message you changed is the one the preview copies does the chat get
+rewritten (`followPreview`). A deleted last message is `lastText: ""`
+and reads "Message deleted".
+
+The rules bound it (120 chars; `previewOf` makes 90) and require
+`lastSenderUid == uid()` whenever any of the three change, so the other
+person can never put words in your mouth in your own list. They can
+still write a preview of their OWN that no message backs — which is no
+more than they could say by sending one.
+
+### Active now, and why there is no listener
+
+A presence listener is the textbook way to burn a read budget: every
+heartbeat by every person bills a read to everyone watching them. So:
+
+- **Writing.** `presence/{uid} = { visible: true, at: request.time }` when
+  the app opens and at most every 4 minutes while the tab is on screen.
+  A hidden tab writes nothing.
+- **Reading.** One-off `get()`s, only for people on screen: the top 8
+  rows of the inbox while it is showing, or the one chat that is open.
+  Each answer is kept 3 minutes. Active = seen in the last 5 minutes;
+  then "Active 12m ago" up to a day; then nothing.
+- **Cost at 300 daily actives:** roughly 7–9k reads/day and ~2.5k
+  writes/day. That is the whole bill; nothing grows while nobody looks.
+
+**Turning it off** rewrites the document as `{ visible: false }` with
+no time in it, which the rules require — so a hidden person has nothing
+readable, whatever a client does. The reciprocal half ("and you won't
+see theirs") is the app not asking. Enforcing it in the rules means the
+rule reading your own presence document inside every lookup, and rule
+reads are billed, so it would double the reads above. If that ever
+matters more than the reads, add
+`get(/databases/$(database)/documents/presence/$(uid())).data.visible == true`
+to `allow get`.

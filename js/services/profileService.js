@@ -8,7 +8,7 @@
 
 import { auth, db } from '../config/firebase.js';
 import { state } from '../state/store.js';
-import { renderAvatar, escapeHtml, safeId } from '../utils/formatters.js';
+import { renderAvatar, escapeHtml, safeId, clockTime } from '../utils/formatters.js';
 import { switchScreen, showTab, toast, setPageTitle } from '../utils/ui.js';
 import { askConfirm } from '../utils/confirm.js';
 import { syncThemeUI } from '../utils/theme.js';
@@ -145,7 +145,7 @@ function startOfDay(ms) {
 }
 
 function clock(ms) {
-  return new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return clockTime(ms);
 }
 
 /** "Today", "Tomorrow", "Yesterday", "Sat", "12 Sep", "12 Sep 2025". */

@@ -798,6 +798,23 @@ div.login-mark { background: var(--forest); }
 .return-chip:hover { filter: brightness(1.06); box-shadow: var(--lift-2); }
 .return-chip:active { transform: scale(0.95); }
 .return-chip i { font-size: 18px; }
+/* A phone: bottom left, level with the + button and clear of it, above
+   the tab bar. See ui.returnChip for why it moved down here. */
+.return-chip.floating {
+  position: fixed;
+  left: 16px;
+  bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  z-index: 46;
+  max-width: calc(100% - 16px - 18px - 54px - 16px);
+  margin: 0;
+  padding: 12px 18px;
+  font-size: 15px;
+  box-shadow: var(--lift-3);
+  transform: translateY(8px);
+}
+.return-chip.floating.in { transform: translateY(0); }
+.return-chip.floating:active { transform: scale(0.95); }
+html.kb-open .return-chip.floating { display: none; }
 
 .fab:hover { filter: brightness(1.08); }
 .fab:active { transform: scale(0.92); }
@@ -981,6 +998,10 @@ div.login-mark { background: var(--forest); }
 /* Inside a sent bubble the card keeps the app's own colours rather
    than inheriting the bubble's, or it becomes unreadable. */
 .msg-sent .event-embed, .msg-received .event-embed { color: var(--ink); }
+/* Links in a bubble carry data-href (utils/quietLinks.js), so they need
+   the pointer and the underline a real href would have given them. */
+.msg-link { color: inherit; font-weight: 700; text-decoration: underline; word-break: break-all; cursor: pointer; }
+.event-embed[data-href] { cursor: pointer; }
 
 /* ---- The share sheet ----
    Pick people, then Send — see shareService.js. A column: head, search,
@@ -1636,7 +1657,9 @@ div.login-mark { background: var(--forest); }
   text-align: center; color: var(--fog);
   animation: rise 0.4s var(--ease);
 }
-.empty-state i { font-size: 34px; display: block; margin-bottom: var(--s-8); color: var(--sage); }
+/* A drawn icon is 1em wide, not a full-width line of text like the old
+   font glyph was, so centring it is the margin's job, not text-align's. */
+.empty-state i { font-size: 34px; display: block; margin: 0 auto var(--s-8); color: var(--sage); }
 .empty-state p { margin: 0; font-size: 14.5px; }
 .inbox-empty { padding-top: var(--s-24); }
 .inbox-empty p { max-width: 300px; margin: 0 auto; }
@@ -1697,6 +1720,22 @@ div.login-mark { background: var(--forest); }
 }
 .back-btn { width: 38px; height: 38px; flex-shrink: 0; padding: 0; font-size: 21px; border-radius: 50%; }
 .header-title { font-size: 16px; font-weight: 700; letter-spacing: -0.03em; color: var(--obsidian); }
+.chat-header-text { min-width: 0; display: flex; flex-direction: column; }
+.chat-presence { font-size: 12px; color: var(--fog); margin-top: 1px; }
+.chat-presence.now { color: var(--mint-ink, var(--forest)); font-weight: 600; }
+
+/* The green dot for someone active right now. It sits on the face's
+   edge, outside the avatar's own overflow:hidden circle, ringed in the
+   surface colour so it reads on any photo. */
+.chat-face { position: relative; flex-shrink: 0; display: inline-flex; }
+.presence-dot {
+  position: absolute; right: -1px; bottom: -1px;
+  width: 13px; height: 13px;
+  border-radius: 50%;
+  background: var(--mint);
+  box-shadow: 0 0 0 2.5px var(--paper);
+}
+.header-face .presence-dot { width: 11px; height: 11px; box-shadow: 0 0 0 2px var(--canvas); }
 
 /* =====================================================================
    THE RECAP RECEIPT
@@ -2772,7 +2811,7 @@ html:not(.kb-open) .chat-footer {
 .result-sub { font-size: 13px; color: var(--fog); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: flex; align-items: center; gap: 4px; }
 
 .search-hint { padding: var(--s-48) var(--s-24); text-align: center; color: var(--fog); }
-.search-hint i { font-size: 34px; display: block; margin-bottom: var(--s-8); color: var(--sage); }
+.search-hint i { font-size: 34px; display: block; margin: 0 auto var(--s-8); color: var(--sage); }
 .search-hint p { margin: 0; font-size: 14.5px; }
 
 /* Hosted-event rows on a profile are buttons now */

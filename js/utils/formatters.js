@@ -89,13 +89,29 @@ export function msOf(value) {
   return 0;
 }
 
+/**
+ * A clock time, always the same shape: "12:58 am", "9:05 pm".
+ *
+ * toLocaleTimeString() is at the mercy of the device's locale, and in
+ * en-IN Chrome picks the h11 cycle — so five to one in the morning came
+ * out as "0:58". Every time on screen goes through here instead.
+ */
+export function clockTime(value) {
+  const ms = msOf(value);
+  if (!ms && ms !== 0) return "";
+  const d = new Date(ms);
+  const h = d.getHours();
+  const m = String(d.getMinutes()).padStart(2, "0");
+  return `${h % 12 || 12}:${m} ${h < 12 ? "am" : "pm"}`;
+}
+
 export function formatTime(value) {
   const messageDate = new Date(msOf(value));
   const today = new Date();
   const yesterday = new Date(today);
   yesterday.setDate(yesterday.getDate() - 1);
 
-  const timeString = messageDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const timeString = clockTime(messageDate.getTime());
   if (messageDate.toDateString() === today.toDateString()) return `Today at ${timeString}`;
   if (messageDate.toDateString() === yesterday.toDateString()) return `Yesterday at ${timeString}`;
   return `${messageDate.toLocaleDateString([], { month: "short", day: "numeric" })} at ${timeString}`;
@@ -115,7 +131,7 @@ export function formatInboxTime(value, now = Date.now()) {
   const today = new Date(now);
   const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
   const DAY = 86400000;
-  if (ms >= startOfToday) return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  if (ms >= startOfToday) return clockTime(ms);
   if (ms >= startOfToday - DAY) return "Yesterday";
   if (ms >= startOfToday - 6 * DAY) return d.toLocaleDateString([], { weekday: "short" });
   if (d.getFullYear() === today.getFullYear()) return d.toLocaleDateString([], { month: "short", day: "numeric" });
@@ -171,7 +187,7 @@ function spotifyEmbed(rawUrl) {
  */
 function eventEmbed(eventId, rawUrl) {
   return `
-    <a class="event-embed" href="${escapeHtml(rawUrl)}"
+    <a class="event-embed" data-href="${escapeHtml(rawUrl)}" tabindex="0"
        data-event-embed="${escapeHtml(eventId)}"
        onclick="return window.openSharedEvent('${escapeHtml(eventId)}', event)">
       <span class="event-embed-body">
@@ -223,6 +239,9 @@ export function formatMessage(text, isMediaOnly = false) {
     }
 
     // ---- Plain link (http/https only, already escaped) ----
-    return `<a href="${escapedUrl}" target="_blank" rel="noopener noreferrer nofollow" style="color: inherit; font-weight: 700; text-decoration: underline; word-break: break-all;">${escapedUrl}</a>`;
+    // data-href, not href: see utils/quietLinks.js — the address is
+    // already the text of the link, so the browser's hover box added
+    // nothing but noise.
+    return `<a data-href="${escapedUrl}" tabindex="0" target="_blank" rel="noopener noreferrer nofollow" class="msg-link">${escapedUrl}</a>`;
   });
 }

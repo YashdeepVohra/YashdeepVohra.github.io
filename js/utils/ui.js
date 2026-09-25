@@ -144,11 +144,9 @@ export function refreshSocialUI() {
    separate detail view to open. But on a phone that means the
    conversation is gone, and getting back to it is Chats, find the
    thread, scroll. So leaving a conversation leaves a way back: one
-   chip, bottom of the screen where a thumb already is, gone on its own
-   after a few seconds.
-
-   On a laptop none of this is needed — the thread stays open beside
-   the feed — which is why only the phone branch calls it.
+   chip, at every width. On a phone it floats at the bottom where the
+   thumb already is; on a laptop it is the first row of the feed
+   column. switchScreen clears it.
    ------------------------------------------------------------------- */
 let chipTimer = 0;
 
@@ -183,7 +181,22 @@ export function returnChip({ text, icon = "bx-left-arrow-alt", onTap }) {
   // width and needs no coordinates at all: the column already has them.
   // It sits outside #eventsTab and #recapTab on purpose, so switching
   // between Live Now and Recap doesn't strand it in the hidden one.
-  (document.getElementById("home") || document.body).prepend(el);
+  //
+  // EXCEPT ON A PHONE, where the top of the column is the one place a
+  // thumb can't reach. There it joins the floating controls instead —
+  // bottom left, level with the + button, above the tab bar — which
+  // sit in the strip the feed's bottom padding already keeps clear, so
+  // a card can always be scrolled out from under it the way it can
+  // from under the + button. Fixed to the viewport, and a phone has no
+  // sidebar, so the arithmetic that broke on the laptop has nothing to
+  // add up. Same element, same text, same way out; only its place.
+  const phone = !!(window.matchMedia && matchMedia("(max-width: 1099px)").matches);
+  if (phone) {
+    el.classList.add("floating");
+    document.body.appendChild(el);
+  } else {
+    (document.getElementById("home") || document.body).prepend(el);
+  }
   void el.offsetWidth;
   el.classList.add("in");
   // No timer. Nine seconds was right for something floating over the

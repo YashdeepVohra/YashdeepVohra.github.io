@@ -149,3 +149,25 @@ included. A per-event card would need a server reading the event, and
 events are sign-in only; that was considered and not built. WhatsApp,
 Telegram and X cache a preview by the IMAGE URL, so every redraw bumps
 the `?v=` on the og, twitter and JSON-LD image URLs in `index.html`.
+
+### The way back moved to the bottom — on a phone only
+
+At the top of the feed column the chip was out of thumb reach on a phone,
+and that is where people use this. On a phone it now floats bottom-left,
+level with the + button and above the tab bar. That strip is already
+kept clear by the feed's bottom padding (it is where the + button
+lives), so any card can be scrolled out from under it — the old floating
+chip's crime was sitting over an action row that could NOT be moved
+clear. A phone has no sidebar, so there is no offset arithmetic to go
+wrong. On a laptop it is still the first row of the feed column.
+
+### No URL in the corner when you hover a link
+
+A laptop browser prints the address of anything with an `href` in the
+bottom-left corner while the pointer is over it. No stylesheet can stop
+it. So links in the app carry `data-href` instead, and
+`utils/quietLinks.js` puts the real `href` back only for the moments the
+browser's link behaviour is wanted — right-click (copy / open in new
+tab), middle-click, and keyboard focus — and takes it away again when
+the pointer or focus leaves. A plain click on an event card is handled
+by its own onclick; any other quiet link opens in a new tab.

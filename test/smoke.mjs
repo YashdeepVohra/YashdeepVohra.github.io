@@ -2059,10 +2059,12 @@ group('sharing an event');
       cards: box.querySelectorAll('.event-embed').length,
       title: card && card.querySelector('.event-embed-title').innerText,
       meta: card && card.querySelector('.event-embed-meta').innerText,
-      // The href has to stay a real link, so the message still means
-      // something pasted anywhere else.
-      href: card && card.getAttribute('href'),
-      otherLinkStillALink: !!box.querySelector('a[href="https://example.com/not-ours"]')
+      // The address stays on the card, so the message still means
+      // something copied anywhere else — but as data-href, so hovering
+      // on a laptop doesn't print it at the bottom of the window.
+      href: card && card.getAttribute('data-href'),
+      hrefOnHover: !!box.querySelector('a[href]'),
+      otherLinkStillALink: !!box.querySelector('a[data-href="https://example.com/not-ours"]')
     };
   }, { id: 'AbC123_-x' });
 
@@ -2081,8 +2083,9 @@ group('sharing an event');
   ok('the card fills in from the cache with no read',
      embed.title === 'Chai + assignment panic' && /Happening now/.test(embed.meta || ''),
      JSON.stringify({ t: embed.title, m: embed.meta }));
-  ok('the card is still a real link underneath',
+  ok('the card still carries its link',
      /livesociya\.com\/\?e=AbC123_-x$/.test(embed.href || ''), embed.href);
+  ok('and nothing in the thread has an href to print on hover', embed.hrefOnHover === false);
   ok('someone else\u2019s link is left alone', embed.otherLinkStillALink);
 }
 
@@ -2939,6 +2942,15 @@ group('opening an event somebody shared');
     await wait(700);
     const chip = document.getElementById('returnChip');
     const fab = document.querySelector('.fab');
+    const nav = document.querySelector('.bottom-nav');
+    const hit = (a, b) => a.right > b.left && a.left < b.right && a.bottom > b.top && a.top < b.bottom;
+    const cr = chip ? chip.getBoundingClientRect() : null;
+    // Where a thumb is: the bottom quarter of the screen, above the tab
+    // bar, and not over the shared card's own buttons.
+    const reach = !!cr && cr.top > innerHeight * 0.75 && cr.bottom <= innerHeight
+      && (!nav || !hit(cr, nav.getBoundingClientRect()));
+    const actions = document.querySelector('#event-sh1 .card-actions');
+    const coversActions = !!cr && !!actions && hit(cr, actions.getBoundingClientRect());
     const overlapping = (() => {
       if (!chip || !fab || getComputedStyle(fab).display === 'none') return false;
       const a = chip.getBoundingClientRect(), b = fab.getBoundingClientRect();
@@ -2951,6 +2963,7 @@ group('opening an event somebody shared');
       // The name belongs to another student: it must be text, never markup.
       chipIsText: chip ? !/<|>/.test(chip.innerHTML.replace(/<i [^>]*><\/i>/, '')) : false,
       overlapping,
+      reach, coversActions,
       // And it must not outlive the screen it belongs to.
       clearedOnNavigate: (() => { window.switchScreen('home'); return !document.getElementById('returnChip'); })()
     };
@@ -2962,6 +2975,8 @@ group('opening an event somebody shared');
   ok('but it leaves a way back, by name', /Back to Riya/.test(ph.chipText), ph.chipText);
   ok('the name goes in as text, never markup', ph.chipIsText);
   ok('the chip does not sit under the compose button', !ph.overlapping);
+  ok('on a phone it is at the bottom, where a thumb reaches, clear of the tab bar', ph.reach);
+  ok('and it does not cover the shared card\u2019s buttons', !ph.coversActions);
   ok('and it does not outlive the screen it belongs to', ph.clearedOnNavigate);
 }
 
@@ -3667,6 +3682,188 @@ group('icons, the orbit, the emoji picker and the inbox');
   ok('closing the chat takes the panel and the greeting with it', r.closedWithChat);
   ok('orbit faces are drawn', r.faceCount >= 6, String(r.faceCount));
   ok('and every one of them is upright', r.angles.length > 0 && r.angles.every((a) => Math.abs(a) <= 2), JSON.stringify(r.angles));
+  ok('no errors from any of that', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ------------------------------------------------------------------ */
+group('previews, active now, clock times and quiet links');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const pg = await ctx.newPage();
+  const errs = [];
+  pg.on('pageerror', (e) => errs.push(e.message));
+  await pg.addInitScript({ path: fileURLToPath(new URL('./stub.js', import.meta.url)) });
+  await pg.goto(APP_URL, { waitUntil: 'domcontentloaded' });
+  await pg.waitForTimeout(1500);
+
+  const r = await pg.evaluate(async () => {
+    const wait = (ms) => new Promise((res) => setTimeout(res, ms));
+    const { state } = await import('/js/state/store.js');
+    const chat = await import('/js/services/chatService.js');
+    const pres = await import('/js/services/presenceService.js');
+    const fm = await import('/js/utils/formatters.js');
+    const mr = await import('/js/services/messageRules.js');
+    const search = await import('/js/interactions/searchUI.js');
+    const now = Date.now();
+    const out = {};
+
+    // ---- Clock times: the same shape in every locale ----
+    out.clocks = [
+      fm.clockTime(new Date(2026, 8, 26, 0, 58).getTime()),
+      fm.clockTime(new Date(2026, 8, 26, 12, 5).getTime()),
+      fm.clockTime(new Date(2026, 8, 26, 21, 30).getTime())
+    ];
+    out.inboxClock = fm.formatInboxTime(new Date(2026, 8, 26, 0, 58).getTime(), new Date(2026, 8, 26, 1, 3).getTime());
+
+    // ---- The preview text itself ----
+    const ours = (u) => u.includes('livesociya.com/?e=');
+    out.previews = [
+      mr.previewOf('  see\n you   there ', { isOurEvent: ours }),
+      mr.previewOf('https://livesociya.com/?e=abc123', { isOurEvent: ours }),
+      mr.previewOf('come!\nhttps://livesociya.com/?e=abc123', { isOurEvent: ours }),
+      mr.previewOf('https://example.com/x', { isOurEvent: ours })
+    ];
+    out.previewCapped = mr.previewOf('x'.repeat(300)).length <= mr.PREVIEW_MAX;
+
+    window.__authSingleton.currentUser = { uid: 'me' };
+    state.uid = 'me'; state.blockedUids = []; state.privacyChosen = true;
+    const mk = (u, n) => ({ uid: u, username: u, displayName: n, avatar: '🦊', followers: [], following: [], vouchedBy: [] });
+    const ppl = ['p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10'];
+    state.userCache = { me: mk('me', 'Me') };
+    ppl.forEach((u, i) => { state.userCache[u] = mk(u, 'Person ' + i); window.__stubDocs['users/' + u] = mk(u, 'Person ' + i); });
+    state.following = []; state.orbitUids = []; state.eventCache = {}; state.eventOrder = []; state.recapOrder = []; state.recapDone = true;
+    document.getElementById('loading-screen').classList.add('hidden');
+    document.getElementById('login').classList.add('hidden');
+    document.querySelector('.app-frame').classList.remove('hidden');
+    window.switchScreen('home');
+
+    // ---- The search screen's empty hint is centred ----
+    search.openSearch();
+    await wait(300);
+    const hint = document.querySelector('#searchResults .search-hint');
+    const hi = hint && hint.querySelector('i');
+    if (hi) {
+      const a = hi.getBoundingClientRect(), b = hint.getBoundingClientRect();
+      out.hintOffset = Math.abs((a.left + a.width / 2) - (b.left + b.width / 2));
+    }
+    search.closeSearch();
+    await wait(300);
+
+    // ---- Presence: somebody fresh, somebody stale, somebody hidden ----
+    window.__stubDocs['presence/p1'] = { visible: true, at: { toMillis: () => now - 60e3 } };
+    window.__stubDocs['presence/p2'] = { visible: true, at: { toMillis: () => now - 20 * 60e3 } };
+    window.__stubDocs['presence/p3'] = { visible: false };
+    ppl.forEach((u, i) => {
+      const id = ['me', u].sort().join('_');
+      window.__stubDocs['chats/' + id] = { userUids: ['me', u].sort(), status: 'unlocked', lastUpdated: now - i * 6e4, unreadByUid: '', initiatedByUid: u };
+    });
+    // p1's chat has a preview; the newest message was theirs, unread.
+    Object.assign(window.__stubDocs['chats/me_p1'], { lastText: 'see you there', lastSenderUid: 'p1', lastMsgId: 'x1', unreadByUid: 'me' });
+    Object.assign(window.__stubDocs['chats/me_p2'], { lastText: 'on my way', lastSenderUid: 'me', lastMsgId: 'x2' });
+    Object.assign(window.__stubDocs['chats/me_p3'], { lastText: '', lastSenderUid: 'p3', lastMsgId: 'x3' });
+
+    await pres.startPresence();
+    out.myBeat = window.__stubDocs['presence/me'] || null;
+
+    window.__readPaths = [];
+    window.showTab('chats');
+    chat.loadChatList();
+    await wait(500);
+    const presReads = () => (window.__readPaths || []).filter((p) => p.startsWith('presence/')).length;
+    out.presenceReads = presReads();
+    const row = (u) => document.querySelector(`#chatList .chat-item[data-uid="${u}"]`);
+    const dotOn = (u) => { const d = row(u)?.querySelector('.presence-dot'); return !!d && !d.classList.contains('hidden'); };
+    out.dots = { p1: dotOn('p1'), p2: dotOn('p2'), p3: dotOn('p3') };
+    out.subs = ['p1', 'p2', 'p3'].map((u) => row(u)?.querySelector('.chat-sub span')?.innerText.trim());
+    out.p1Strong = row('p1')?.querySelector('.chat-sub')?.classList.contains('strong');
+
+    // A second look inside the cache window reads nothing.
+    window.__readPaths = [];
+    chat.loadChatList();
+    await wait(300);
+    out.rereads = presReads();
+
+    // The header of an open chat says it in words.
+    chat.openChat('me_p1', 'p1');
+    await wait(300);
+    out.headerNow = document.getElementById('chatPresence')?.innerText.trim();
+    chat.closeChat({ silent: true });
+    chat.openChat('me_p2', 'p2');
+    await wait(300);
+    out.headerAgo = document.getElementById('chatPresence')?.innerText.trim();
+    chat.closeChat({ silent: true });
+
+    // ---- Sending writes the preview in the chat write it already makes ----
+    chat.openChat('me_p4', 'p4');
+    await wait(300);
+    state.currentChatData = { ...window.__stubDocs['chats/me_p4'] };
+    state.currentChatLoaded = true;
+    const input = document.getElementById('msgInput');
+    input.value = 'hello there';
+    await window.sendMessage();
+    await wait(200);
+    const c4 = window.__stubDocs['chats/me_p4'];
+    const msgKey = Object.keys(window.__stubDocs).find((k) => k.startsWith('chats/me_p4/messages/') && window.__stubDocs[k].text === 'hello there');
+    out.sentPreview = { text: c4.lastText, sender: c4.lastSenderUid, matches: !!msgKey && msgKey.endsWith('/' + c4.lastMsgId) };
+    chat.closeChat({ silent: true });
+
+    // ---- Turning it off: nothing stored to read, and nothing shown ----
+    await pres.setShowActivity(false);
+    out.hiddenDoc = { ...(window.__stubDocs['presence/me'] || {}) };
+    window.__readPaths = [];
+    window.showTab('chats');
+    chat.loadChatList();
+    await wait(400);
+    out.readsWhileHidden = presReads();
+    out.dotsWhileHidden = document.querySelectorAll('#chatList .presence-dot:not(.hidden)').length;
+    out.switchOff = !document.getElementById('activitySwitch').classList.contains('on');
+    await pres.setShowActivity(true);
+
+    // ---- Quiet links: armed only when the browser needs them ----
+    const box = document.getElementById('messages');
+    const a = document.createElement('a');
+    a.dataset.href = 'https://example.com/x';
+    a.textContent = 'x';
+    box.appendChild(a);
+    a.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+    out.hoverHref = a.hasAttribute('href');
+    a.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    out.rightClickHref = a.getAttribute('href');
+    a.dispatchEvent(new MouseEvent('mouseout', { bubbles: true, relatedTarget: document.body }));
+    out.afterLeave = a.hasAttribute('href');
+    a.remove();
+    return out;
+  });
+
+  ok('a clock time never reads 0:58', JSON.stringify(r.clocks) === JSON.stringify(['12:58 am', '12:05 pm', '9:30 pm']), JSON.stringify(r.clocks));
+  ok('and neither does the inbox', r.inboxClock === '12:58 am', r.inboxClock);
+  ok('a preview is one tidy line', r.previews[0] === 'see you there', r.previews[0]);
+  ok('a shared event reads as one, not as a URL',
+     r.previews[1] === 'Shared an event' && r.previews[2] === 'come! · shared an event', JSON.stringify(r.previews));
+  ok('any other bare link says so', r.previews[3] === 'Shared a link', r.previews[3]);
+  ok('and a preview is capped', r.previewCapped);
+  ok('the search hint’s icon is centred over its text', typeof r.hintOffset === 'number' && r.hintOffset < 2, String(r.hintOffset));
+  ok('opening the app says you are active, stamped by the server',
+     !!r.myBeat && r.myBeat.visible === true && !!r.myBeat.at, JSON.stringify(r.myBeat));
+  ok('the inbox asks about at most eight people', r.presenceReads > 0 && r.presenceReads <= 8, String(r.presenceReads));
+  ok('and looking again inside a few minutes reads nothing', r.rereads === 0, String(r.rereads));
+  ok('a green dot for someone active now, and only for them',
+     r.dots.p1 === true && r.dots.p2 === false && r.dots.p3 === false, JSON.stringify(r.dots));
+  ok('rows show the last message, "You:" for yours, and a deleted one as such',
+     JSON.stringify(r.subs) === JSON.stringify(['see you there', 'You: on my way', 'Message deleted']), JSON.stringify(r.subs));
+  ok('an unread preview is bold', r.p1Strong === true);
+  ok('the chat header says Active now', r.headerNow === 'Active now', r.headerNow);
+  ok('or how long ago', r.headerAgo === 'Active 20m ago', r.headerAgo);
+  ok('sending writes the preview, from you, pointing at that message',
+     r.sentPreview.text === 'hello there' && r.sentPreview.sender === 'me' && r.sentPreview.matches, JSON.stringify(r.sentPreview));
+  ok('turning it off stores nothing to read', r.hiddenDoc.visible === false && !('at' in r.hiddenDoc), JSON.stringify(r.hiddenDoc));
+  ok('and you stop seeing anybody else’s', r.readsWhileHidden === 0 && r.dotsWhileHidden === 0,
+     JSON.stringify({ reads: r.readsWhileHidden, dots: r.dotsWhileHidden }));
+  ok('the switch in Settings says off', r.switchOff);
+  ok('hovering a link gives the browser no URL to print', r.hoverHref === false);
+  ok('right-click still gets the real link', r.rightClickHref === 'https://example.com/x', String(r.rightClickHref));
+  ok('and it goes quiet again when the pointer leaves', r.afterLeave === false);
   ok('no errors from any of that', errs.length === 0, errs.join(' | '));
   await ctx.close();
 }

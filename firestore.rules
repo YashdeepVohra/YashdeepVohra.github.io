@@ -977,8 +977,22 @@ service cloud.firestore {
       // (where userUids array-contains uid), so Firestore can verify it.
       allow list: if isMemberByData();
 
+      /* THE INBOX PREVIEW. lastText is a copy of the newest message
+         (messageRules.previewOf, 90 chars; 120 here so the "…" always
+         fits), lastMsgId says which message, lastSenderUid who sent it.
+         Whoever writes a preview must name THEMSELVES as its sender, so
+         nobody can put words in the other person's mouth in your list.
+         "" is allowed: it is how a deleted last message reads. */
+      function previewOk(d) {
+        return (!('lastText' in d) && !('lastMsgId' in d) && !('lastSenderUid' in d))
+          || (d.get('lastText', '') is string && d.get('lastText', '').size() <= 120
+              && d.get('lastMsgId', '') is string && d.get('lastMsgId', '').size() <= 64
+              && d.get('lastSenderUid', '') == uid());
+      }
+
       allow create: if inThisChat()
         && !exists(/databases/$(database)/documents/blocks/$(chatId))
+        && previewOk(request.resource.data)
         && uid() in request.resource.data.userUids
         && request.resource.data.userUids.size() == 2
         && request.resource.data.userUids[0] < request.resource.data.userUids[1]
@@ -990,7 +1004,10 @@ service cloud.firestore {
         && sensibleTime(request.resource.data.lastUpdated);
 
       allow update: if inThisChat()
-        && changedKeys().hasOnly(['unreadByUid', 'typingUid', 'status', 'lastUpdated', 'icebreakerUsed'])
+        && changedKeys().hasOnly(['unreadByUid', 'typingUid', 'status', 'lastUpdated', 'icebreakerUsed',
+                                  'lastText', 'lastMsgId', 'lastSenderUid'])
+        && (!(changedKeys().hasAny(['lastText', 'lastMsgId', 'lastSenderUid']))
+            || previewOk(request.resource.data))
         // The icebreaker flag only ever goes from unset to true, and
         // only the person who opened the chat can set it.
         && (!(changedKeys().hasAny(['icebreakerUsed']))
@@ -1216,6 +1233,35 @@ service cloud.firestore {
     // DEFAULT DENY
     // Anything not matched above is refused. Never remove this.
     // ---------------------------------------------------------------
+    // ---------------------------------------------------------------
+    // ACTIVE NOW — presence/{uid}
+    // ---------------------------------------------------------------
+    // One small document per person: { visible: true, at: now } while
+    // they are in the app, or { visible: false } and NOTHING ELSE when
+    // they have turned "Show when you're active" off. That shape is the
+    // privacy guarantee: a hidden person's document holds no time, so
+    // there is nothing for anybody to read. `at` can only ever say
+    // "now" (request.time), so nobody can look active on a schedule.
+    //
+    // Read by any signed-in person, one document at a time (no list),
+    // and only by the app for people already on your screen. "Turn
+    // mine off and you won't see theirs" is the app's side of the deal:
+    // enforcing it here would read your own presence document inside
+    // every lookup, doubling what presence costs. See docs/data.md.
+    match /presence/{personUid} {
+      allow get: if signedIn();
+      allow list: if false;
+      allow create, update: if signedIn()
+        && personUid == uid()
+        && request.resource.data.visible is bool
+        && ((request.resource.data.visible == true
+              && request.resource.data.keys().hasOnly(['visible', 'at'])
+              && request.resource.data.at == request.time)
+            || (request.resource.data.visible == false
+              && request.resource.data.keys().hasOnly(['visible'])));
+      allow delete: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

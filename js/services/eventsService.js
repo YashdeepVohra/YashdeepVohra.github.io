@@ -14,7 +14,7 @@
 
 import { auth, db, FieldValue, Timestamp } from '../config/firebase.js';
 import { state } from '../state/store.js';
-import { renderAvatar, escapeHtml, safeId } from '../utils/formatters.js';
+import { renderAvatar, escapeHtml, safeId, clockTime } from '../utils/formatters.js';
 import { showTab, toast, returnChip, switchScreen } from '../utils/ui.js';
 import { openOverlay, closeOverlay, replaceOverlay, isOverlayTop } from '../utils/overlays.js';
 import { primeUsers, displayNameFor, usernameFor, avatarFor } from './userService.js';
@@ -601,7 +601,7 @@ function relTime(ms, now = Date.now()) {
  * only once you have decided you care.
  */
 function timeStat(e, now) {
-  const clock = new Date(e.startTime).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const clock = clockTime(e.startTime);
 
   if (e.expiresAt <= now) {
     return { label: "Ended", value: relTime(e.expiresAt, now).replace(" ago", ""), sub: "ago" };
@@ -1970,7 +1970,7 @@ function countTo(el, target) {
  */
 function materialDiff(before, after) {
   const changes = [];
-  const when = (ms) => new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const when = (ms) => clockTime(ms);
 
   if (before.place !== after.place) changes.push(`moved to ${after.place}`);
   if (before.startTime !== after.startTime) changes.push(`now starts ${when(after.startTime)}`);

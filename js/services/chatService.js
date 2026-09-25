@@ -17,14 +17,14 @@
 
 import { auth, db, FieldValue } from '../config/firebase.js';
 import { state } from '../state/store.js';
-import { renderAvatar, formatTime, formatInboxTime, formatMessage, escapeHtml, safeId, msOf } from '../utils/formatters.js';
+import { renderAvatar, formatTime, formatInboxTime, clockTime, formatMessage, escapeHtml, safeId, msOf } from '../utils/formatters.js';
 import { switchScreen, showTab, showNotification, toggleTime, toast, setPageTitle, setTitleUnread } from '../utils/ui.js';
 import { askConfirm } from '../utils/confirm.js';
 import { openOverlay, closeOverlay, isOverlayOpen } from '../utils/overlays.js';
 import {
   isDeleted, isEdited, canEdit, canRetract, messageActions, editWindowLabel,
   REACTIONS, reactionOf, canReact, nextReaction, reactionSummary,
-  hostActions, pinPayload
+  hostActions, pinPayload, previewOf
 } from './messageRules.js';
 import { eventIdFromUrl } from './shareRules.js';
 import { primeEvent } from './shareService.js';
@@ -35,12 +35,32 @@ import { vibeColor } from './eventsService.js';
 import { inRecap } from './recapRules.js';
 import { searchPeople } from './searchService.js';
 import { closeEmojiPicker } from '../interactions/emojiPicker.js';
+import { activityOf, primePresence, onPresenceChange, setPresenceTargets, MAX_FETCH } from './presenceService.js';
 import {
   primeUsers, fetchUser, displayNameFor, usernameFor, avatarFor,
   resolveUsernameToUid, directChatId, normalizeUsername
 } from './userService.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/* The inbox preview travels in the chat write every send already makes
+   (see messageRules.previewOf). lastMsgId says WHICH message it is a
+   copy of, so an edit or a delete of that one message can follow it. */
+function lastFields(text, msgId) {
+  return {
+    lastText: previewOf(text, { isOurEvent: (u) => !!eventIdFromUrl(u) }),
+    lastSenderUid: state.uid,
+    lastMsgId: msgId
+  };
+}
+function followPreview(chatId, type, msgId, text) {
+  if (type !== "direct" || !chatId) return;
+  const data = state.currentChat === chatId ? state.currentChatData : null;
+  if (!data || data.lastMsgId !== msgId) return;
+  db.collection("chats").doc(chatId)
+    .set({ lastText: text ? previewOf(text, { isOurEvent: (u) => !!eventIdFromUrl(u) }) : "", lastSenderUid: state.uid, lastMsgId: msgId }, { merge: true })
+    .catch((e) => console.error("Preview update failed:", e.code || e.message));
+}
 
 // Only the newest messages get a live listener. Older ones are fetched
 // once, on demand, when you scroll back. Opening a conversation used
@@ -123,6 +143,8 @@ export async function sendDirectText(otherUid, text) {
   if (!body || body.length > 2000) throw fail("bad-text");
 
   const chatRef = db.collection("chats").doc(directChatId(state.uid, otherUid));
+  const msgRef = chatRef.collection("messages").doc();
+  const last = lastFields(body, msgRef.id);
   const snap = await chatRef.get();
   const data = snap.exists ? (snap.data() || {}) : null;
   const mutual = await isMutualFollow(otherUid);
@@ -139,7 +161,8 @@ export async function sendDirectText(otherUid, text) {
       icebreakerUsed: false,
       unreadByUid: otherUid,
       typingUid: "",
-      lastUpdated: Date.now()
+      lastUpdated: Date.now(),
+      ...last
     });
     usedIcebreaker = status === "icebreaker";
   } else {
@@ -148,10 +171,9 @@ export async function sendDirectText(otherUid, text) {
     const mine = status === "icebreaker" && data.initiatedByUid === state.uid;
     if (mine && data.icebreakerUsed === true) throw fail("icebreaker-used");
     usedIcebreaker = mine;
-    await chatRef.set({ unreadByUid: otherUid, lastUpdated: Date.now(), status }, { merge: true });
+    await chatRef.set({ unreadByUid: otherUid, lastUpdated: Date.now(), status, ...last }, { merge: true });
   }
 
-  const msgRef = chatRef.collection("messages").doc();
   const msg = {
     senderUid: state.uid,
     text: body,
@@ -168,6 +190,44 @@ export async function sendDirectText(otherUid, text) {
     await msgRef.set(msg);
   }
 }
+
+/* ---------------------------------------------------------------------
+   Active now — painted from presenceService's cache, never fetched here
+   ------------------------------------------------------------------- */
+let inboxUids = [];
+
+function paintHeaderPresence() {
+  const line = document.getElementById("chatPresence");
+  const dot = document.getElementById("chatHeaderDot");
+  const uid = state.currentChatType === "direct" ? state.currentOtherUid : "";
+  const a = uid ? activityOf(uid) : { active: false, label: "" };
+  if (line) {
+    line.textContent = a.label;
+    line.classList.toggle("hidden", !a.label);
+    line.classList.toggle("now", a.active);
+  }
+  if (dot) dot.classList.toggle("hidden", !a.active);
+}
+
+function paintInboxPresence() {
+  document.querySelectorAll("#chatList .chat-item[data-uid]").forEach((row) => {
+    const a = activityOf(row.getAttribute("data-uid"));
+    row.querySelector(".presence-dot")?.classList.toggle("hidden", !a.active);
+  });
+}
+
+function inboxOnScreen() {
+  const tab = document.getElementById("chatsTab") || document.getElementById("chatList");
+  return !!tab && tab.offsetParent !== null;
+}
+
+onPresenceChange(() => { paintHeaderPresence(); paintInboxPresence(); });
+setPresenceTargets(() => {
+  const out = [];
+  if (state.currentChatType === "direct" && state.currentOtherUid) out.push(state.currentOtherUid);
+  if (inboxOnScreen()) out.push(...inboxUids.slice(0, MAX_FETCH));
+  return out;
+});
 
 // ---------- Entry points ----------
 export async function startChat(rawUsername = null) {
@@ -237,6 +297,8 @@ export function openChat(chatId, otherUid) {
     }
     setPageTitle(displayNameFor(otherUid));
   });
+  paintHeaderPresence();
+  primePresence([otherUid]);
 
   document.querySelector(".topbar")?.classList.add("hidden");
   switchScreen("chatScreen");
@@ -307,6 +369,7 @@ export function openEventChat(eventId) {
     hAvatar.style.cursor = "default";
     hAvatar.onclick = null;
   }
+  paintHeaderPresence();
   // innerText, not innerHTML — the title is user-supplied.
   if (hTitle) {
     hTitle.innerText = cached.title || "Event chat";
@@ -461,6 +524,8 @@ export async function sendMessage() {
 
     let status = state.currentChatStatus;
     let initiatedByUid = state.currentChatInitiatorUid;
+    const msgRef = messagesRef().doc();
+    const last = lastFields(text, msgRef.id);
 
     let usedIcebreaker = false;
 
@@ -480,7 +545,8 @@ export async function sendMessage() {
         icebreakerUsed: false,
         unreadByUid: otherUid,
         typingUid: "",
-        lastUpdated: Date.now()
+        lastUpdated: Date.now(),
+        ...last
       });
       usedIcebreaker = status === "icebreaker";
     } else {
@@ -497,7 +563,8 @@ export async function sendMessage() {
         unreadByUid: otherUid,
         lastUpdated: Date.now(),
         status,
-        typingUid: ""
+        typingUid: "",
+        ...last
       }, { merge: true });
     }
 
@@ -507,7 +574,6 @@ export async function sendMessage() {
     // from false to true, and the flag can never go back. So there is
     // exactly one such message, ever. Everything after it is an
     // ordinary send, once they have written back.
-    const msgRef = messagesRef().doc();
     const body = {
       senderUid: state.uid,
       text,
@@ -1008,6 +1074,7 @@ async function commitEdit() {
 
   try {
     await messagesRef(chatId, type).doc(target.id).update(written);
+    followPreview(chatId, type, target.id, text);
   } catch (e) {
     console.error("Edit failed:", e.code || e.message);
     patchLocalMessage(target.id, before);
@@ -1042,6 +1109,7 @@ async function confirmRetractMessage(messageId) {
 
   try {
     await messagesRef(chatId, type).doc(messageId).update(written);
+    followPreview(chatId, type, messageId, "");
   } catch (e) {
     console.error("Delete failed:", e.code || e.message);
     patchLocalMessage(messageId, before);
@@ -1605,7 +1673,7 @@ function renderMessages(msgs, { keepScroll = null } = {}) {
       new Date(msOf(m.time)).toDateString() === new Date(msOf(m.editedAt)).toDateString();
     const editStamp = edited
       ? (sameDay
-          ? new Date(msOf(m.editedAt)).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+          ? clockTime(m.editedAt)
           : formatTime(m.editedAt))
       : "";
     const timeLine = edited
@@ -1920,20 +1988,29 @@ export function loadChatList() {
           }
           if (isUnread) hasGlobalUnread = true;
 
-          // The second line says where the conversation STANDS, from
-          // fields already on the chat document — no extra read. There
-          // is no last-message preview on purpose: that would be a new
-          // field written on every send, and a rules change.
+          // The second line: typing beats everything; then the last
+          // message (a copy on the chat document, so no read); then, for
+          // a chat from before previews existed, where it stands.
           let sub = "@" + escapeHtml(usernameFor(otherUid));
           let subClass = "";
+          const hasPreview = typeof chat.lastMsgId === "string" && chat.lastMsgId !== "";
           if (chat.typingUid === otherUid) { sub = "typing\u2026"; subClass = " live"; }
+          else if (hasPreview) {
+            const mine = chat.lastSenderUid === state.uid;
+            const body = chat.lastText ? escapeHtml(chat.lastText) : "<em>Message deleted</em>";
+            sub = (mine ? "You: " : "") + body;
+            if (isUnread) subClass = " strong";
+          }
           else if (isUnread) { sub = "New message"; subClass = " strong"; }
           else if (chat.status === "icebreaker" && chat.initiatedByUid === state.uid && chat.icebreakerUsed) sub = "Waiting for a reply";
           else if (chat.status === "icebreaker" && chat.initiatedByUid === otherUid) { sub = "Wants to chat"; subClass = " strong"; }
 
           html += `
-            <div class="chat-item${isUnread ? " unread" : ""}" onclick="window.openChat('${id}', '${otherId}')">
-              <div class="chat-avatar">${renderAvatar(avatarFor(otherUid))}</div>
+            <div class="chat-item${isUnread ? " unread" : ""}" data-uid="${otherId}" onclick="window.openChat('${id}', '${otherId}')">
+              <div class="chat-face">
+                <div class="chat-avatar">${renderAvatar(avatarFor(otherUid))}</div>
+                <span class="presence-dot${activityOf(otherUid).active ? "" : " hidden"}" aria-hidden="true"></span>
+              </div>
               <div class="chat-main">
                 <div class="chat-top">
                   <span class="chat-name">${escapeHtml(displayNameFor(otherUid))}</span>
@@ -1948,6 +2025,11 @@ export function loadChatList() {
         });
 
         list.innerHTML = html;
+
+        // Only the conversations near the top are worth asking about,
+        // and only answers older than a few minutes are asked again.
+        inboxUids = chats.map((c) => (c.userUids || []).find((u) => u !== state.uid)).filter(Boolean);
+        if (inboxOnScreen()) primePresence(inboxUids.slice(0, MAX_FETCH));
 
         setUnreadBadge(hasGlobalUnread);
         setTitleUnread(hasGlobalUnread);

@@ -135,6 +135,8 @@ import { initSwipeListeners } from './interactions/swipeReply.js';
 import { initPullRefresh } from './interactions/pullRefresh.js';
 import { initViewportFit, lockZoom } from './utils/viewport.js';
 import { initEmojiPicker } from './interactions/emojiPicker.js';
+import { toggleShowActivity } from './services/presenceService.js';
+import { initQuietLinks } from './utils/quietLinks.js';
 import { popOverlay, anyOverlayOpen, clearOverlays } from './utils/overlays.js';
 import { openSearch, closeSearch, onSearchInput, searchOpenProfile, searchOpenEvent, refreshSearchResults } from './interactions/searchUI.js';
 
@@ -286,6 +288,7 @@ Object.assign(window, {
   closeFollowList,
   answerFollowRequest: answerRequest,
   togglePrivateAccount,
+  toggleShowActivity,
   setThemeChoice,
   onBioInput,
   toggleInterest,
@@ -345,6 +348,7 @@ function boot() {
   lockZoom();
   initViewportFit();
   initEmojiPicker();
+  initQuietLinks();
 
   document.getElementById("login-btn")?.addEventListener("click", () => loginWithGoogle());
 
