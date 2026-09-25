@@ -296,7 +296,9 @@ window.firebase = {
   }), { GoogleAuthProvider: function () { this.setCustomParameters = noop; }, Auth: { Persistence: { LOCAL: 'local' } } }),
   firestore: Object.assign(() => ({ enablePersistence: () => Promise.resolve(), collection: (n) => collRef(n), doc: (p) => docRef(p), batch: () => {
       const ops = [];
-      const rec = (kind) => (ref, data) => { ops.push({ kind, ref, path: (ref && ref.__path) || '?', data }); return undefined; };
+      // `opts` rides along: a batched set({ merge: true }) used to land
+      // as a plain overwrite here, which real Firestore never does.
+      const rec = (kind) => (ref, data, opts) => { ops.push({ kind, ref, path: (ref && ref.__path) || '?', data, opts }); return undefined; };
       return {
         set: rec('set'), update: rec('update'), delete: rec('delete'),
         commit: () => {
@@ -311,7 +313,7 @@ window.firebase = {
           // passed on exactly these ops.
           applying = true;
           try {
-            ops.forEach((o) => { if (o.ref && typeof o.ref[o.kind] === 'function') o.ref[o.kind](o.data); });
+            ops.forEach((o) => { if (o.ref && typeof o.ref[o.kind] === 'function') o.ref[o.kind](o.data, o.opts); });
           } finally {
             applying = false;
           }

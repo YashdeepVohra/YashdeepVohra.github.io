@@ -116,3 +116,36 @@ scrollbars float over the artwork. The attribute is deprecated in the
 HTML spec and implemented by every engine; there is no replacement.
 Their sizing lives in `.media-embed` in the stylesheet now rather
 than in a `style` attribute, so there is one place to change it.
+
+### The share sheet is pick, then Send
+
+It used to be the eight people you last messaged, and tapping a face
+sent the event there and then: one person per open, nobody you had not
+already talked to, and a misplaced thumb was a message you could not
+take back. People expected the sheet every other app has, so it is that
+now: conversations first, then everyone you follow, a search box that
+also asks the people search after two letters, ticks, an optional line,
+and a Send button that says how many. Below the list, when nothing is
+ticked, the ways out: copy the link, WhatsApp (`wa.me/?text=`), and the
+phone's own sheet where `navigator.share` exists.
+
+The old path also wrote every NEW chat as an icebreaker and never flipped
+`icebreakerUsed` on an existing one, so a share to a friend could be
+refused by the rules for no reason on screen. Every send goes through
+`sendDirectText` in chatService now, which makes the same decisions as
+the composer: mutual follows and crossed paths are unlocked, a stranger's
+opener flips the flag in the same batch, and an opener already spent is
+refused before anything is written. The note and the link go in ONE
+message, because to a stranger a second message would be refused.
+
+The stub's batch used to drop `{ merge: true }` and overwrite; it passes
+it through now, which is what caught the icebreaker case in the smoke
+group "sharing an event to several people".
+
+### The preview card on other apps
+
+`og-image.png` is one branded card for every link, event links
+included. A per-event card would need a server reading the event, and
+events are sign-in only; that was considered and not built. WhatsApp,
+Telegram and X cache a preview by the IMAGE URL, so every redraw bumps
+the `?v=` on the og, twitter and JSON-LD image URLs in `index.html`.

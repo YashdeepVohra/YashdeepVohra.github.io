@@ -13,7 +13,7 @@ const SCREENS = ["login", "home", "usernameScreen", "profileScreen", "chatScreen
    only says whether something is unread (setTitleUnread); this paints
    both. Signed out, the title is the full search title from index.html
    — that is the one Google shows, so the front door never changes it. */
-const SEARCH_TITLE = "livesociya — what's happening on campus, right now";
+const SEARCH_TITLE = "livesociya — what's happening around you, right now";
 const TAB_TITLES = { events: "Live now", recap: "Recap", chats: "Messages" };
 const SCREEN_TITLES = { login: "", usernameScreen: "Claim your handle", chatScreen: "Chat", profileScreen: "Profile" };
 let titleLabel = "";

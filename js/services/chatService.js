@@ -96,6 +96,78 @@ export async function checkCrossedPaths(uidA, uidB) {
   }
 }
 
+/**
+ * Send one text to somebody's direct chat WITHOUT opening it — what the
+ * share sheet uses to post an event to several people at once.
+ *
+ * It follows exactly the same rules as typing into the thread
+ * (sendMessage below): a new chat with a stranger is an icebreaker,
+ * people who follow each other or crossed paths are unlocked, and the
+ * opening message of an icebreaker flips `icebreakerUsed` in the same
+ * batch, because the rules refuse it otherwise. The old share path
+ * wrote every NEW chat as an icebreaker and never flipped the flag on
+ * an existing one, so sharing to a friend could be refused for no
+ * reason the person could see.
+ *
+ * Throws with `code`: "blocked", "icebreaker-used" (you already sent
+ * your one opener; wait for a reply), or whatever Firestore says.
+ * Costs one read of the chat (plus the mutual/crossed-paths checks the
+ * composer already pays for a first message).
+ */
+export async function sendDirectText(otherUid, text) {
+  const fail = (code) => { const e = new Error(code); e.code = code; return e; };
+  if (!state.uid || !safeId(otherUid) || otherUid === state.uid) throw fail("bad-recipient");
+  if (isBlocked(otherUid)) throw fail("blocked");
+  const body = String(text || "").trim();
+  if (!body || body.length > 2000) throw fail("bad-text");
+
+  const chatRef = db.collection("chats").doc(directChatId(state.uid, otherUid));
+  const snap = await chatRef.get();
+  const data = snap.exists ? (snap.data() || {}) : null;
+  const mutual = await isMutualFollow(otherUid);
+
+  let usedIcebreaker = false;
+  if (!data) {
+    const crossed = mutual || await checkCrossedPaths(state.uid, otherUid);
+    const status = crossed ? "unlocked" : "icebreaker";
+    await chatRef.set({
+      userUids: [state.uid, otherUid].sort(),
+      createdAt: FieldValue.serverTimestamp(),
+      initiatedByUid: state.uid,
+      status,
+      icebreakerUsed: false,
+      unreadByUid: otherUid,
+      typingUid: "",
+      lastUpdated: Date.now()
+    });
+    usedIcebreaker = status === "icebreaker";
+  } else {
+    let status = data.status || "unlocked";
+    if (status === "icebreaker" && (data.initiatedByUid === otherUid || mutual)) status = "unlocked";
+    const mine = status === "icebreaker" && data.initiatedByUid === state.uid;
+    if (mine && data.icebreakerUsed === true) throw fail("icebreaker-used");
+    usedIcebreaker = mine;
+    await chatRef.set({ unreadByUid: otherUid, lastUpdated: Date.now(), status }, { merge: true });
+  }
+
+  const msgRef = chatRef.collection("messages").doc();
+  const msg = {
+    senderUid: state.uid,
+    text: body,
+    time: Date.now(),
+    sentAt: FieldValue.serverTimestamp(),
+    replyTo: null
+  };
+  if (usedIcebreaker) {
+    const batch = db.batch();
+    batch.set(chatRef, { icebreakerUsed: true }, { merge: true });
+    batch.set(msgRef, msg);
+    await batch.commit();
+  } else {
+    await msgRef.set(msg);
+  }
+}
+
 // ---------- Entry points ----------
 export async function startChat(rawUsername = null) {
   const typed = rawUsername || document.getElementById("chatUser")?.value;
@@ -104,10 +176,10 @@ export async function startChat(rawUsername = null) {
   if (handle === state.username) return toast("That's you.");
 
   const otherUid = await resolveUsernameToUid(handle);
-  if (!otherUid) return toast("No @" + handle + " on campus.");
+  if (!otherUid) return toast("No @" + handle + " here.");
   // Deliberately the same message as "no such user" — confirming a
   // block would tell the blocked person exactly what happened.
-  if (isBlocked(otherUid)) return toast("No @" + handle + " on campus.");
+  if (isBlocked(otherUid)) return toast("No @" + handle + " here.");
 
   const input = document.getElementById("chatUser");
   if (input && !rawUsername) input.value = "";

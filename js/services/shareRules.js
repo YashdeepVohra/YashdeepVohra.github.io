@@ -83,7 +83,7 @@ export function firstEventLink(text) {
 
 /** What goes in the native share sheet. */
 export function shareText(event) {
-  const title = String((event && event.title) || "Something on campus").trim();
+  const title = String((event && event.title) || "Something happening now").trim();
   const place = String((event && event.place) || "").trim();
   return place ? `${title} — ${place}` : title;
 }

@@ -194,6 +194,16 @@
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
+/* NO VISIBLE SCROLLBARS, anywhere. Everything still scrolls — by
+   finger, wheel, trackpad and keyboard — only the bar is gone. On a
+   phone the bars were already overlays; on Windows and some Android
+   builds they took real width and drew a grey track down the feed,
+   the thread and every sheet, which read as a web page, not an app.
+   `scrollbar-width` is Firefox and new Chromium; the pseudo-element is
+   Safari and older Chromium; both are needed. */
+* { scrollbar-width: none; -ms-overflow-style: none; }
+*::-webkit-scrollbar { display: none; width: 0; height: 0; background: transparent; }
+
 html, body {
   margin: 0; padding: 0;
   min-height: 100%;
@@ -890,9 +900,28 @@ div.login-mark { background: var(--forest); }
    than inheriting the bubble's, or it becomes unreadable. */
 .msg-sent .event-embed, .msg-received .event-embed { color: var(--ink); }
 
-/* ---- The share sheet ---- */
-.modal-content.share-sheet { max-width: 360px; padding: var(--s-20); text-align: left; }
-.share-head { padding: 0 4px var(--s-12); border-bottom: 1px solid var(--border); margin-bottom: var(--s-12); }
+/* ---- The share sheet ----
+   Pick people, then Send — see shareService.js. A column: head, search,
+   the list (the only part that scrolls), and a foot that is either the
+   ways out of the app or, once somebody is ticked, the Send bar. On a
+   phone it is a bottom sheet; on a laptop the usual centred card.
+   Every control here sheds the base button's flex/width/padding (see
+   CLAUDE.md) explicitly. */
+.modal-content.share-sheet {
+  max-width: 420px;
+  height: min(620px, 86dvh);
+  padding: var(--s-16) var(--s-16) var(--s-16);
+  text-align: left;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.share-grab { display: none; }
+.share-head {
+  display: flex; align-items: center; gap: var(--s-12);
+  padding: 0 4px var(--s-12);
+  flex: none;
+}
+.share-head-text { flex: 1; min-width: 0; }
 .share-head b {
   display: block;
   font-family: var(--font-mono);
@@ -905,25 +934,36 @@ div.login-mark { background: var(--forest); }
   font-size: 17px; letter-spacing: -0.02em; color: var(--ink);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.share-people {
-  display: flex; align-items: flex-start; gap: var(--s-8);
-  overflow-x: auto; overscroll-behavior: contain;
-  padding-bottom: var(--s-12); margin-bottom: 4px;
-  scrollbar-width: none;
+.modal-content .share-x {
+  width: 36px; height: 36px; flex: none; padding: 0; margin: 0;
+  display: grid; place-items: center;
+  border-radius: 50%; border: none; box-shadow: none;
+  background: var(--bone); color: var(--ink);
 }
-.share-people::-webkit-scrollbar { display: none; }
-.share-person {
-  flex: 0 0 auto; width: 68px;
-  flex-direction: column; justify-content: flex-start; gap: 6px;
-  padding: 6px 2px;
-  background: transparent; box-shadow: none; border: none;
-  color: var(--ink); font-size: 11.5px; font-weight: 600;
+.share-x svg { width: 18px; height: 18px; }
+.share-x:hover { background: var(--ash); filter: none; }
+.search-field.share-search {
+  flex: none;
+  margin-bottom: var(--s-8);
+  cursor: text;
 }
-.share-person:hover { background: var(--bone); filter: none; }
-.share-person:active { transform: scale(0.93); }
-.share-person span:last-child {
-  width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center;
+.share-search svg { width: 19px; height: 19px; color: var(--fog); flex: none; }
+.share-list {
+  flex: 1; min-height: 0;
+  overflow-y: auto; overscroll-behavior: contain;
+  margin: 0 calc(var(--s-8) * -1);
+  padding: 2px var(--s-8);
 }
+.modal-content .share-row {
+  width: 100%;
+  display: flex; align-items: center; justify-content: flex-start; gap: var(--s-12);
+  padding: 8px 8px; margin: 0;
+  background: transparent; color: var(--ink);
+  border: none; box-shadow: none; border-radius: var(--r-sm);
+  text-align: left;
+}
+.share-row:hover { background: var(--bone); filter: none; }
+.share-row:active:not(:disabled) { transform: none; filter: none; background: var(--bone); }
 .share-face {
   width: 44px; height: 44px; flex: none;
   display: grid; place-items: center;
@@ -931,7 +971,93 @@ div.login-mark { background: var(--forest); }
   background: var(--wash); font-size: 20px;
   position: relative;
 }
-.share-empty { margin: 0 0 var(--s-12); padding: 0 4px; font-size: 13.5px; color: var(--fog); }
+.share-who { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.share-who b {
+  font-size: 15px; font-weight: 600; color: var(--ink);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.share-who small {
+  font-family: var(--font-mono); font-size: 11.5px; color: var(--fog);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.share-check {
+  width: 26px; height: 26px; flex: none;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  border: 2px solid var(--ash);
+  color: transparent;
+  transition: background var(--fast) var(--ease), border-color var(--fast) var(--ease), transform var(--fast) var(--ease);
+}
+.share-row.on .share-check {
+  background: var(--forest); border-color: var(--forest); color: var(--on-accent);
+  transform: scale(1.05);
+}
+.share-empty { margin: var(--s-24) 0; padding: 0 var(--s-16); font-size: 14px; color: var(--fog); text-align: center; }
+.share-foot {
+  flex: none;
+  border-top: 1px solid var(--border);
+  margin: var(--s-8) calc(var(--s-16) * -1) 0;
+  padding: var(--s-12) var(--s-16) 0;
+}
+.share-send { display: flex; align-items: center; gap: var(--s-8); }
+.share-send input {
+  flex: 1; margin: 0;
+  padding: 11px 16px;
+  background: var(--bone); border-color: transparent;
+}
+.modal-content .share-send-btn {
+  width: auto; flex: none; margin: 0;
+  padding: 11px 20px;
+  border-radius: var(--r-pill);
+  background: var(--forest); color: var(--on-accent);
+  font-weight: 700; font-size: 15px;
+  box-shadow: none; white-space: nowrap;
+}
+.share-out { display: flex; justify-content: space-around; gap: var(--s-8); }
+.modal-content .share-out-btn {
+  width: auto; flex: 1 1 0; min-width: 0; margin: 0;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 4px 0;
+  background: transparent; border: none; box-shadow: none;
+  color: var(--ink); font-size: 12px; font-weight: 600;
+}
+.share-out-btn:hover { background: transparent; filter: none; }
+.share-out-btn:hover .share-out-ico { background: var(--ash); }
+.share-out-ico {
+  width: 50px; height: 50px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: var(--bone); color: var(--ink);
+  transition: background var(--fast) var(--ease);
+}
+.share-out-ico.wa { background: var(--wash); color: var(--forest); }
+
+/* A phone: a sheet from the bottom edge, clear of the home indicator,
+   and pinned to the visible area while the keyboard is up (the search
+   box and the message line are both in it). */
+@media (max-width: 560px) {
+  .modal-overlay.share-overlay { align-items: flex-end; padding: 0; }
+  .modal-content.share-sheet {
+    max-width: none;
+    height: min(640px, 84dvh);
+    border-radius: 24px 24px 0 0;
+    border-bottom: none;
+    padding-bottom: calc(var(--s-16) + env(safe-area-inset-bottom, 0px));
+    animation: sheetUp 0.3s var(--ease);
+  }
+  .share-grab {
+    display: block; flex: none;
+    width: 40px; height: 4px; margin: -4px auto var(--s-12);
+    border-radius: 4px; background: var(--ash);
+  }
+}
+@keyframes sheetUp { from { transform: translateY(40%); opacity: 0.6; } to { transform: none; opacity: 1; } }
+@media (max-width: 1099px) {
+  html.kb-open .modal-overlay.share-overlay {
+    top: var(--vvt, 0px); bottom: auto; height: var(--vvh, 100%);
+  }
+  html.kb-open .modal-content.share-sheet { height: 100%; max-height: 100%; padding-bottom: var(--s-12); }
+}
 
 /* =====================================================================
    THE POSTER BAND
@@ -1764,7 +1890,7 @@ div.login-mark { background: var(--forest); }
 /* Note the base sheet already makes every button flex, full width and
    generously padded — see the note in CLAUDE.md. These only override
    what that gives them. */
-.action-sheet .action-row, .share-sheet .action-row {
+.action-sheet .action-row {
   justify-content: flex-start;
   box-shadow: none;
   gap: 12px;
@@ -1775,9 +1901,6 @@ div.login-mark { background: var(--forest); }
   border-radius: var(--r-sm);
   margin-bottom: 0;
 }
-/* The share sheet has exactly one of these and nothing above it to group
-   with, so on its own it reads as a heading. A hairline says "tappable". */
-.share-sheet .action-row { border: 1px solid var(--border); width: 100%; }
 .action-row:hover { background: var(--bone); filter: none; box-shadow: none; transform: none; }
 .action-row:active { transform: scale(0.97); }
 .action-row i { font-size: 20px; color: var(--fog); }
@@ -2374,6 +2497,17 @@ html:not(.kb-open) .chat-footer {
 }
 .search-field input:focus, .inbox-search input:focus { box-shadow: none; border: none; }
 .search-field input::-webkit-search-cancel-button { display: none; }
+/* iOS draws a type="search" field as its own native control — a
+   rounded light box with its own padding — underneath our styles
+   unless the appearance is switched off. On a phone that showed as a
+   pale slab behind the text inside the pill, loudest in dark mode. */
+.search-field input, .inbox-search input {
+  -webkit-appearance: none;
+  appearance: none;
+}
+.search-field input::-webkit-search-decoration,
+.search-field input::-webkit-search-results-button,
+.search-field input::-webkit-search-results-decoration { -webkit-appearance: none; display: none; }
 
 .inbox-search { margin-bottom: var(--s-16); }
 .inbox-search .clear-btn { width: 28px; height: 28px; font-size: 17px; background: var(--ash); }
@@ -3808,6 +3942,21 @@ html.rotate-lock body *::after { animation-play-state: paused !important; }
     top: var(--vvt, 0px);
     bottom: auto;
     height: var(--vvh, 100%);
+  }
+}
+
+/* The page must never show round a full-screen layer on a phone. While
+   the keyboard animates, iOS scrolls the page under the layer and the
+   visual viewport is re-measured a frame or two late, so for a moment
+   the layer sat a few pixels off and the feed showed through in a
+   strip beside the search field. A spread shadow in the canvas colour
+   paints over everything outside the layer's box — it is not clipped
+   by the layer's own `overflow: hidden` — so any gap is canvas, not
+   the app behind. Phones only: on a laptop the layers are laid out
+   inside the frame and must not blank the sidebar. */
+@media (max-width: 1099px) {
+  .full-screen-view:not(.hidden) {
+    box-shadow: 0 0 0 100vmax var(--canvas);
   }
 }
 

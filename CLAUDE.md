@@ -1,6 +1,7 @@
 # livesociya — working notes
 
-**What it is.** A campus app for things happening *right now*: somebody
+**What it is.** An app for things happening *right now* — open to
+everyone, made first for college students: somebody
 starts an event, everyone nearby sees it instantly, it vanishes when it
 ends. Plus direct messages, and a social graph. Live at livesociya.com,
 Firestore, vanilla ES modules — no framework. The only build step is
@@ -181,6 +182,9 @@ Each line is the whole rule. The file after it is the argument for it.
 - Boxicons has no `bx-hot`. Check a class exists; anything load-bearing
   is inline SVG — and a button with an icon and NO label (hype, share)
   must be drawn, or a font that fails to load leaves nothing there.
+- No scrollbar is ever drawn (top of `style.css`); scrolling still works.
+  A full-screen layer on a phone paints canvas round itself so the app
+  never shows through while the keyboard settles.
 - Zoom is off everywhere, on purpose. The keyboard is handled by the
   visual viewport, not `innerHeight`.
 - Send cancels its own mousedown, so the keyboard never drops; nothing
@@ -203,6 +207,9 @@ Each line is the whole rule. The file after it is the argument for it.
 - The logo is the firefly: `logo.svg` (tile), `logo-mark.svg` (no tile), PNGs
   at 16/32/48/192/512 + maskable + apple-touch, and `og-image.png`. It is an
   identity: same drawing in both themes, used as an `<img>`, never recoloured.
+- Redraw `og-image.png` → bump `?v=` on every og/twitter/JSON-LD image URL;
+  WhatsApp and X cache previews by URL. Copy says "around you", never
+  campus-only: the product is for everyone, college first.
 - `document.title` has one owner, `ui.js` (`setPageTitle`, `setTitleUnread`).
   Signed out it is the full search title; nothing else writes it.
 
@@ -248,6 +255,9 @@ Each line is the whole rule. The file after it is the argument for it.
   row, and its desktop offset broke as soon as the frame centred.
 - A cross-origin iframe's scrollbars are reachable only through
   `scrolling="no"`.
+- Share is PICK, THEN SEND: ticking a person sends nothing. Every send
+  goes through `sendDirectText` (chatService), the composer's icebreaker
+  rules; note + link are ONE message, or a stranger's opener is refused.
 
 **Search** → `docs/search.md`
 

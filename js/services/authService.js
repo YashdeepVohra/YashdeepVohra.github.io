@@ -491,7 +491,7 @@ export async function claimUsername() {
     }
 
     if (btn) {
-      btn.innerHTML = "Join Campus";
+      btn.innerHTML = "Join livesociya";
       handleIsFree = false;
       syncClaimButton();
       checkUsernameAvailability();

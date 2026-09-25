@@ -3407,6 +3407,128 @@ group('everything scrolls to its bottom');
 }
 
 /* ------------------------------------------------------------------ */
+group('sharing an event to several people');
+{
+  // The sheet used to send the moment a face was tapped: one person per
+  // open, only people you had already messaged, and a misplaced thumb
+  // was a message you could not take back. Now it is pick, then Send —
+  // and each send obeys the same icebreaker rules as the composer.
+  const phCtx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+  const ph = await phCtx.newPage();
+  const errs = [];
+  ph.on('pageerror', (e) => errs.push(e.message));
+  await ph.addInitScript({ path: fileURLToPath(new URL('./stub.js', import.meta.url)) });
+  await ph.goto(APP_URL, { waitUntil: 'domcontentloaded' });
+  await ph.waitForTimeout(1500);
+
+  const r = await ph.evaluate(async () => {
+    const wait = (ms) => new Promise((res) => setTimeout(res, ms));
+    const { state } = await import('/js/state/store.js');
+    const share = await import('/js/services/shareService.js');
+    const now = Date.now();
+    window.__authSingleton.currentUser = { uid: 'me' };
+    state.uid = 'me'; state.blockedUids = []; state.privacyChosen = true;
+    const mk = (u, n) => ({ uid: u, username: u, displayName: n || u, avatar: 'x', followers: [], following: [], vouchedBy: [] });
+    state.userCache = { me: mk('me'), a: mk('a', 'Riya'), b: mk('b', 'Arjun'), c: mk('c', 'Neha'), d: mk('d', 'Kabir') };
+    state.recentChatUids = ['a', 'd'];
+    state.following = ['b', 'c', 'a'];
+    state.eventCache = { e1: { id: 'e1', title: 'Chai + assignment panic', place: 'Back lawn',
+      tag: '☕ Chill', hostUid: 'a', participantUids: [], hypedUids: [],
+      startTime: now - 6e4, expiresAt: now + 36e5, description: '', pendingUids: [], unconfirmedUids: [] } };
+    // a: an open conversation. b: follows me back, no chat yet.
+    // c: I follow, they don't, never talked — a stranger's icebreaker.
+    // d: I already spent my one opener and they never replied.
+    window.__stubDocs['chats/a_me'] = { userUids: ['a', 'me'], status: 'unlocked', initiatedByUid: 'a', icebreakerUsed: false };
+    window.__stubDocs['users/me/followers/b'] = { at: 1 };
+    window.__stubDocs['chats/d_me'] = { userUids: ['d', 'me'], status: 'icebreaker', initiatedByUid: 'me', icebreakerUsed: true };
+    document.getElementById('loading-screen').classList.add('hidden');
+    document.querySelector('.app-frame').classList.remove('hidden');
+
+    share.openShare('e1');
+    await wait(350);
+    const sheet = document.querySelector('#shareSheet .share-sheet');
+    const rows = () => [...document.querySelectorAll('#sharePeople .share-row')].map((x) => x.getAttribute('data-uid'));
+    const order = rows();
+    const box = sheet.getBoundingClientRect();
+    const writesBefore = window.__writes;
+    const tap = (uid) => document.querySelector(`#sharePeople [data-uid="${uid}"]`).click();
+    tap('a');
+    await wait(50);
+    const tappedSent = window.__writes !== writesBefore;
+    const sendShownAfterOne = !document.getElementById('shareSendBar').classList.contains('hidden');
+    const outHiddenAfterOne = document.getElementById('shareOut').classList.contains('hidden');
+    tap('b'); tap('c');
+    const label = document.getElementById('shareSendBtn').textContent.trim();
+    tap('c'); tap('c');           // untick and tick again: still three
+    const labelAgain = document.getElementById('shareSendBtn').textContent.trim();
+
+    // Search filters the list, and what you ticked stays ticked.
+    const search = document.getElementById('shareSearch');
+    search.value = 'ney'; search.dispatchEvent(new Event('input'));
+    await wait(20);
+    const filteredEmptyOrNot = rows();
+    search.value = 'ne'; search.dispatchEvent(new Event('input'));
+    await wait(20);
+    const filtered = rows();
+    const stillOn = document.querySelector('#sharePeople [data-uid="c"]').classList.contains('on');
+    search.value = ''; search.dispatchEvent(new Event('input'));
+    await wait(20);
+
+    document.getElementById('shareNote').value = 'come through';
+    document.getElementById('shareSendBtn').click();
+    await wait(600);
+    const msgs = (id) => Object.keys(window.__stubDocs)
+      .filter((k) => k.startsWith('chats/' + id + '/messages/')).map((k) => window.__stubDocs[k]);
+    const toastText = (document.getElementById('toastBox') || {}).innerText || '';
+
+    // The one who has not replied yet: refused before anything is written.
+    share.openShare('e1');
+    await wait(100);
+    const w2 = window.__writes;
+    document.querySelector('#sharePeople [data-uid="d"]').click();
+    document.getElementById('shareSendBtn').click();
+    await wait(400);
+    const dToast = (document.getElementById('toastBox') || {}).innerText || '';
+
+    return {
+      order, tappedSent, sendShownAfterOne, outHiddenAfterOne, label, labelAgain,
+      filtered, stillOn, filteredEmptyOrNot,
+      sheetOnBottom: Math.abs(box.bottom - innerHeight) < 2 && box.left >= 0 && box.right <= innerWidth + 0.5,
+      closedAfterSend: document.getElementById('shareSheet').classList.contains('hidden'),
+      aText: (msgs('a_me')[0] || {}).text || '',
+      bChat: window.__stubDocs['chats/b_me'] || null, bMsgs: msgs('b_me').length,
+      cChat: window.__stubDocs['chats/c_me'] || null, cMsgs: msgs('c_me').length,
+      toastText, dWrites: window.__writes - w2, dMsgs: msgs('d_me').length, dToast,
+      noScrollbars: getComputedStyle(document.documentElement).scrollbarWidth === 'none'
+        && getComputedStyle(document.getElementById('sharePeople')).scrollbarWidth === 'none',
+      noVerifiedLine: !/verified students/i.test(document.getElementById('login').innerText
+        + document.getElementById('login').textContent),
+    };
+  });
+
+  ok('conversations come first, then the people you follow', JSON.stringify(r.order) === JSON.stringify(['a', 'd', 'b', 'c']), JSON.stringify(r.order));
+  ok('the sheet is a bottom sheet on a phone, inside the screen', r.sheetOnBottom);
+  ok('tapping a person ticks them and sends nothing', !r.tappedSent);
+  ok('one tick swaps the ways out for the Send bar', r.sendShownAfterOne && r.outHiddenAfterOne);
+  ok('Send says how many', r.label === 'Send to 3' && r.labelAgain === 'Send to 3', r.label + ' / ' + r.labelAgain);
+  ok('search narrows the list and keeps what you ticked', JSON.stringify(r.filtered) === JSON.stringify(['c']) && r.stillOn, JSON.stringify(r.filtered));
+  ok('Send closes the sheet', r.closedAfterSend);
+  ok('an open conversation gets the note and the link in ONE message',
+     /^come through\n/.test(r.aText) && /\?e=e1/.test(r.aText), JSON.stringify(r.aText));
+  ok('somebody who follows you back gets an unlocked chat',
+     !!r.bChat && r.bChat.status === 'unlocked' && r.bMsgs === 1, JSON.stringify(r.bChat));
+  ok('a stranger gets the icebreaker, and it is spent in the same write',
+     !!r.cChat && r.cChat.status === 'icebreaker' && r.cChat.icebreakerUsed === true && r.cMsgs === 1, JSON.stringify(r.cChat));
+  ok('one toast says who it went to', /Sent to Riya and 2 others/.test(r.toastText), r.toastText);
+  ok('an opener already spent is refused before anything is written',
+     r.dWrites === 0 && r.dMsgs === 0 && /Wait for them to reply/.test(r.dToast), JSON.stringify({ w: r.dWrites, t: r.dToast }));
+  ok('no scrollbars are drawn, the page or the sheet', r.noScrollbars);
+  ok('the front door no longer says "verified students only"', r.noVerifiedLine);
+  ok('no errors from any of that', errs.length === 0, errs.join(' | '));
+  await phCtx.close();
+}
+
+/* ------------------------------------------------------------------ */
 group('one file for the browser, a phone on its side, and Send');
 {
   // The browser gets one file. It must be built from the js/ that is

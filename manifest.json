@@ -1,7 +1,7 @@
 {
   "name": "livesociya",
   "short_name": "livesociya",
-  "description": "The campus live feed. See what's happening right now, join it, and meet the people who showed up.",
+  "description": "A live feed of what's happening around you. Join it and meet the people who show up. Open to everyone, made for college life.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
