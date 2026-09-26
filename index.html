@@ -536,6 +536,8 @@
     <div class="card">
       <label class="settings-label" style="margin-top:0;">Profile Picture</label>
       <div class="avatar-grid" id="settingsAvatarGrid">
+        <!-- Your own photo. Hidden until features.photos is on (js/config/features.js). -->
+        <div class="avatar-option photo-slot needs-photos" id="settingsPhotoSlot" role="button" tabindex="0" aria-label="Use a photo of your own" onclick="tapPhotoSlot()"></div>
         <div class="avatar-option" onclick="selectSettingsAvatar(this, '🦊')">🦊</div>
         <div class="avatar-option" onclick="selectSettingsAvatar(this, '🐼')">🐼</div>
         <div class="avatar-option" onclick="selectSettingsAvatar(this, '🐯')">🐯</div>
@@ -673,9 +675,16 @@
     </div>
 
     <label class="settings-label">The details</label>
-    <input id="title" placeholder="Event Title" autocomplete="off" spellcheck="false">
-    <input id="place" placeholder="Location" autocomplete="off" spellcheck="false">
-    <textarea id="description" placeholder="Add a short note or vibe check (optional)..." rows="3"></textarea>
+    <input id="title" placeholder="Event Title" autocomplete="off" spellcheck="false" maxlength="80">
+    <input id="place" placeholder="Location" autocomplete="off" spellcheck="false" maxlength="80" oninput="onPlaceInput()">
+    <div class="field-count hidden" id="placeCount" aria-live="polite">0/80</div>
+    <textarea id="description" placeholder="Add a short note or vibe check (optional)..." rows="3" maxlength="500"></textarea>
+
+    <!-- Photos. Hidden until features.photos is on (js/config/features.js).
+         The first one is the cover the feed shows. -->
+    <label class="settings-label about-label needs-photos">Photos <span class="about-count" id="photoCount">0/4</span></label>
+    <div class="photo-tray needs-photos" id="createPhotos"></div>
+    <p class="settings-hint needs-photos">The first photo is the cover people see in the feed.</p>
 
     <label class="settings-label">Schedule &amp; limits</label>
     <div class="time-stack">
@@ -701,6 +710,17 @@
       <span class="switch-track"><span class="switch-thumb"></span></span>
     </label>
   </div>
+</div>
+
+<!-- THE EVENT PAGE: every photo, the full place and note, who's going,
+     and Report. Painted by js/services/eventPage.js. -->
+<div id="eventScreen" class="full-screen-view hidden">
+  <div class="screen-header">
+    <button class="back-btn" aria-label="Back" onclick="closeEventPage()"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 5.5 4.5 12l6.5 6.5"/></svg></button>
+    <div class="header-title">Event</div>
+    <div style="width:42px;"></div>
+  </div>
+  <div class="screen-body" id="eventPageBody"></div>
 </div>
 
 <div id="deleteModal" class="modal-overlay hidden">

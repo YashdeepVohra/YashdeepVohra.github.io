@@ -141,6 +141,43 @@ service cloud.firestore {
     }
 
     // ---------------------------------------------------------------
+    // PHOTOS (docs/photos.md)
+    // ---------------------------------------------------------------
+    // A photo is stored as its Cloud Storage download URL, and only a
+    // URL for a file the OWNER put in their own folder of one of this
+    // project's buckets is accepted. The URL names its bucket, so moving
+    // new uploads to a second bucket later changes nothing stored here.
+    // Mirrors isOurPhotoUrl in js/services/photoRules.js.
+    function okPhotoUrl(url, folder, owner) {
+      return url is string
+        && url.size() <= 600
+        && url.matches('^https://firebasestorage[.]googleapis[.]com/v0/b/livesociyaweb[a-z0-9._-]*/o/'
+             + folder + '%2F' + owner + '%2F[A-Za-z0-9_-]{8,40}[.]jpg[?]alt=media&token=[A-Za-z0-9-]+$');
+    }
+    // Up to four on an event (PHOTO.EVENT_MAX). Rules have no loops,
+    // so each index is checked by hand.
+    function okEventPhotos(photos, owner) {
+      return photos is list
+        && photos.size() <= 4
+        && (photos.size() < 1 || okPhotoUrl(photos[0], 'events', owner))
+        && (photos.size() < 2 || okPhotoUrl(photos[1], 'events', owner))
+        && (photos.size() < 3 || okPhotoUrl(photos[2], 'events', owner))
+        && (photos.size() < 4 || okPhotoUrl(photos[3], 'events', owner));
+    }
+    // An avatar is one of three things: a short emoji, the Google photo
+    // from sign-in, or a picture the owner uploaded. It used to be any
+    // string under 300 characters, which let a profile point every
+    // viewer's browser at any https address at all.
+    function okAvatar(avatar, owner) {
+      return avatar is string
+        && avatar.size() > 0
+        && avatar.size() <= 300
+        && ((avatar.size() <= 16 && !avatar.matches('^[A-Za-z][A-Za-z0-9+.-]*:.*'))
+            || avatar.matches('^https://[a-z0-9-]+[.]googleusercontent[.]com/[^ ]+$')
+            || okPhotoUrl(avatar, 'avatars', owner));
+    }
+
+    // ---------------------------------------------------------------
     // EDITING AND RETRACTING A MESSAGE
     // ---------------------------------------------------------------
     //
@@ -448,8 +485,7 @@ service cloud.firestore {
         // through the reservation flow below.
         && !('username' in request.resource.data)
         && isString(request.resource.data.displayName, 20)
-        && request.resource.data.avatar is string
-        && request.resource.data.avatar.size() <= 300
+        && okAvatar(request.resource.data.avatar, userId)
         // Vouches and followers are given by other people. Neither can
         // be handed to yourself at sign-up.
         && !('vouchedBy' in request.resource.data)
@@ -503,7 +539,7 @@ service cloud.firestore {
         && request.resource.data.get('uid', null) == resource.data.get('uid', null)
         && request.resource.data.get('banned', null) == resource.data.get('banned', null)
         && (!(changedKeys().hasAny(['displayName'])) || isString(request.resource.data.displayName, 20))
-        && (!(changedKeys().hasAny(['avatar'])) || request.resource.data.avatar.size() <= 300)
+        && (!(changedKeys().hasAny(['avatar'])) || okAvatar(request.resource.data.avatar, userId))
         // HANDLES ARE PERMANENT. Once set, it can never change; and it
         // can only be set to a handle already reserved by this uid.
         && (
@@ -732,6 +768,9 @@ service cloud.firestore {
         && request.resource.data.createdAt == request.time
         && request.resource.data.circleId == myCircle()
         && sensibleGeo(request.resource.data.get('geo', null))
+        // Photos are usually added a moment AFTER publishing (the event
+        // goes out first, the uploads follow), but may come with it.
+        && (!('photos' in request.resource.data) || okEventPhotos(request.resource.data.photos, uid()))
         // A host cannot open with a pre-filled guest list or fake hype.
         && request.resource.data.participantUids == [uid()]
         && request.resource.data.hypedUids == []
@@ -767,8 +806,9 @@ service cloud.firestore {
                'title', 'place', 'description', 'tag',
                'startTime', 'expiresAt', 'ttlAt', 'maxCapacity',
                'requiresApproval', 'updatedAt',
-               'unconfirmedUids', 'lastEditSummary'
+               'unconfirmedUids', 'lastEditSummary', 'photos'
              ])
+          && (!(changedKeys().hasAny(['photos'])) || okEventPhotos(request.resource.data.photos, resource.data.hostUid))
           // A host may flag attendees as needing to re-confirm, but the
           // flag can only ever name people who are actually going, and
           // never the host themselves. This is the whole point: after a
@@ -1230,6 +1270,12 @@ service cloud.firestore {
         && request.resource.data.reason.size() <= 60
         && request.resource.data.note is string
         && request.resource.data.note.size() <= 500
+        // WHAT is being reported: a person, or one of their events (the
+        // event page's Report). Photos, stories and comments join this
+        // list as they arrive.
+        && request.resource.data.get('targetType', 'user') in ['user', 'event']
+        && request.resource.data.get('targetId', '') is string
+        && request.resource.data.get('targetId', '').size() <= 128
         // Nobody reads a report from the client, so there is no
         // optimistic paint to protect: this can simply be the truth.
         // Triage will want them in the order they really arrived.

@@ -208,6 +208,18 @@ Each line is the whole rule. The file after it is the argument for it.
 - Phones are portrait only. A web page cannot lock rotation, so a phone
   on its side gets `.rotate-cover` and the app behind it stops painting.
 
+**Photos** → `docs/photos.md`
+
+- Built and OFF until Blaze: `features.photos` (js/config/features.js);
+  `.needs-photos` hides everything. The switch-on checklist is in the doc.
+- A photo is stored as its download URL (it names its bucket), and only
+  the owner's own upload is accepted or drawn — `isOurPhotoUrl`,
+  mirrored as `okPhotoUrl` in firestore.rules. Avatars: `okAvatar`.
+- Compressed on the device; publishing never waits for a photo
+  (`commitTray` uploads behind it). Unused uploads are deleted.
+- The cover sits UNDER the band at 16:9 (max 320px), never over it.
+  The event page (`eventPage.js`) is where the rest is.
+
 **Starting on a bad network** → `docs/boot.md`
 
 - The Firebase SDK is `defer`; the app is one preloaded file,
@@ -388,9 +400,15 @@ reactions, a host's pinned message, the Recap
 receipt, the sage-on-paper redesign, the poster/stub cards, and share
 links for an event.
 
-Not built, roughly in the order I'd do them: push notifications (needs
-Blaze — and it is the ceiling on everything else, since a live event
-nobody is told about is a feed nobody opens), report triage for the admin.
+Built, switched off until Blaze: photos (profile pictures, event
+photos with a cover in the feed) — `docs/photos.md`. Built and on: the
+event page with Report, and the 80-character location limit.
+
+Not built, roughly in the order I'd do them: push notifications (the
+client half needs no Blaze; the sender is a Cloud Function in
+asia-south1, the Firestore region), photos in chat, memories (photos,
+likes and comments on a finished event), stories, report triage for
+the admin.
 
 Considered and parked: voice notes. Everything above costs *reads*, which
 have a 50k/day free tier. Voice notes cost storage and egress — a

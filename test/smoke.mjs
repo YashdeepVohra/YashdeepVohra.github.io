@@ -41,6 +41,13 @@ browser.newContext = async (opts = {}) => {
   await ctx.route('**/dist/app.js', (r) => r.fulfill({
     contentType: 'text/javascript', body: 'import "/js/app.js";'
   }));
+  // Photos come from Cloud Storage in production. Here every one is a
+  // 1600x1200 drawing, so a cover has a real image to crop and nothing
+  // leaves the machine.
+  await ctx.route('https://firebasestorage.googleapis.com/**', (r) => r.fulfill({
+    contentType: 'image/svg+xml',
+    body: '<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1200"><rect width="1600" height="1200" fill="#7a9"/><circle cx="800" cy="600" r="300" fill="#fd8"/></svg>'
+  }));
   return ctx;
 };
 browser.newPage = async (opts) => (await browser.newContext(opts)).newPage();
@@ -3034,7 +3041,10 @@ group('nothing is cut off');
       // each of which also brings the Chat button along) were the three
       // this never rendered. Every variant is seeded now.
       const rows = [
-        { hostUid: 'a', participantUids: ['a', 'b'] },                  // Join
+        // Join, with two photos: the cover has to fit at every width too.
+        { hostUid: 'a', participantUids: ['a', 'b'],
+          photos: [1, 2].map((n) => 'https://firebasestorage.googleapis.com/v0/b/livesociyaweb.firebasestorage.app/o/events%2Fa%2FPhotoNumber' + n + 'xxxxxxxx.jpg?alt=media&token=t-' + n),
+          place: 'Nescafe, back lawn, behind the old library, next to the cycle stand by gate three' },
         { hostUid: 'me', participantUids: ['me'] },                     // Chat + Manage
         { hostUid: 'a', participantUids: ['a', 'b', 'me'] },            // Chat + Going
         { hostUid: 'me', participantUids: ['me'], pendingUids: ['b', 'c'] }, // Chat + 2 requests
@@ -3085,6 +3095,11 @@ group('nothing is cut off');
       if (mode === 'both') {
         ev.showSharedEvent('o1');
         await wait(700);
+      }
+      // The event page, with its photos and a place too long for a card.
+      if (mode === 'page') {
+        window.openEventPage('o0');
+        await wait(500);
       }
 
       const out = [];
@@ -3168,9 +3183,16 @@ group('nothing is cut off');
   ok('and after View lands you on a card from a thread, at 1280',
      beside.rows.length === 0, JSON.stringify(beside.rows));
 
+  const pageSmall = await look(320, 700, 'page');
+  ok('the event page slices nothing at 320, photos and a long place included',
+     pageSmall.rows.length === 0, JSON.stringify(pageSmall.rows));
+
+  const pageWide = await look(1280, 860, 'page');
+  ok('nor at 1280', pageWide.rows.length === 0, JSON.stringify(pageWide.rows));
+
   ok('no errors while measuring any of that',
-     [small, smallChat, phone, beside].every((r) => r.errs.length === 0),
-     [small, smallChat, phone, beside].flatMap((r) => r.errs).join(' | '));
+     [small, smallChat, phone, beside, pageSmall, pageWide].every((r) => r.errs.length === 0),
+     [small, smallChat, phone, beside, pageSmall, pageWide].flatMap((r) => r.errs).join(' | '));
 }
 
 /* ------------------------------------------------------------------ */
@@ -4097,6 +4119,271 @@ group('one file for the browser, a phone on its side, and Send');
   ok('upright, the rotate cover is not there', turn.hiddenUpright, JSON.stringify(turn));
   ok('sideways, the cover is all that paints', turn.coverShown && turn.appHidden, JSON.stringify(turn));
   ok('and turning back puts the app back', turn.back, JSON.stringify(turn));
+}
+
+/* ------------------------------------------------------------------ */
+group('photos, the event page and the location');
+{
+  // Photos are BUILT BUT OFF until the Blaze plan (js/config/features.js).
+  // Off must mean nobody can tell: no picker, no tray, no slot.
+  const U = (host, n) => 'https://firebasestorage.googleapis.com/v0/b/livesociyaweb.firebasestorage.app/o/events%2F'
+    + host + '%2FPhotoNumber' + n + 'xxxxxxxx.jpg?alt=media&token=t-' + n;
+  const longPlace = 'Nescafe, back lawn, behind the old library, next to the cycle stand by gate three';
+  const withPhotos = Object.assign(mkEvent('p1', 'a', 'Sunset jam', '\u{1F3A7} Music'),
+    { photos: [U('a', 1), U('a', 2), U('a', 3)], place: longPlace, description: 'Bring a mat.\nWe start at the steps.' });
+  // Someone pasting a URL of their own into `photos` gets nothing drawn.
+  const foreign = Object.assign(mkEvent('p2', 'b', 'Not a cover', '\u{1F4DA} Study'),
+    { photos: ['https://example.com/tracker.jpg', U('a', 9)] });
+  const plain = mkEvent('p3', 'me', 'Mine, no photos', '☕ Chill');
+  await seed({ p1: withPhotos, p2: foreign, p3: plain });
+  await page.waitForTimeout(400);
+
+  const off = await page.evaluate(async () => {
+    const shown = (el) => !!el && getComputedStyle(el).display !== 'none';
+    window.openCreateScreen();
+    await new Promise((r) => setTimeout(r, 200));
+    const out = {
+      tray: shown(document.getElementById('createPhotos')),
+      slot: shown(document.getElementById('settingsPhotoSlot')),
+      bodyFlag: document.body.classList.contains('photos-on')
+    };
+    window.closeCreateScreen();
+    await new Promise((r) => setTimeout(r, 200));
+    return out;
+  });
+  ok('while photos are off, the create sheet has no photo tray', off.tray === false, JSON.stringify(off));
+  ok('and settings has no photo slot', off.slot === false && off.bodyFlag === false);
+
+  const feed = await page.evaluate(() => {
+    const card = document.getElementById('event-p1');
+    const cover = card?.querySelector('.event-cover');
+    const img = cover?.querySelector('img');
+    const kids = [...(card?.children || [])].map((k) => k.className.split(' ')[0]);
+    const r = cover?.getBoundingClientRect();
+    return {
+      cover: !!cover, src: img?.getAttribute('src'), count: cover?.querySelector('.cover-count')?.innerText,
+      order: kids.slice(0, 3).join(','),
+      ratio: r ? +(r.width / r.height).toFixed(2) : 0,
+      foreign: !!document.querySelector('#event-p2 .event-cover'),
+      plain: !!document.querySelector('#event-p3 .event-cover')
+    };
+  });
+  ok('a card with photos shows its first as the cover', feed.cover && feed.src && feed.src.indexOf('PhotoNumber1') > 0, JSON.stringify(feed));
+  ok('under the band and above the title, so the band keeps the top', feed.order === 'poster,event-cover,card-body', feed.order);
+  ok('at 16:9 on a phone, whatever shape the photo is', Math.abs(feed.ratio - 16 / 9) < 0.05, String(feed.ratio));
+  ok('and says there are more', feed.count === '1/3', feed.count);
+  ok('a photo that is not the host\'s own upload is never drawn', feed.foreign === false);
+  ok('and a card with no photos is the card it always was', feed.plain === false);
+
+  const pg = await page.evaluate(async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    document.querySelector('#event-p1 .event-title').click();
+    await wait(400);
+    const screen = document.getElementById('eventScreen');
+    const place = screen.querySelector('.ep-fact span');
+    const firstImg = screen.querySelector('.ep-photo');
+    const out = {
+      open: !screen.classList.contains('hidden'),
+      photos: screen.querySelectorAll('.ep-photo').length,
+      order: [...screen.querySelectorAll('.ep > .ep-photos, .ep-title, .ep-more')]
+        .map((n) => n.classList.contains('ep-more') ? 'more' : n.classList.contains('ep-title') ? 'title' : 'photo').join(','),
+      placeWhole: place?.innerText,
+      placeWraps: place ? place.getBoundingClientRect().height > 20 : false,
+      desc: screen.querySelector('.ep-desc')?.innerText,
+      actions: !!screen.querySelector('.card-actions .act.primary'),
+      report: !!screen.querySelector('.ep-report'),
+      timeFilled: !!screen.querySelector('[data-vt="value"]')?.textContent.trim()
+    };
+    // The minute tick repaints the feed, and the page with it — but must
+    // not throw its photos away and load them again.
+    window.__m.ev.renderEvents();
+    await wait(50);
+    out.sameImg = screen.querySelector('.ep-photo') === firstImg;
+    // Somebody joins while it is open: the page follows.
+    window.__m.state.eventCache.p1.participantUids = ['a', 'b'];
+    window.__m.ev.renderEvents();
+    await wait(50);
+    out.follows = /B|1/.test(screen.querySelector('.going-text')?.innerText || '');
+
+    // Report from the page: a report about THIS EVENT, not just its host.
+    window.__adds = [];
+    screen.querySelector('.ep-report').click();
+    await wait(300);
+    const modal = document.getElementById('reportModal');
+    out.reportAbout = document.getElementById('reportWho')?.innerText;
+    out.reportOpen = !modal.classList.contains('hidden');
+    // Not awaited: after sending it asks whether to block them too.
+    window.sendReport();
+    await wait(400);
+    const rep = (window.__adds || []).find((a) => a.path === 'reports');
+    out.filed = rep ? [rep.data.targetUid, rep.data.targetType, rep.data.targetId].join('|') : '';
+    window.confirmNo?.();
+    await wait(300);
+    window.closeEventPage();
+    await wait(300);
+    out.closed = screen.classList.contains('hidden');
+
+    // Your own event: no Report, and no photos section at all.
+    window.openEventPage('p3');
+    await wait(300);
+    out.ownReport = !!screen.querySelector('.ep-report');
+    out.ownPhotos = !!screen.querySelector('.ep-photos');
+    window.closeEventPage();
+    await wait(300);
+    return out;
+  });
+  ok('tapping a card\'s title opens the event page', pg.open, JSON.stringify(pg));
+  ok('with every photo on it', pg.photos === 3, String(pg.photos));
+  ok('the cover first, the rest after the details', pg.order === 'photo,title,more', pg.order);
+  ok('the whole place, wrapping rather than cut', pg.placeWhole === longPlace && pg.placeWraps);
+  ok('and the whole note, line breaks kept', pg.desc === 'Bring a mat.\nWe start at the steps.', JSON.stringify(pg.desc));
+  ok('the same actions as the card', pg.actions === true);
+  ok('and its time filled in like the card\'s', pg.timeFilled === true);
+  ok('the minute tick does not reload its photos', pg.sameImg === true);
+  ok('and it follows the event while open', pg.follows === true);
+  ok('Report on the page is about this event', pg.reportOpen && pg.reportAbout === 'this event', pg.reportAbout);
+  ok('and is filed as the event, against its host', pg.filed === 'a|event|p1', pg.filed);
+  ok('the page closes', pg.closed === true);
+  ok('your own event has no Report and no empty photo section', pg.ownReport === false && pg.ownPhotos === false);
+
+  // THE LOCATION used to take any length and lose the end on save.
+  const place = await page.evaluate(async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    window.openCreateScreen();
+    await wait(200);
+    const el = document.getElementById('place');
+    const count = document.getElementById('placeCount');
+    el.value = 'Lawn'; el.dispatchEvent(new Event('input'));
+    const quiet = count.classList.contains('hidden');
+    el.value = 'x'.repeat(72); el.dispatchEvent(new Event('input'));
+    const out = { max: el.maxLength, title: document.getElementById('title').maxLength,
+                  quiet, shows: !count.classList.contains('hidden'), text: count.innerText };
+    window.closeCreateScreen();
+    await wait(200);
+    return out;
+  });
+  ok('the location box stops at 80, the same as the rules', place.max === 80 && place.title === 80, JSON.stringify(place));
+  ok('with a count that appears only near the limit', place.quiet && place.shows && place.text === '72/80');
+
+  // ON: the whole path, with a real file through the real picker —
+  // compressed on the device, uploaded, and put on the event AFTER it
+  // has published.
+  await page.evaluate(async () => {
+    const f = await import('/js/config/features.js');
+    f.features.photos = true;
+    f.applyFeatureFlags();
+    window.__uploads = []; window.__storageDeletes = []; window.__updates = [];
+  });
+  // A real 3000x2000 PNG, drawn in the page, as the file a phone hands over.
+  const png = Buffer.from(await page.evaluate(async () => {
+    const c = document.createElement('canvas'); c.width = 3000; c.height = 2000;
+    const x = c.getContext('2d'); x.fillStyle = '#c84'; x.fillRect(0, 0, 3000, 2000);
+    const b = await new Promise((r) => c.toBlob(r, 'image/png'));
+    return [...new Uint8Array(await b.arrayBuffer())];
+  }));
+  await page.evaluate(() => window.openCreateScreen());
+  await page.waitForTimeout(250);
+  const trayShown = await page.evaluate(() => getComputedStyle(document.getElementById('createPhotos')).display !== 'none');
+  const [chooser] = await Promise.all([
+    page.waitForEvent('filechooser'),
+    page.evaluate(() => document.querySelector('#createPhotos .tray-add').click())
+  ]);
+  await chooser.setFiles({ name: 'IMG_0001.png', mimeType: 'image/png', buffer: png });
+  await page.waitForTimeout(250);
+  const on = await page.evaluate(async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const { isOurPhotoUrl } = await import('/js/services/photoRules.js');
+    const out = {
+      tiles: document.querySelectorAll('#createPhotos .tray-tile').length,
+      coverTag: !!document.querySelector('#createPhotos .tray-cover'),
+      counter: document.getElementById('photoCount').innerText
+    };
+    document.getElementById('title').value = 'With a photo';
+    document.getElementById('place').value = 'Steps';
+    window.__lastBatch = null;
+    await window.__m.ev.addEvent();
+    const ev = (window.__lastBatch || []).find((o) => String(o.path).indexOf('events/') === 0);
+    out.publishedWithoutPhotos = !!ev && !('photos' in ev.data);
+    // The upload runs behind the publish.
+    for (let i = 0; i < 40 && !(window.__updates || []).some((u) => u.keys.includes('photos')); i++) await wait(100);
+    const up = window.__uploads[0] || {};
+    const upd = (window.__updates || []).find((u) => u.keys.includes('photos'));
+    out.uploads = window.__uploads.length;
+    out.jpeg = up.type === 'image/jpeg';
+    out.small = up.size > 0 && up.size < 400 * 1024;
+    out.mine = /^events\/me\/[A-Za-z0-9_-]{20}\.jpg$/.test(up.path || '');
+    out.sameEvent = !!upd && !!ev && upd.path === ev.path;
+    out.urlOk = !!upd && upd.patch.photos.length === 1 && isOurPhotoUrl(upd.patch.photos[0], 'events', 'me');
+    return out;
+  });
+  ok('switched on, the tray is there', trayShown === true);
+  ok('a picked photo lands in it, marked as the cover', on.tiles === 1 && on.coverTag && on.counter === '1/4', JSON.stringify(on));
+  ok('publishing does not wait for it', on.publishedWithoutPhotos === true);
+  ok('it is uploaded once, as a JPEG, into your own folder', on.uploads === 1 && on.jpeg && on.mine, JSON.stringify(on));
+  ok('squeezed on the device from a 3000px original', on.small === true);
+  ok('and put on the event it belongs to, as a URL the rules accept', on.sameEvent && on.urlOk);
+
+  // Settings: your own photo as your profile picture.
+  await page.evaluate(() => { window.__uploads = []; window.openSettingsScreen(); });
+  await page.waitForTimeout(300);
+  const [chooser2] = await Promise.all([
+    page.waitForEvent('filechooser'),
+    page.evaluate(() => document.getElementById('settingsPhotoSlot').click())
+  ]);
+  await chooser2.setFiles({ name: 'me.png', mimeType: 'image/png', buffer: png });
+  const pfp = await page.evaluate(async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    for (let i = 0; i < 40 && !window.__uploads.length; i++) await wait(100);
+    await wait(150);
+    const { state } = window.__m;
+    const up = window.__uploads[0] || {};
+    const slot = document.getElementById('settingsPhotoSlot');
+    const out = {
+      path: up.path, square: false,
+      pending: String(state.pendingSettingsAvatar || '').indexOf('avatars%2Fme%2F') > 0,
+      selected: slot.classList.contains('selected') && !!slot.querySelector('img')
+    };
+    // Picking an emoji afterwards and saving deletes the unused upload.
+    window.__storageDeletes = [];
+    const fox = [...document.querySelectorAll('#settingsAvatarGrid .avatar-option')].find((e) => e.innerText === '\u{1F98A}');
+    window.selectSettingsAvatar(fox, '\u{1F98A}');
+    await window.saveProfileData();
+    await wait(1100);
+    out.saved = state.userAvatar === '\u{1F98A}';
+    out.cleaned = window.__storageDeletes.some((p) => p === up.path);
+    return out;
+  });
+  ok('a profile photo uploads into avatars/<your uid>/', /^avatars\/me\/[A-Za-z0-9_-]{20}\.jpg$/.test(pfp.path || ''), JSON.stringify(pfp));
+  ok('and is picked, ready for Save', pfp.pending && pfp.selected);
+  ok('choosing something else instead deletes the upload nobody kept', pfp.saved && pfp.cleaned);
+
+  // Off again for everything after this.
+  await page.evaluate(async () => {
+    const f = await import('/js/config/features.js');
+    f.features.photos = false;
+    f.applyFeatureFlags();
+  });
+
+  // The pure rules the database mirrors.
+  const pure = await page.evaluate(async () => {
+    const r = await import('/js/services/photoRules.js');
+    const u = 'https://firebasestorage.googleapis.com/v0/b/livesociyaweb.firebasestorage.app/o/events%2Fabc%2FAbCdEfGhIj0123456789.jpg?alt=media&token=12ab-cd';
+    return {
+      ok: r.isOurPhotoUrl(u, 'events', 'abc'),
+      otherOwner: r.isOurPhotoUrl(u, 'events', 'xyz'),
+      otherFolder: r.isOurPhotoUrl(u, 'avatars', 'abc'),
+      otherProject: r.isOurPhotoUrl(u.replace('livesociyaweb', 'someoneelse'), 'events', 'abc'),
+      mumbai: r.isOurPhotoUrl(u.replace('livesociyaweb.firebasestorage.app', 'livesociyaweb-mumbai'), 'events', 'abc'),
+      path: r.pathOfUrl(u),
+      fit: JSON.stringify(r.fitWithin(4032, 3024, 1600)),
+      noUpscale: JSON.stringify(r.fitWithin(800, 600, 1600))
+    };
+  });
+  ok('a photo URL is ours only for its owner, folder and project',
+     pure.ok && !pure.otherOwner && !pure.otherFolder && !pure.otherProject, JSON.stringify(pure));
+  ok('and a second bucket of this project is fine, so moving to Mumbai later is config', pure.mumbai === true);
+  ok('its storage path can be read back for a delete', pure.path === 'events/abc/AbCdEfGhIj0123456789.jpg');
+  ok('a phone photo is scaled to 1600 on its long edge, never up', pure.fit === '{"w":1600,"h":1200}' && pure.noUpscale === '{"w":800,"h":600}');
 }
 
 /* ------------------------------------------------------------------ */

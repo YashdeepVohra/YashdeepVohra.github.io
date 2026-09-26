@@ -23,3 +23,5 @@ firebase.json
 .firebaserc
 firestore.rules
 firestore.indexes.json
+storage.rules
+_sync.tgz

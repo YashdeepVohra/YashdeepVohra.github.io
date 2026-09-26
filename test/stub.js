@@ -288,7 +288,13 @@ const collRef = (name, parent) => {
         window.__collCbs[base] = (window.__collCbs[base] || []).filter((f) => f !== fire);
       };
     },
-    doc: (id) => docRef(base + '/' + id), add: () => Promise.resolve({ id: 'x' }),
+    doc: (id) => docRef(base + '/' + id),
+    // Recorded, so a report (or anything else added) can be checked.
+    add: (data) => {
+      (window.__adds = window.__adds || []).push({ path: base, data });
+      window.__writes++;
+      return Promise.resolve({ id: 'x' });
+    },
   };
   return q;
 };
@@ -334,3 +340,24 @@ window.firebase = {
     { Timestamp: { fromMillis: (ms) => stamp(ms), now: () => stamp() },
       FieldPath: { documentId: () => '__name__' }, FieldValue: { arrayUnion: (v) => ({ __op: 'union', v }), arrayRemove: (v) => ({ __op: 'remove', v }), increment: (v) => ({ __op: 'inc', v }), serverTimestamp: () => ({ __op: 'now' }), delete: () => ({ __op: 'delete' }) } }),
 };
+
+// Cloud Storage, just enough for photos: put() records the upload and
+// getDownloadURL() answers in the real URL's exact shape, so the
+// rules-mirroring checks in photoRules.js see what production sees.
+// window.__uploads / window.__storageDeletes let a test count both;
+// window.__storageFail makes the next put() fail like a dropped network.
+window.__uploads = [];
+window.__storageDeletes = [];
+window.firebase.storage = () => ({
+  ref: (path) => ({
+    put: (blob, meta) => {
+      if (window.__storageFail) return Promise.reject({ code: 'storage/retry-limit-exceeded' });
+      window.__uploads.push({ path, size: blob && blob.size, type: meta && meta.contentType });
+      return Promise.resolve({});
+    },
+    getDownloadURL: () => Promise.resolve(
+      'https://firebasestorage.googleapis.com/v0/b/livesociyaweb.firebasestorage.app/o/'
+      + encodeURIComponent(path) + '?alt=media&token=0a1b2c3d-test'),
+    delete: () => { window.__storageDeletes.push(path); return Promise.resolve(); },
+  }),
+});

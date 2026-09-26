@@ -18,6 +18,9 @@ import { INTERESTS, INTERESTS_MAX, BIO_MAX, cleanBio, cleanInterests } from './a
 import { openOverlay, closeOverlay } from '../utils/overlays.js';
 import { closeChat, startChatWithUid } from './chatService.js';
 import { fetchUser, displayNameFor, usernameFor, avatarFor, rememberUser } from './userService.js';
+import { features } from '../config/features.js';
+import { PHOTO, isOurPhotoUrl } from './photoRules.js';
+import { pickImages, compressImage, uploadPhoto, deletePhotoByUrl, photoError } from './photoService.js';
 import {
   orbitStatus, inOrbit, hasVouched, vouchCount, vouchersYouKnow, renderOrbitRings
 } from './orbitService.js';
@@ -551,6 +554,80 @@ export function openSettingsScreen() {
   document.querySelectorAll("#settingsAvatarGrid .avatar-option").forEach((el) => {
     el.classList.toggle("selected", el.innerText === state.userAvatar);
   });
+  paintPhotoSlot(isMyPhoto(state.userAvatar) ? state.userAvatar : "");
+}
+
+/* ---------- A photo of your own as your profile picture ----------
+   The first cell of the avatar grid (hidden while features.photos is
+   off). A pick is squeezed to 512px square on the device, uploaded
+   straight away, and then behaves like any other choice: nothing is
+   saved until Save. A photo that was uploaded and then NOT kept is
+   deleted again, and so is the one it replaces — a profile only ever
+   costs one file. */
+const CAMERA = `<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor"
+  stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  <path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2l1.5-2h6l1.5 2h2A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z"/>
+  <circle cx="12" cy="13" r="3.5"/></svg>`;
+let unsavedUpload = "";
+
+function isMyPhoto(url) {
+  return !!state.uid && isOurPhotoUrl(url, "avatars", state.uid);
+}
+
+function paintPhotoSlot(url, { busy = false } = {}) {
+  const slot = document.getElementById("settingsPhotoSlot");
+  if (!slot) return;
+  slot.classList.toggle("has-photo", !!url);
+  slot.classList.toggle("busy", busy);
+  slot.innerHTML = busy
+    ? `<i class='bx bx-loader-alt bx-spin'></i>`
+    : url ? renderAvatar(url) : CAMERA;
+  if (url && state.pendingSettingsAvatar === url) slot.classList.add("selected");
+}
+
+export async function pickProfilePhoto() {
+  if (!features.photos) return;
+  const [file] = await pickImages();
+  if (!file) return;
+  paintPhotoSlot("", { busy: true });
+  try {
+    const blob = await compressImage(file, { edge: PHOTO.AVATAR_EDGE, square: true });
+    const url = await uploadPhoto("avatars", blob);
+    // A second pick before saving replaces the first; the first goes.
+    if (unsavedUpload && unsavedUpload !== url) deletePhotoByUrl(unsavedUpload);
+    unsavedUpload = url;
+    document.querySelectorAll("#settingsAvatarGrid .avatar-option").forEach((el) => el.classList.remove("selected"));
+    state.pendingSettingsAvatar = url;
+    paintPhotoSlot(url);
+  } catch (e) {
+    console.error("Profile photo failed:", e.code || e.message);
+    toast(photoError(e));
+    paintPhotoSlot(isMyPhoto(state.userAvatar) ? state.userAvatar : "");
+  }
+}
+
+/**
+ * The slot is both a choice and a button: with a photo in it, the
+ * first tap picks that photo (you may have tapped an emoji since); a
+ * tap on the photo already picked, or on an empty slot, opens the
+ * picker to choose a different one.
+ */
+export function tapPhotoSlot() {
+  const slot = document.getElementById("settingsPhotoSlot");
+  const url = unsavedUpload || (isMyPhoto(state.userAvatar) ? state.userAvatar : "");
+  if (slot && url && state.pendingSettingsAvatar !== url) {
+    document.querySelectorAll("#settingsAvatarGrid .avatar-option").forEach((el) => el.classList.remove("selected"));
+    state.pendingSettingsAvatar = url;
+    slot.classList.add("selected");
+    return;
+  }
+  pickProfilePhoto();
+}
+
+/** Anything uploaded this visit that did not end up as the avatar. */
+function dropUnsavedUpload() {
+  if (unsavedUpload && unsavedUpload !== state.userAvatar) deletePhotoByUrl(unsavedUpload);
+  unsavedUpload = "";
 }
 
 let pendingInterests = [];
@@ -587,6 +664,7 @@ export function toggleInterest(index) {
 }
 
 export function closeSettingsScreen() {
+  dropUnsavedUpload();
   closeOverlay("settingsScreen");
 }
 
@@ -637,7 +715,11 @@ export async function saveProfileData() {
     }, { merge: true });
 
     state.userDisplayName = newName;
+    // The photo this replaces is nobody's avatar any more.
+    const replaced = state.userAvatar;
+    if (replaced !== avatar && isMyPhoto(replaced)) deletePhotoByUrl(replaced);
     state.userAvatar = avatar;
+    dropUnsavedUpload();
     if (state.userCache[state.uid]) {
       Object.assign(state.userCache[state.uid], { displayName: newName, avatar, bio, interests });
       rememberUser(state.uid, state.userCache[state.uid]);
@@ -986,13 +1068,22 @@ const REPORT_REASONS = [
   "Something else"
 ];
 
-export function openReport(targetUid) {
+/**
+ * Report a person, or one thing of theirs — `about` is { type, id },
+ * e.g. { type: "event", id } from the event page. The report is always
+ * filed against the uid responsible; the type and id tell the admin
+ * WHAT to look at, which a report against a person alone never did.
+ */
+export function openReport(targetUid, about = null) {
   const modal = document.getElementById("reportModal");
   if (!modal) return;
 
   modal.dataset.target = safeId(targetUid);
+  const type = about && /^(event)$/.test(about.type) ? about.type : "user";
+  modal.dataset.targetType = type;
+  modal.dataset.targetId = type === "user" ? "" : (safeId(about.id) || "");
   const who = document.getElementById("reportWho");
-  if (who) who.innerText = `@${usernameFor(targetUid)}`;
+  if (who) who.innerText = type === "event" ? "this event" : `@${usernameFor(targetUid)}`;
 
   const list = document.getElementById("reportReasons");
   if (list) {
@@ -1026,7 +1117,9 @@ export async function sendReport() {
 
   if (btn) { btn.disabled = true; btn.innerHTML = "Sending..."; }
 
-  const ok = await submitReport({ targetUid, reason, note });
+  const targetType = modal.dataset.targetType || "user";
+  const targetId = modal.dataset.targetId || "";
+  const ok = await submitReport({ targetUid, reason, note, targetType, targetId });
 
   if (btn) { btn.disabled = false; btn.innerHTML = "Send report"; }
   closeReport();

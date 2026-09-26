@@ -24,3 +24,6 @@ _backup_pre_uid/
 # Screenshots and files delivered into the chat land here. They are
 # session artefacts, not source — they stay on disk, out of the repo.
 Claude outputs/
+
+# A tarball of the repo made to run the tests elsewhere. Never source.
+_sync.tgz

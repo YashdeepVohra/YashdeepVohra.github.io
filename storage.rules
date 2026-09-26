@@ -1,0 +1,47 @@
+rules_version = '2';
+
+// Cloud Storage — who may put which photo where.
+//
+// Deployed with `firebase deploy --only storage`. Does nothing until the
+// bucket exists (Blaze plan, US-CENTRAL1 — see docs/photos.md).
+//
+// Every photo lives at <folder>/<owner uid>/<random>.jpg. Only the owner
+// writes under their own uid, only JPEG (the app re-encodes everything
+// on the device), never overwritten, and small — compression lands far
+// under these, so they only stop somebody going round the app.
+//
+// The limits here are repeated in js/services/photoRules.js.
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function signedIn() { return request.auth != null; }
+    function owner(uid) { return signedIn() && request.auth.uid == uid; }
+    function okName(file) { return file.matches('^[A-Za-z0-9_-]{8,40}[.]jpg$'); }
+    function jpegUnder(bytes) {
+      return request.resource.contentType == 'image/jpeg'
+          && request.resource.size > 0
+          && request.resource.size < bytes;
+    }
+
+    // Profile pictures. 512px square in the app, well under 400 KB.
+    match /avatars/{uid}/{file} {
+      allow read: if signedIn();
+      allow create: if owner(uid) && okName(file) && jpegUnder(400 * 1024);
+      allow update: if false;
+      allow delete: if owner(uid);
+    }
+
+    // Photos on an event. 1600px on the long edge, well under 2 MB.
+    match /events/{uid}/{file} {
+      allow read: if signedIn();
+      allow create: if owner(uid) && okName(file) && jpegUnder(2 * 1024 * 1024);
+      allow update: if false;
+      allow delete: if owner(uid);
+    }
+
+    // Everything else: nobody.
+    match /{all=**} {
+      allow read, write: if false;
+    }
+  }
+}

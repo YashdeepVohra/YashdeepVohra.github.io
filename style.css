@@ -4435,3 +4435,160 @@ html.rotate-lock body *::after { animation-play-state: paused !important; }
   border-color: var(--forest);
 }
 .theme-note { margin: 10px 0 0; }
+
+/* =====================================================================
+   PHOTOS (docs/photos.md)
+   ===================================================================== */
+
+/* Everything for photos is in the page already and hidden until
+   features.photos is on (js/config/features.js). !important because a
+   `button` and a `label` bring their own display. */
+body:not(.photos-on) .needs-photos { display: none !important; }
+
+/* THE COVER ON A CARD. A photo pinned to the poster, under its band —
+   never over it. The band keeps the top of the card (the vibe colour,
+   the category, WHEN), and the photo sits inside the card's gutter,
+   held by the same hairline as every surface, at a fixed 16:9: a tall
+   phone photo cannot turn one card into a wall, and every card in a
+   feed of mixed photos keeps the same rhythm. No shadow, no overlay,
+   no text on the picture — it is the event's own photo, shown plainly. */
+.event-cover {
+  position: relative;
+  margin: var(--s-12) var(--s-16) 0;
+  aspect-ratio: 16 / 9;
+  /* On a laptop column 16:9 is 470px of photo — more poster than
+     the poster. Past 320px it crops wider instead of growing taller. */
+  max-height: 320px;
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  border: 1.5px solid color-mix(in srgb, var(--vibe, var(--sage)) 30%, var(--ash));
+  background: var(--bone);
+  cursor: pointer;
+}
+.event-cover > img {
+  display: block; width: 100%; height: 100%;
+  object-fit: cover;
+}
+/* "1/3" — there is more on the event page. Mono, like every count. */
+.cover-count {
+  position: absolute; right: 8px; bottom: 8px;
+  padding: 3px 8px;
+  border-radius: var(--r-pill);
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em;
+  background: var(--paper); color: var(--ink);
+  border: 1px solid var(--ash);
+}
+.event-title.tappable:hover { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+
+/* THE TRAY in the create sheet: what you picked, the first one marked
+   as the cover, and a tile to add more. */
+.photo-tray {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--s-8); margin-bottom: var(--s-8);
+}
+.tray-tile, .tray-add {
+  position: relative; aspect-ratio: 1;
+  border-radius: var(--r-sm); overflow: hidden;
+}
+.tray-tile { border: 1.5px solid var(--ash); background: var(--bone); }
+.tray-tile > img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.tray-cover {
+  position: absolute; left: 4px; bottom: 4px;
+  padding: 2px 6px; border-radius: var(--r-pill);
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase;
+  background: var(--paper); color: var(--ink); border: 1px solid var(--ash);
+}
+/* Buttons shed the base sheet's display/padding/width (layout.md). */
+.tray-x {
+  position: absolute; top: 4px; right: 4px;
+  display: grid; place-items: center;
+  width: 24px; height: 24px; padding: 0; margin: 0;
+  border-radius: 50%;
+  background: var(--paper); color: var(--ink);
+  border: 1px solid var(--ash); box-shadow: none;
+}
+.tray-add {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  width: auto; padding: 0; margin: 0;
+  background: var(--paper); color: var(--forest);
+  border: 1.5px dashed var(--ash); box-shadow: none;
+  font-size: 12px; font-weight: 600;
+}
+.tray-add:hover:not(:disabled) { border-color: var(--forest); transform: none; box-shadow: none; filter: none; }
+
+/* The location's count, only near the limit (onPlaceInput). */
+.field-count {
+  margin: calc(-1 * var(--s-8)) 4px var(--s-12) 0;
+  text-align: right;
+  font-family: var(--font-mono); font-size: 11.5px; color: var(--fog);
+}
+.field-count.near { color: var(--rose); }
+
+/* Your own photo, first in the avatar grid. */
+.photo-slot { color: var(--forest); overflow: hidden; }
+.photo-slot.has-photo { padding: 0; }
+.photo-slot.has-photo img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit !important; display: block; }
+.photo-slot.busy { pointer-events: none; opacity: 0.7; }
+
+/* =====================================================================
+   THE EVENT PAGE (js/services/eventPage.js)
+   One column, never wider than a comfortable read, the poster band at
+   its head exactly as on the card.
+   ===================================================================== */
+#eventPageBody { padding-top: var(--s-16); }
+.ep {
+  max-width: 640px; margin: 0 auto;
+  background: var(--paper);
+  border: 1.5px solid var(--ash);
+  border-radius: var(--r-card);
+  overflow: hidden;
+  padding-bottom: var(--s-16);
+}
+/* Every photo, whole. The feed crops to 16:9; this does not, except to
+   stop one very tall photo taking several screens. */
+.ep-photos { display: flex; flex-direction: column; gap: var(--s-8); padding: var(--s-12) var(--s-16) 0; }
+.ep-photos.ep-more { padding: 0; }
+.ep-photo {
+  display: block; width: 100%; height: auto;
+  max-height: 70vh; object-fit: cover;
+  border-radius: var(--r-sm);
+  border: 1.5px solid var(--ash);
+  background: var(--bone);
+}
+.ep-title {
+  font-family: var(--font-display);
+  font-size: 26px; font-weight: var(--display-weight);
+  letter-spacing: -0.035em; line-height: 1.14;
+  color: var(--ink);
+  margin: var(--s-16) var(--s-16) var(--s-8);
+  overflow-wrap: anywhere;
+}
+.ep-facts { display: flex; flex-direction: column; gap: 6px; padding: 0 var(--s-16); }
+/* The place WRAPS here — the card clips it to one line, this is where
+   the whole of it is read. */
+.ep-fact {
+  display: flex; align-items: flex-start; gap: 6px;
+  font-family: var(--font-mono); font-size: 12.5px; letter-spacing: 0.03em; line-height: 1.45;
+  color: var(--fog);
+}
+.ep-fact i { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+.ep-fact span { min-width: 0; overflow-wrap: anywhere; }
+.ep-desc {
+  margin: var(--s-16) var(--s-16) 0;
+  font-size: 15px; line-height: 1.55; color: var(--ink);
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.ep-section { margin: var(--s-20) var(--s-16) 0; }
+.ep-label {
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--fog); margin-bottom: var(--s-8);
+}
+.ep .card-actions { margin: var(--s-20) var(--s-16) 0; }
+/* Quiet on purpose: there when you need it, never the loudest thing. */
+.ep-report {
+  display: inline-flex; align-items: center; gap: 6px;
+  width: auto; padding: 6px 0; margin: var(--s-20) var(--s-16) 0;
+  background: none; border: none; box-shadow: none;
+  color: var(--fog); font-size: 13px; font-weight: 500;
+}
+.ep-report:hover:not(:disabled) { color: var(--rose); transform: none; box-shadow: none; filter: none; }

@@ -54,8 +54,12 @@ import {
   confirmMoveToRecap,
   confirmDeletePermanently,
   openSharedEvent,
-  showSharedEvent
+  showSharedEvent,
+  onPlaceInput
 } from './services/eventsService.js';
+import { openEventPage, closeEventPage, reportEvent } from './services/eventPage.js';
+import { addDraftPhotos, removeDraftPhoto } from './services/eventPhotoService.js';
+import { applyFeatureFlags } from './config/features.js';
 
 import {
   startChat,
@@ -98,7 +102,8 @@ import {
   jumpToEvent,
   onBioInput,
   toggleInterest,
-  setProfileEventsTab
+  setProfileEventsTab,
+  tapPhotoSlot
 } from './services/profileService.js';
 
 import {
@@ -242,6 +247,12 @@ Object.assign(window, {
   peopleForManagedEvent,
   confirmMoveToRecap,
   confirmDeletePermanently,
+  onPlaceInput,
+  openEventPage,
+  closeEventPage,
+  reportEvent,
+  addDraftPhotos,
+  removeDraftPhoto,
 
   // Chat
   startChat,
@@ -280,6 +291,7 @@ Object.assign(window, {
   closeSettingsScreen,
   selectSettingsAvatar,
   saveProfileData,
+  tapPhotoSlot,
 
   // Following
   toggleFollow: followFromProfile,
@@ -324,6 +336,7 @@ Object.assign(window, {
 // ==========================================
 function boot() {
   window.__livesociyaBooted = true;
+  applyFeatureFlags();
 
   // Take the event id off the URL BEFORE anything else can rewrite
   // history — the sign-in redirect and initializeUserApp both do — and

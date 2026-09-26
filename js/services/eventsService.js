@@ -26,6 +26,9 @@ import { rankFeed } from './feedRules.js';
 import { RECAP_MAX_MS, EVENT_TTL_AFTER_MS, inRecap, recapUntil, wasCalledOff } from './recapRules.js';
 import { harvestReceipt, renderReceipt, primeReceipt } from './receiptService.js';
 import { myCircleId, circleGeo, feedIsScoped } from './circleService.js';
+import { eventPhotos } from './photoRules.js';
+import { resetPhotoTray, commitTray, deleteEventPhotos } from './eventPhotoService.js';
+import { renderEventPage, isEventPageOpen } from './eventPage.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -181,6 +184,7 @@ export function openCreateScreen() {
     const el = document.getElementById(id);
     if (el) el.value = "";
   });
+  resetPhotoTray([]);
 
   // A publish the server refused hands their words back rather than a
   // blank sheet. Once only — a second open is a fresh one.
@@ -194,6 +198,24 @@ export function openCreateScreen() {
     set("maxCapacity", failedDraft.capacityRaw);
     failedDraft = null;
   }
+  onPlaceInput();
+}
+
+/**
+ * The location is kept to 80 characters (the rules say so too). The
+ * box used to take any length and cut it on save without a word, so a
+ * long address lost its end silently. Now the box stops at 80, and a
+ * count shows up once you are near it.
+ */
+export const PLACE_MAX = 80;
+export function onPlaceInput() {
+  const el = document.getElementById("place");
+  const count = document.getElementById("placeCount");
+  if (!el || !count) return;
+  const n = el.value.length;
+  count.innerText = `${n}/${PLACE_MAX}`;
+  count.classList.toggle("hidden", n < PLACE_MAX - 20);
+  count.classList.toggle("near", n >= PLACE_MAX - 5);
 }
 
 /** Swap the sheet between creating and editing. */
@@ -242,6 +264,8 @@ export function openEditScreen(eventId) {
   document.querySelectorAll("#tagSelector .tag").forEach((t) => {
     t.classList.toggle("active", t.innerText.trim() === (e.tag || "").trim());
   });
+  resetPhotoTray(eventPhotos(e));
+  onPlaceInput();
 }
 
 export function closeCreateScreen() {
@@ -341,6 +365,9 @@ export async function addEvent(e) {
       failedDraft = draft;
       openCreateScreen();
     });
+
+    // Behind the publish, never in front of it: see eventPhotoService.
+    commitTray(ref.id);
 
     ["title", "place", "description", "maxCapacity"].forEach((id) => {
       const el = document.getElementById(id);
@@ -600,7 +627,7 @@ function relTime(ms, now = Date.now()) {
  * clock time demoted to the line underneath, which is what you need
  * only once you have decided you care.
  */
-function timeStat(e, now) {
+export function timeStat(e, now) {
   if (e.expiresAt <= now) {
     return { label: "Ended", parts: durParts(now - e.expiresAt), sub: "ago" };
   }
@@ -710,7 +737,7 @@ function statBlock(s, { volatileTime = false } = {}) {
  * this, and is anybody actually going. Those are the two things you
  * decide on, so they are the two things set at poster scale.
  */
-function posterBand(e, now, { stats, spent = false } = {}) {
+export function posterBand(e, now, { stats, spent = false } = {}) {
   const list = (stats || [timeStat(e, now)]).filter(Boolean);
   const glyph = (e.tag || "").trim().split(" ")[0];
   const word = (e.tag || "").trim().split(" ").slice(1).join(" ");
@@ -737,7 +764,7 @@ function posterBand(e, now, { stats, spent = false } = {}) {
 }
 
 /** Overlapping avatar stack, capped at four plus a counter. */
-function avatarStack(uids) {
+export function avatarStack(uids) {
   const shown = uids.slice(0, 4);
   const rest = uids.length - shown.length;
   const chips = shown
@@ -755,7 +782,7 @@ function avatarStack(uids) {
  * Who is going, not counting the host — the byline right above already
  * names them, and "Aarav, Diya and 2 more" under "Aarav" said it twice.
  */
-function goingText(uids, unconfirmedCount = 0, isHost = false) {
+export function goingText(uids, unconfirmedCount = 0, isHost = false) {
   const tail = unconfirmedCount > 0
     ? ` <span class="unconfirmed-tag">${unconfirmedCount} not confirmed</span>`
     : "";
@@ -1094,7 +1121,9 @@ function syncList(listEl, cards, tailHTML, emptyHTML) {
 export function paintVolatile(listEl, now = Date.now()) {
   if (!listEl) return;
   listEl.querySelectorAll(".event").forEach((card) => {
-    const id = card.id.indexOf("event-") === 0 ? card.id.slice(6) : "";
+    // The event page carries its id as data-eid: it cannot reuse the
+    // card's element id while the card is still in the feed behind it.
+    const id = card.dataset.eid || (card.id.indexOf("event-") === 0 ? card.id.slice(6) : "");
     const e = id && state.eventCache[id];
     if (!e) return;
 
@@ -1168,6 +1197,99 @@ function applyFilter(listEl, tag) {
 /* ---------------------------------------------------------------------
    Feed
    ------------------------------------------------------------------- */
+/**
+ * The action row — Hype, Chat, Share and the one primary action for
+ * where YOU stand with this event. Shared by the feed card and the
+ * event page, so the two can never offer different things.
+ */
+export function cardActions(e, id) {
+  const participants = e.participantUids || [];
+  const attendees = participants.length || 1;
+  const hasHyped = (e.hypedUids || []).includes(state.uid);
+  const hypeCount = (e.hypedUids || []).length;
+  const hasJoined = participants.includes(state.uid);
+  const isHost = e.hostUid === state.uid;
+  const isFull = e.maxCapacity && attendees >= e.maxCapacity;
+  const flame = `<svg class="hype-flame" viewBox="0 0 24 24" width="17" height="17"
+    fill="${hasHyped ? "currentColor" : "none"}" stroke="currentColor"
+    stroke-width="${hasHyped ? 0 : 1.7}" stroke-linejoin="round" aria-hidden="true">
+    <path d="M12 22a6.5 6.5 0 0 0 6.5-6.5c0-2-1-3.8-2.9-5.3 0 0 .2 2.4-1.5 2.9.1-2.9-1.8-5.8-4.7-7.6.5 3.8-1.9 4.8-2.9 6.7a6.5 6.5 0 0 0-1 3.3A6.5 6.5 0 0 0 12 22Z"/>
+  </svg>`;
+  const hypeBtn = `<button class="act ${hasHyped ? "hyped" : ""}" aria-label="Hype" onclick="window.toggleHype('${id}')">${flame} ${hypeCount || "Hype"}</button>`;
+  const chatBtn = `<button class="act" onclick="window.openEventChat('${id}')"><i class='bx bx-message-rounded-dots'></i> Chat</button>`;
+  // DRAWN, not set in the icon font, for the same reason the flame is:
+  // this button has no label, so an icon font that fails to load
+  // leaves an invisible control. It sits at the far right of the row
+  // on a phone, where an invisible control is worse still.
+  const shareGlyph = `<svg class="act-glyph" viewBox="0 0 24 24" width="18" height="18"
+    fill="none" stroke="currentColor" stroke-width="1.8"
+    stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <circle cx="18" cy="5.5" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="18.5" r="2.6"/>
+    <path d="M8.35 10.75 15.65 7.1M8.35 13.25l7.3 3.65"/>
+  </svg>`;
+  const shareBtn = `<button class="act" aria-label="Share" onclick="window.openShare('${id}')">${shareGlyph}</button>`;
+
+  const pending = e.pendingUids || [];
+  const hasRequested = pending.includes(state.uid);
+  const needsApproval = e.requiresApproval === true;
+
+  let primary;
+  if (isHost) {
+    primary = pending.length
+      ? `<button class="act primary" onclick="window.openPeople('${id}')"><i class='bx bx-user-plus'></i> ${pending.length} request${pending.length > 1 ? "s" : ""}</button>`
+      : `<button class="act joined" onclick="window.openDeleteModal('${id}')"><i class='bx bx-slider-alt'></i> Manage</button>`;
+  } else if (hasJoined) {
+    primary = `<button class="act joined" onclick="window.leaveEvent('${id}')"><i class='bx bx-check'></i> Going</button>`;
+  } else if (hasRequested) {
+    primary = `<button class="act requested" onclick="window.cancelRequest('${id}')"><i class='bx bx-time-five'></i> Requested</button>`;
+  } else if (isFull) {
+    primary = `<button class="act full" disabled>Full</button>`;
+  } else if (needsApproval) {
+    primary = `<button class="act primary" onclick="window.requestJoin('${id}')"><i class='bx bx-user-plus'></i> Request</button>`;
+  } else {
+    primary = `<button class="act primary" onclick="window.joinEvent('${id}')">Join</button>`;
+  }
+
+  // No spacer div between the secondary actions and the primary one.
+  // A spacer is a flex ITEM, so the moment the row is allowed to wrap
+  // it claims a whole line to itself; an auto margin on the primary
+  // does the same job on one line and simply stops mattering on two.
+  // See .card-actions in style.css for why the row wraps at all.
+  const actions = `
+    <div class="card-actions">
+      ${hypeBtn}
+      ${(isHost || hasJoined) ? chatBtn : ""}
+      ${shareBtn}
+      ${primary}
+    </div>`;
+  return actions;
+}
+
+/**
+ * THE COVER. The first photo, pinned to the poster under its band.
+ *
+ * It sits INSIDE the card's gutter, framed by the same hairline as
+ * every surface, at a fixed 16:9 — so a tall phone photo cannot turn
+ * a card into a wall and the band keeps the top of the card: the vibe
+ * colour, the category, WHEN. The photo is under the poster's
+ * headline, never in place of it. A tap opens the event page, where
+ * every photo is shown whole.
+ *
+ * Only a URL of the host's own upload is ever drawn (eventPhotos).
+ */
+function coverHtml(e, id) {
+  const photos = eventPhotos(e);
+  if (!photos.length) return "";
+  const more = photos.length > 1
+    ? `<span class="cover-count">1/${photos.length}</span>` : "";
+  return `
+    <div class="event-cover" role="button" tabindex="0" aria-label="Open event and photos"
+         onclick="window.openEventPage('${id}')">
+      <img src="${escapeHtml(photos[0])}" alt="" loading="lazy" decoding="async">
+      ${more}
+    </div>`;
+}
+
 export function renderEvents() {
   const liveList = document.getElementById("events");
   const recapList = document.getElementById("recapEvents");
@@ -1281,25 +1403,6 @@ export function renderEvents() {
     // the one person who had hyped saw a flame and everybody else saw
     // an empty space where it should have been. One path, filled when
     // it's yours and outlined when it isn't.
-    const flame = `<svg class="hype-flame" viewBox="0 0 24 24" width="17" height="17"
-      fill="${hasHyped ? "currentColor" : "none"}" stroke="currentColor"
-      stroke-width="${hasHyped ? 0 : 1.7}" stroke-linejoin="round" aria-hidden="true">
-      <path d="M12 22a6.5 6.5 0 0 0 6.5-6.5c0-2-1-3.8-2.9-5.3 0 0 .2 2.4-1.5 2.9.1-2.9-1.8-5.8-4.7-7.6.5 3.8-1.9 4.8-2.9 6.7a6.5 6.5 0 0 0-1 3.3A6.5 6.5 0 0 0 12 22Z"/>
-    </svg>`;
-    const hypeBtn = `<button class="act ${hasHyped ? "hyped" : ""}" aria-label="Hype" onclick="window.toggleHype('${id}')">${flame} ${hypeCount || "Hype"}</button>`;
-    const chatBtn = `<button class="act" onclick="window.openEventChat('${id}')"><i class='bx bx-message-rounded-dots'></i> Chat</button>`;
-    // DRAWN, not set in the icon font, for the same reason the flame is:
-    // this button has no label, so an icon font that fails to load
-    // leaves an invisible control. It sits at the far right of the row
-    // on a phone, where an invisible control is worse still.
-    const shareGlyph = `<svg class="act-glyph" viewBox="0 0 24 24" width="18" height="18"
-      fill="none" stroke="currentColor" stroke-width="1.8"
-      stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-      <circle cx="18" cy="5.5" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="18.5" r="2.6"/>
-      <path d="M8.35 10.75 15.65 7.1M8.35 13.25l7.3 3.65"/>
-    </svg>`;
-    const shareBtn = `<button class="act" aria-label="Share" onclick="window.openShare('${id}')">${shareGlyph}</button>`;
-
     const pending = e.pendingUids || [];
     const hasRequested = pending.includes(state.uid);
     const needsApproval = e.requiresApproval === true;
@@ -1312,40 +1415,13 @@ export function renderEvents() {
     // rather than silently vouching for a plan they never saw.
     const confirmedGoing = participants.filter((u) => !unconfirmed.includes(u));
 
-    let primary;
-    if (isHost) {
-      primary = pending.length
-        ? `<button class="act primary" onclick="window.openPeople('${id}')"><i class='bx bx-user-plus'></i> ${pending.length} request${pending.length > 1 ? "s" : ""}</button>`
-        : `<button class="act joined" onclick="window.openDeleteModal('${id}')"><i class='bx bx-slider-alt'></i> Manage</button>`;
-    } else if (hasJoined) {
-      primary = `<button class="act joined" onclick="window.leaveEvent('${id}')"><i class='bx bx-check'></i> Going</button>`;
-    } else if (hasRequested) {
-      primary = `<button class="act requested" onclick="window.cancelRequest('${id}')"><i class='bx bx-time-five'></i> Requested</button>`;
-    } else if (isFull) {
-      primary = `<button class="act full" disabled>Full</button>`;
-    } else if (needsApproval) {
-      primary = `<button class="act primary" onclick="window.requestJoin('${id}')"><i class='bx bx-user-plus'></i> Request</button>`;
-    } else {
-      primary = `<button class="act primary" onclick="window.joinEvent('${id}')">Join</button>`;
-    }
+    const actions = cardActions(e, id);
 
-    // No spacer div between the secondary actions and the primary one.
-    // A spacer is a flex ITEM, so the moment the row is allowed to wrap
-    // it claims a whole line to itself; an auto margin on the primary
-    // does the same job on one line and simply stops mattering on two.
-    // See .card-actions in style.css for why the row wraps at all.
-    const actions = `
-      <div class="card-actions">
-        ${hypeBtn}
-        ${(isHost || hasJoined) ? chatBtn : ""}
-        ${shareBtn}
-        ${primary}
-      </div>`;
-
+    const openPage = `onclick="window.openEventPage('${id}')"`;
     const body = `
       <div class="card-body">
-      <div class="event-title">${escapeHtml(e.title)}</div>
-      <div class="event-place"><i class='bx bx-map-pin'></i><span>${escapeHtml(e.place)}</span></div>
+      <div class="event-title tappable" ${openPage}>${escapeHtml(e.title)}</div>
+      <div class="event-place tappable" ${openPage}><i class='bx bx-map-pin'></i><span>${escapeHtml(e.place)}</span></div>
       ${desc}
       ${byline}
       ${needsApproval && !isHost && !hasJoined ? `<div class="approval-note"><i class='bx bx-lock-alt'></i> The host approves who joins</div>` : ""}
@@ -1392,6 +1468,7 @@ export function renderEvents() {
       liveCards.push({ id, html: `
         <article class="event card poster-card ${isLive ? "is-live" : ""}" id="event-${id}"${tagAttr} style="--vibe:${vibe}">
           ${posterBand(e, now, { stats: [timeStat(e, now), goingStat] })}
+          ${coverHtml(e, id)}
           ${body}${actions}
         </article>` });
     } else if (inRecap(e, now, state.uid)) {
@@ -1429,7 +1506,7 @@ export function renderEvents() {
         <article class="event card poster-card stub${fading ? " fading" : ""}" id="event-${id}"${tagAttr} style="--vibe:${vibe}">
           ${posterBand(e, now, { stats: [turnout], spent: true })}
           <div class="card-body">
-            <div class="event-title">${escapeHtml(e.title)}</div>
+            <div class="event-title tappable" onclick="window.openEventPage('${id}')">${escapeHtml(e.title)}</div>
             <div class="event-place"><i class='bx bx-map-pin'></i><span>${escapeHtml(e.place)}</span></div>
             <div class="byline">
               <div class="av-ring tappable" ${openHost}>
@@ -1507,6 +1584,10 @@ export function renderEvents() {
   applyFilter(recapList, state.currentRecapFilter);
 
   updateRail(order, now);
+
+  // An open event page follows the same data, so it can never show a
+  // plan the card has already moved on from.
+  if (isEventPageOpen()) renderEventPage();
 
   // If the host is looking at the requests sheet, keep it current —
   // someone may have cancelled while it was open.
@@ -1957,6 +2038,7 @@ export async function confirmDeletePermanently() {
       purgeCollection(eventRef.collection("pinned"))
     ]);
     await eventRef.delete();
+    deleteEventPhotos(snapshot);
     deleting.delete(id);
   } catch (error) {
     console.error("Delete failed:", error.code, error.message);
@@ -2103,6 +2185,7 @@ async function saveEventEdits(e) {
 
   try {
     await db.collection("events").doc(eventId).update(next);
+    commitTray(eventId);
     closeCreateScreen();
     setTimeout(() => focusEvent(eventId), 300);
   } catch (error) {
