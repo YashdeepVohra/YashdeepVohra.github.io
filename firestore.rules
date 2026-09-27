@@ -1019,21 +1019,53 @@ service cloud.firestore {
           && (resource.data.uid == uid() || eventData(eventId).hostUid == uid() || isAdmin());
       }
 
-      // Likes: ONE document, social/likes, holding every uid. One read
-      // answers both "how many" and "have I", and you may only ever add
-      // or remove yourself — the same rule as hype.
+      // Likes AND the comment count: ONE document, social/likes, so a
+      // Recap card or a profile row can show both from a single read.
+      //   uids           who liked it — you may only add or remove YOURSELF
+      //   comments       how many comments — moves by exactly one, in the
+      //   lastCommentId  same batch as the comment it counts, which must
+      //                  really be appearing (+1) or going (-1)
       match /social/{docId} {
+        function soc() { return request.resource.data; }
+        function commentAt(commentId) {
+          return /databases/$(database)/documents/events/$(eventId)/comments/$(commentId);
+        }
+        function countUp() {
+          return soc().lastCommentId is string
+            && soc().comments == resource.data.get('comments', 0) + 1
+            && existsAfter(commentAt(soc().lastCommentId))
+            && !exists(commentAt(soc().lastCommentId));
+        }
+        function countDown() {
+          return soc().lastCommentId is string
+            && soc().comments == resource.data.get('comments', 0) - 1
+            && exists(commentAt(soc().lastCommentId))
+            && !existsAfter(commentAt(soc().lastCommentId));
+        }
+
         allow read: if signedIn();
         allow create: if signedIn()
           && docId == 'likes'
-          && request.resource.data.keys().hasOnly(['uids'])
-          && request.resource.data.uids == [uid()];
+          && (
+               // the first like
+               (soc().keys().hasOnly(['uids']) && soc().uids == [uid()])
+               // or the first comment
+               || (soc().keys().hasOnly(['comments', 'lastCommentId'])
+                   && soc().comments == 1
+                   && soc().lastCommentId is string
+                   && existsAfter(commentAt(soc().lastCommentId))
+                   && !exists(commentAt(soc().lastCommentId)))
+             );
         allow update: if signedIn()
           && docId == 'likes'
-          && request.resource.data.keys().hasOnly(['uids'])
-          && request.resource.data.uids is list
-          && request.resource.data.uids.size() <= 5000
-          && selfToggleOnly(resource.data.uids, request.resource.data.uids);
+          && soc().keys().hasOnly(['uids', 'comments', 'lastCommentId'])
+          && (
+               (changedKeys().hasOnly(['uids'])
+                && soc().uids is list
+                && soc().uids.size() <= 5000
+                && selfToggleOnly(resource.data.get('uids', []), soc().uids))
+               || (changedKeys().hasOnly(['comments', 'lastCommentId']) && (countUp() || countDown()))
+             );
         // Only as part of the host deleting the whole event.
         allow delete: if signedIn() && eventData(eventId).hostUid == uid();
       }
@@ -1050,7 +1082,9 @@ service cloud.firestore {
           && request.resource.data.createdAt == request.time
           && eventEnded(eventId)
           && !blockedWith(eventData(eventId).hostUid)
-          && notBanned();
+          && notBanned()
+          // Counted in the same batch (see social/likes above).
+          && getAfter(/databases/$(database)/documents/events/$(eventId)/social/likes).data.get('lastCommentId', '') == commentId;
         allow update: if false;
         allow delete: if signedIn()
           && (resource.data.uid == uid() || eventData(eventId).hostUid == uid() || isAdmin());

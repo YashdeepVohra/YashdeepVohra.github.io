@@ -23,6 +23,7 @@ import { askConfirm } from '../utils/confirm.js';
 import { openOverlay, closeOverlay } from '../utils/overlays.js';
 import { escapeHtml, safeId, formatInboxTime, msOf } from '../utils/formatters.js';
 import { displayNameFor, usernameFor, primeUsers, fetchUser } from './userService.js';
+import { deleteCommentBatch } from './memoryService.js';
 
 let reports = [];
 let showAll = false;
@@ -160,7 +161,13 @@ export async function adminRemove(reportId) {
   });
   if (!yes) return;
   try {
-    await db.doc(path).delete();
+    // A comment goes with its count, in one batch (the rules check it).
+    if (r.targetType === "comment") {
+      const [, eventId, , commentId] = path.split("/");
+      await deleteCommentBatch(eventId, commentId);
+    } else {
+      await db.doc(path).delete();
+    }
     await mark(r, "removed");
     toast("Removed.");
   } catch (e) {

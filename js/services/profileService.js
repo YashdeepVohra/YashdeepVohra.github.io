@@ -21,6 +21,7 @@ import { fetchUser, displayNameFor, usernameFor, avatarFor, rememberUser } from 
 import { features } from '../config/features.js';
 import { PHOTO, isOurPhotoUrl, eventPhotos } from './photoRules.js';
 import { hideLocally } from './hiddenService.js';
+import { paintSocial } from './memoryService.js';
 import { pickImages, compressImage, uploadPhoto, deletePhotoByUrl, photoError } from './photoService.js';
 import {
   orbitStatus, inOrbit, hasVouched, vouchCount, vouchersYouKnow, renderOrbitRings
@@ -341,8 +342,13 @@ function paintProfileEvents() {
     const g = phaseOf(e, now);
     const head = g !== lastGroup ? `<div class="pe-group">${labels[g]}</div>` : "";
     lastGroup = g;
-    return head + profileEventRow(e, now, kind);
+    // A finished event gets its like + comment bar under the row, so
+    // a profile's journal can be reacted to without opening anything.
+    const social = g === "past" && safeId(e.id)
+      ? `<div class="soc-bar pe-social" data-social="${safeId(e.id)}"></div>` : "";
+    return head + profileEventRow(e, now, kind) + social;
   }).join("");
+  paintSocial(list);
 }
 
 export function setProfileEventsTab(tab) {

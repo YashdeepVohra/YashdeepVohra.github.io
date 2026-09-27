@@ -3190,6 +3190,42 @@ group('nothing is cut off');
   const pageWide = await look(1280, 860, 'page');
   ok('nor at 1280', pageWide.rows.length === 0, JSON.stringify(pageWide.rows));
 
+  // On a laptop the page is TWO columns: the event, and beside it the
+  // people, the actions and (on a finished event) the comment box —
+  // not one 640px column with the box stretched across the window.
+  {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 860 } });
+    const p = await ctx.newPage();
+    await p.addInitScript({ path: fileURLToPath(new URL('./stub.js', import.meta.url)) });
+    await p.goto(APP_URL, { waitUntil: 'domcontentloaded' });
+    await p.waitForTimeout(1500);
+    const lay = await p.evaluate(async () => {
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+      const { state } = await import('/js/state/store.js');
+      const now = Date.now();
+      window.__authSingleton.currentUser = { uid: 'me' };
+      state.uid = 'me'; state.blockedUids = [];
+      state.userCache = { me: { uid: 'me', username: 'me_h', displayName: 'Me' }, a: { uid: 'a', username: 'a', displayName: 'A' } };
+      state.eventCache = { z: { id: 'z', hostUid: 'a', title: 'Done', place: 'Lawn', tag: '\u2615 Chill', description: '',
+        startTime: now - 5 * 36e5, expiresAt: now - 36e5, participantUids: ['a', 'me'], hypedUids: [], pendingUids: [], unconfirmedUids: [] } };
+      document.getElementById('loading-screen').classList.add('hidden');
+      document.querySelector('.app-frame').classList.remove('hidden');
+      window.openEventPage('z');
+      await wait(500);
+      const r = (sel) => document.querySelector(sel).getBoundingClientRect();
+      const main = r('#eventPageBody'), side = r('.ep-side'), box = r('#epCompose');
+      return {
+        beside: side.left >= main.right, sameTop: Math.abs(side.top - main.top) < 4,
+        boxInSide: box.left >= side.left - 1 && box.right <= side.right + 1 && box.bottom <= side.bottom + 1,
+        boxWidth: Math.round(box.width), used: Math.round(side.right - main.left)
+      };
+    });
+    await ctx.close();
+    ok('on a laptop the event page is two columns, side by side', lay.beside && lay.sameTop, JSON.stringify(lay));
+    ok('and the comment box sits in the side column, not across the window', lay.boxInSide && lay.boxWidth < 420);
+    ok('using the width of a laptop, not 640px of it', lay.used > 900);
+  }
+
   ok('no errors while measuring any of that',
      [small, smallChat, phone, beside, pageSmall, pageWide].every((r) => r.errs.length === 0),
      [small, smallChat, phone, beside, pageSmall, pageWide].flatMap((r) => r.errs).join(' | '));
@@ -4586,6 +4622,130 @@ group('chat photos, memories, stories and reports');
   ok('adding a memory uploads into memories/<you>/ as <you>_0', /^memories\/me\//.test(memAdd.upload) && memAdd.doc, JSON.stringify(memAdd));
   ok('and it joins the grid', memAdd.tiles === 2);
   ok('a live event has no memories and no comment box yet', memAdd.liveMem === false && memAdd.liveCompose === false);
+
+  // ---- LIKE AND COMMENT WITHOUT OPENING ANYTHING ----
+  const quick = await page.evaluate(async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const { state, ui, ev } = window.__m;
+    // A fresh finished event nobody has opened, sitting in Recap.
+    const t = Date.now();
+    state.eventCache.m3 = Object.assign({}, state.eventCache.m1, { id: 'm3', title: 'Chai at the gate', photos: [], expiresAt: t - 30 * 60000 });
+    window.__stubDocs['events/m3/social/likes'] = { uids: ['a'], comments: 4 };
+    state.recapOrder = ['m3'];
+    state.currentRecapFilter = 'All';
+    // Back on the feed the way seed() gets there (the thread above was
+    // closed silently, which leaves its screen up).
+    history.pushState({ screen: 'home' }, '', location.href);
+    window.switchScreen('home');
+    ui.showTab('recap');
+    ev.renderEvents();
+    await wait(100);
+    // The bar asks for its one read only once it is on screen.
+    const cardEl = document.getElementById('event-m3');
+    const before = cardEl && cardEl.querySelector('.soc-btn').innerText.trim();
+    if (cardEl) cardEl.scrollIntoView({ block: 'center' });
+    await wait(400);
+    const card = document.getElementById('event-m3');
+    const bar = card && card.querySelector('.soc-bar');
+    const btns = bar ? [...bar.querySelectorAll('.soc-btn')] : [];
+    const out = {
+      before,
+      bar: btns.length,
+      likeText: btns[0] && btns[0].innerText.trim(),
+      commentText: btns[1] && btns[1].innerText.trim()
+    };
+    // Like it right there.
+    window.__lastBatch = null; window.__writes = 0;
+    btns[0].click();
+    await wait(120);
+    const b2 = [...document.querySelectorAll('#event-m3 .soc-btn')];
+    out.likedInPlace = b2[0].classList.contains('on') && b2[0].innerText.trim() === '2';
+    out.likeWrote = window.__writes > 0;
+    out.pageStayedShut = document.getElementById('eventScreen').classList.contains('hidden');
+    // Comment right there: a sheet, not the page.
+    b2[1].click();
+    await wait(400);
+    out.sheet = !document.getElementById('commentSheet').classList.contains('hidden');
+    out.sheetTitle = document.getElementById('csTitle').innerText;
+    document.getElementById('csInput').value = 'next time!';
+    window.__lastBatch = null;
+    window.postSheetComment();
+    await wait(250);
+    out.inSheet = [...document.querySelectorAll('#csList .cmt-text')].some((n) => n.innerText === 'next time!');
+    const ops = (window.__lastBatch || []).map((o) => o.kind + ' ' + o.path.replace(/comments\/[^/]+$/, 'comments/X'));
+    out.oneBatch = ops.join(',');
+    const soc = (window.__lastBatch || []).find((o) => /social\/likes$/.test(o.path));
+    out.countMoves = !!soc && soc.data.comments && soc.data.comments.__op === 'inc' && soc.data.comments.v === 1
+      && typeof soc.data.lastCommentId === 'string';
+    window.closeComments();
+    await wait(300);
+    out.cardCount = [...document.querySelectorAll('#event-m3 .soc-btn')][1].innerText.trim();
+    ui.showTab('events');
+    await wait(150);
+    return out;
+  });
+  ok('a Recap card has its own like and comment buttons', quick.bar === 2 && quick.likeText === '1' && quick.commentText === '4', JSON.stringify(quick));
+  ok('a like works right on the card, without opening the event', quick.likedInPlace && quick.likeWrote && quick.pageStayedShut);
+  ok('the comment button opens a sheet over the card, not the event', quick.sheet && quick.sheetTitle === 'Chai at the gate');
+  ok('a comment posts from the sheet', quick.inSheet === true);
+  ok('the comment and its count go in ONE batch', quick.oneBatch === 'set events/m3/comments/X,set events/m3/social/likes' && quick.countMoves, quick.oneBatch);
+  ok('and the card\'s count moves with it', quick.cardCount === '5', quick.cardCount);
+
+  const journalBar = await page.evaluate(async () => {
+    const prof = await import('/js/services/profileService.js');
+    const mem = await import('/js/services/memoryService.js');
+    const { state } = window.__m;
+    const box = document.createElement('div');
+    box.innerHTML = prof.__rowForTest(state.eventCache.m3, Date.now(), 'joined')
+      + `<div class="soc-bar pe-social" data-social="m3"></div>`;
+    document.body.appendChild(box);
+    mem.paintSocial(box);
+    const out = { btns: box.querySelectorAll('.pe-social .soc-btn').length };
+    box.remove();
+    return out;
+  });
+  ok('a finished event on a profile gets the same bar', journalBar.btns === 2, JSON.stringify(journalBar));
+
+  // ---- REPLYING AND TAGGING ----
+  const tags = await page.evaluate(async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const { state } = window.__m;
+    state.userCache.b.username = 'diya_b'; state.userCache.b.displayName = 'Diya';
+    window.__stubDocs['events/m3/comments/k1'] = { uid: 'b', text: 'who brought the speaker? @me_h', createdAt: Date.now() - 5000 };
+    const mem = await import('/js/services/memoryService.js');
+    mem.retryMemories('m3');
+    window.openComments('m3');
+    await wait(400);
+    const out = {
+      mention: !!document.querySelector('#csList .cmt-text .mention'),
+      mentionText: (document.querySelector('#csList .cmt-text .mention') || {}).innerText
+    };
+    // Reply puts their handle in the box.
+    const row = [...document.querySelectorAll('#csList .cmt')].find((n) => n.innerText.includes('speaker'));
+    [...row.querySelectorAll('.mem-link')].find((b) => b.innerText === 'Reply').click();
+    await wait(80);
+    const input = document.getElementById('csInput');
+    out.reply = input.value;
+    // Typing @Di suggests Diya; picking her writes the handle.
+    input.value = 'thanks @Di';
+    input.setSelectionRange(input.value.length, input.value.length);
+    window.onCommentInput('sheet');
+    await wait(60);
+    const picks = [...document.querySelectorAll('#csMentions .mention-pick')];
+    out.suggested = picks.map((p) => p.innerText.replace(/\s+/g, ' ').trim()).join('|');
+    if (picks[0]) picks[0].click();
+    await wait(60);
+    out.picked = input.value;
+    out.rowHidden = document.getElementById('csMentions').classList.contains('hidden');
+    input.value = '';
+    window.closeComments();
+    await wait(300);
+    return out;
+  });
+  ok('an @handle in a comment is a tap to that profile', tags.mention && tags.mentionText === '@me_h', JSON.stringify(tags));
+  ok('Reply starts your comment with their @handle', tags.reply === '@diya_b ');
+  ok('typing @ suggests people from the event', tags.suggested.indexOf('Diya @diya_b') >= 0, tags.suggested);
+  ok('and picking one writes the handle for you', tags.picked === 'thanks @diya_b ' && tags.rowHidden);
 
   // A profile's finished events open their page — that is the journal.
   const journal = await page.evaluate(async () => {

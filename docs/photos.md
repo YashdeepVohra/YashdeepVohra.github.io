@@ -141,6 +141,39 @@ Read with three gets when the page opens, never a listener: a finished
 event is not busy enough to be worth one on every phone. Likes and
 comments work with the flag off; adding photos needs it.
 
+**Like and comment without opening anything.** Having to open an event
+to react to it is a step people skip. So every Recap card and every
+finished event on a profile carries its own heart and comment button:
+the heart works in place, the comment button opens a SHEET over what
+you were looking at (with "Open event" if you want the rest). The bar
+needs one document — `social/likes` holds the likes AND the comment
+count — read only when the card scrolls into view (IntersectionObserver),
+once per session. Its slot is empty in the card's markup and filled
+after the diff, like a `data-vt` slot, so a like never rebuilds a card.
+
+**The count moves with the comment, in one batch.** A comment's create
+rule requires `social/likes.lastCommentId` to name it after the batch,
+and the count may only move by one, towards a comment that is really
+appearing or really going. So the number on a card cannot be inflated
+and does not drift. A delete (by the author, the host or the admin)
+goes the same way (`deleteCommentBatch`).
+
+**Replies and tags.** Reply puts `@handle ` at the front of your box.
+Typing `@` suggests people already on the event (host, who went, who
+commented) — no reads. An `@handle` in a comment is a tap to that
+profile, looked up only when tapped. Nobody is NOTIFIED of a tag yet:
+that arrives with push notifications.
+
+### The event page on a laptop
+
+Past 1100px every full-screen view centres a 640px column; the event
+page is the exception. It is two columns, 1060px across: the event on
+the left, and on the right the people, the actions and — on a finished
+event — the memories and comments, with the comment box at the bottom
+of that column (the column is sticky and scrolls its own comments, never
+taller than the window). On a phone the two stack, and the box sticks
+to the bottom of the screen while the comments are on it.
+
 The comment box lives OUTSIDE the painted page body. The page is
 repainted whenever the event changes, and a box you are typing in must
 never be rebuilt under you.

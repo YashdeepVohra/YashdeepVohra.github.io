@@ -57,9 +57,11 @@ import {
   showSharedEvent,
   onPlaceInput
 } from './services/eventsService.js';
-import { openEventPage, closeEventPage, reportEvent, postEventComment } from './services/eventPage.js';
+import { openEventPage, closeEventPage, reportEvent, postEventComment, onEventCommentInput } from './services/eventPage.js';
 import {
-  retryMemories, openMemoryPhoto, addMemoryPhotos, toggleMemoryLike, deleteComment, reportComment
+  retryMemories, openMemoryPhoto, addMemoryPhotos, toggleMemoryLike, deleteComment, reportComment,
+  openComments, closeComments, openCommentsEvent, postSheetComment, replyToComment, onCommentInput,
+  pickMention, openProfileByHandle
 } from './services/memoryService.js';
 import { addDraftPhotos, removeDraftPhoto } from './services/eventPhotoService.js';
 import { applyFeatureFlags } from './config/features.js';
@@ -276,6 +278,15 @@ Object.assign(window, {
   toggleMemoryLike,
   deleteComment,
   reportComment,
+  openComments,
+  closeComments,
+  openCommentsEvent,
+  postSheetComment,
+  replyToComment,
+  onCommentInput,
+  onEventCommentInput,
+  pickMention,
+  openProfileByHandle,
   openStories,
   closeStories,
   storyNext,

@@ -30,6 +30,7 @@ import { eventPhotos } from './photoRules.js';
 import { resetPhotoTray, commitTray, deleteEventPhotos } from './eventPhotoService.js';
 import { renderEventPage, isEventPageOpen } from './eventPage.js';
 import { storyRailHtml, loadStories, onStoriesChange } from './storyService.js';
+import { paintSocial } from './memoryService.js';
 
 // Stories land asynchronously; the rail is painted by renderEvents.
 onStoriesChange(() => renderEvents());
@@ -1527,6 +1528,10 @@ export function renderEvents() {
             ${shownGuests.length ? `<div class="going-row">${avatarStack(shownGuests)}<span class="going-text">${escapeHtml(wentText)}</span></div>` : ""}
             ${leaves}
           </div>
+          <!-- Like and comment right here (memoryService). Empty in the
+               markup and filled after the diff, like a data-vt slot, so
+               a like never makes the card look changed. -->
+          <div class="soc-bar stub-soc" data-social="${id}"></div>
         </article>` });
     }
   });
@@ -1588,6 +1593,7 @@ export function renderEvents() {
   // is never on screen with an empty time slot.
   paintVolatile(liveList, now);
   paintVolatile(recapList, now);
+  paintSocial(recapList);
 
   applyFilter(liveList, state.currentLiveFilter);
   applyFilter(recapList, state.currentRecapFilter);

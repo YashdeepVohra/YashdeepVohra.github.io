@@ -220,8 +220,9 @@ Each line is the whole rule. The file after it is the argument for it.
 - The cover sits UNDER the band at 16:9 (max 320px), never over it.
   The event page (`eventPage.js`) is where the rest is.
 - A finished event is a MEMORY (`memoryService.js`): photos from who
-  went (id `<uid>_<n>`, three each), one `social/likes` doc, comments.
-  Read with gets on open, never listened to. Profile rows open it.
+  went (id `<uid>_<n>`, three each), one `social/likes` doc (likes AND
+  the comment count, which moves in the comment's own batch), comments.
+  Never listened to. Recap cards and profile rows like/comment in place.
 - A story ends at the server's createdAt + `hours` (2/3/6/12/24). Rings
   are forest, never ember. A song is a LINK, never audio under a photo.
 - A report carries a copy of what was reported (`excerpt`); the admin

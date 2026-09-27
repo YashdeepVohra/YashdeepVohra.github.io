@@ -19,13 +19,14 @@ import { displayNameFor, usernameFor, avatarFor } from './userService.js';
 import { isBlocked, withoutBlocked } from './blockService.js';
 import { inRecap, wasCalledOff } from './recapRules.js';
 import { eventPhotos } from './photoRules.js';
-import { memoriesHtml, loadMemories, onMemoriesChange, postComment } from './memoryService.js';
+import { memoriesHtml, loadMemories, onMemoriesChange, postComment, onCommentInput } from './memoryService.js';
 import {
   vibeColor, posterBand, timeStat, avatarStack, goingText, cardActions, paintVolatile
 } from './eventsService.js';
 
 let currentId = null;
 let lastHtml = "";
+let lastSide = "";
 
 export function isEventPageOpen() {
   return !!currentId && !document.getElementById("eventScreen")?.classList.contains("hidden");
@@ -43,16 +44,23 @@ export function openEventPage(eventId) {
   currentId = id;
   if (e.expiresAt <= Date.now()) loadMemories(id);
   lastHtml = "";
-  openOverlay("eventScreen", { onClose: () => { currentId = null; lastHtml = ""; } });
+  lastSide = "";
+  const input = document.getElementById("epCommentInput");
+  if (input) input.value = "";
+  openOverlay("eventScreen", { onClose: () => { currentId = null; lastHtml = ""; lastSide = ""; } });
   renderEventPage();
-  const body = document.getElementById("eventPageBody");
-  if (body) body.scrollTop = 0;
+  const scroller = document.getElementById("eventPageScroll");
+  if (scroller) scroller.scrollTop = 0;
 }
 
 onMemoriesChange(() => { if (isEventPageOpen()) renderEventPage(); });
 
 export function postEventComment() {
-  if (currentId) postComment(currentId);
+  if (currentId) postComment(currentId, "page");
+}
+
+export function onEventCommentInput() {
+  if (currentId) onCommentInput("page", currentId);
 }
 
 export function closeEventPage() {
@@ -117,7 +125,15 @@ export function renderEventPage() {
         <div class="ep-photos ep-more">${all.slice(1).map((u, i) => img(u, i + 1)).join("")}</div>
       </div>` : "";
 
-  const html = `
+  // TWO PARTS. The event itself — band, cover, title, where and when,
+  // the note, the rest of the photos — and beside it (below it on a
+  // phone) the people and what you can do: who is hosting, who is going
+  // or went, the actions, and on a finished event its memories and
+  // comments with the box to add one. On a laptop the two sit side by
+  // side, so the page is not one narrow column in a sea of canvas and
+  // the comment box is where the comments are, not a bar across the
+  // bottom of the window.
+  const main = `
     <div class="event ep" data-eid="${id}" style="--vibe:${vibeColor(e.tag)}">
       ${posterBand(e, now, { stats, spent: ended })}
       ${cover}
@@ -133,8 +149,11 @@ export function renderEventPage() {
         ${e.requiresApproval ? `<div class="ep-fact"><i class='bx bx-lock-alt'></i><span>The host approves who joins</span></div>` : ""}
       </div>
       ${e.description ? `<p class="ep-desc">${escapeHtml(e.description)}</p>` : ""}
+      ${rest}
+    </div>`;
 
-      <div class="ep-section">
+  const side = `
+      <div class="ep-block">
         <div class="ep-label">Hosted by</div>
         <div class="byline">
           <div class="av-ring ${!ended && now >= e.startTime ? "live" : ""} tappable" ${openHost}>
@@ -145,7 +164,7 @@ export function renderEventPage() {
         </div>
       </div>
 
-      <div class="ep-section">
+      <div class="ep-block">
         <div class="ep-label">${ended ? "Who went" : "Who's going"}</div>
         <div class="going-row">
           ${avatarStack(guests)}
@@ -158,24 +177,28 @@ export function renderEventPage() {
 
       ${ended ? "" : cardActions(e, id)}
 
-      ${rest}
-
-      ${ended ? memoriesHtml(e) : ""}
+      ${ended ? `<div class="ep-block">${memoriesHtml(e)}</div>` : ""}
 
       ${isHost ? "" : `
         <button type="button" class="ep-report" onclick="window.reportEvent('${id}')">
           <i class='bx bx-flag'></i> Report this event
-        </button>`}
-    </div>`;
+        </button>`}`;
 
   // Rebuilt only when something on it changed — the minute tick must
   // not reload its photos. Times go through the same data-vt slots as
-  // the feed and are painted after.
-  if (html !== lastHtml) {
-    body.innerHTML = html;
-    lastHtml = html;
+  // the feed and are painted after. The comment box is NOT in either
+  // part: it is fixed markup, so typing is never rebuilt under you.
+  if (main !== lastHtml) {
+    body.innerHTML = main;
+    lastHtml = main;
+  }
+  const sideEl = document.getElementById("epSideBody");
+  if (sideEl && side !== lastSide) {
+    sideEl.innerHTML = side;
+    lastSide = side;
   }
   document.getElementById("epCompose")?.classList.toggle("hidden", !ended);
+  document.getElementById("eventScreen")?.classList.toggle("is-memory", ended);
   paintVolatile(body, now);
 }
 

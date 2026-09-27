@@ -725,13 +725,43 @@
     <div class="header-title">Event</div>
     <div style="width:42px;"></div>
   </div>
-  <div class="screen-body" id="eventPageBody"></div>
-  <!-- Comments, on a finished event only. Outside the painted body on
-       purpose: the page is repainted when the event changes, and a box
-       you are typing in must never be rebuilt under you. -->
-  <div class="ep-compose hidden" id="epCompose">
-    <input id="epCommentInput" maxlength="300" placeholder="Add a comment…" autocomplete="off" onkeydown="if(event.key === 'Enter') postEventComment()">
-    <button type="button" class="ep-post" onmousedown="event.preventDefault()" onclick="postEventComment()">Post</button>
+  <div class="screen-body ep-scroll" id="eventPageScroll">
+    <div class="ep-layout">
+      <div class="ep-main" id="eventPageBody"></div>
+      <aside class="ep-side">
+        <div id="epSideBody"></div>
+        <!-- Comments, on a finished event only. Fixed markup on purpose:
+             the page is repainted when the event changes, and a box you
+             are typing in must never be rebuilt under you. -->
+        <div class="ep-compose hidden" id="epCompose">
+          <div class="mention-row hidden" id="epMentions"></div>
+          <div class="compose-row">
+            <input id="epCommentInput" maxlength="300" placeholder="Add a comment…" autocomplete="off" oninput="onEventCommentInput()" onkeydown="if(event.key === 'Enter') postEventComment()">
+            <button type="button" class="ep-post" onmousedown="event.preventDefault()" onclick="postEventComment()">Post</button>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+</div>
+
+<!-- COMMENTS, without opening the event (memoryService.js): from a Recap
+     card or a profile row. -->
+<div id="commentSheet" class="modal-overlay comment-sheet hidden" onclick="if(event.target === this) closeComments()">
+  <div class="modal-content cs-panel" role="dialog" aria-labelledby="csTitle">
+    <div class="cs-head">
+      <div class="cs-titles">
+        <span class="ep-label">Comments</span>
+        <b id="csTitle" class="cs-title"></b>
+      </div>
+      <button type="button" class="cs-open" onclick="openCommentsEvent()">Open event</button>
+    </div>
+    <div class="cs-list" id="csList"></div>
+    <div class="mention-row hidden" id="csMentions"></div>
+    <div class="compose-row">
+      <input id="csInput" maxlength="300" placeholder="Add a comment…" autocomplete="off" oninput="onCommentInput('sheet')" onkeydown="if(event.key === 'Enter') postSheetComment()">
+      <button type="button" class="ep-post" onmousedown="event.preventDefault()" onclick="postSheetComment()">Post</button>
+    </div>
   </div>
 </div>
 
