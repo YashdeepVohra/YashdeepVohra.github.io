@@ -68,6 +68,7 @@ import {
 } from './userService.js';
 import { toast, refreshSocialUI } from '../utils/ui.js';
 import { openOverlay, closeOverlay } from '../utils/overlays.js';
+import { PAGE, shown, freshFrom, resetPager, sentinel, nextPage, watch } from '../utils/pager.js';
 import { askConfirm } from '../utils/confirm.js';
 import { stampAsk, limitMessage, msUntilAskAllowed, ASK_GAP_MS } from './limitsService.js';
 
@@ -234,7 +235,9 @@ export function followerCount(uid) {
   if (!u) return 0;
   // A loaded page of followers beats the stored number, because it can
   // be filtered; the number is what answers before anyone opens it.
-  if (uid === listUid && listKind === "followers" && Array.isArray(loadedFollowers)) {
+  // Only a COMPLETE list, though: followers load twenty at a time now,
+  // and a partial page would read as "20 followers".
+  if (uid === listUid && listKind === "followers" && Array.isArray(loadedFollowers) && !followersMore) {
     return countOf(loadedFollowers, u.followerCount);
   }
   return typeof u.followerCount === "number" ? Math.max(0, u.followerCount) : 0;
@@ -836,8 +839,14 @@ let listKind = "followers";
 // blocked people out of a count once the list behind it is in hand.
 let loadedFollowers = null;
 
-// Rules cap nothing now. This is what a person will actually scroll.
-const FOLLOWER_PAGE = 300;
+// Followers are fetched twenty at a time as the list scrolls (pager.js),
+// not three hundred at once.
+const FOLLOWER_PAGE = PAGE;
+let followersCursor = null;   // the last follower document fetched
+let followersMore = false;    // a full page came back, so there may be more
+
+function listKey() { return `fl:${listKind}:${listUid}`; }
+let toTop = false;
 
 const LIST_TITLES = {
   followers: "Followers",
@@ -878,12 +887,13 @@ function listMembers() {
   return (Array.isArray(uids) ? uids : []).filter((x) => x && !isBlocked(x));
 }
 
-/** Newest followers first — one page, only when somebody opens it. */
-async function fetchFollowers(uid) {
-  const snap = await db.collection("users").doc(uid).collection("followers")
-    .orderBy("at", "desc")
-    .limit(FOLLOWER_PAGE)
-    .get();
+/** Newest followers first — a page of twenty, after `after` if given. */
+async function fetchFollowers(uid, after = null) {
+  let q = db.collection("users").doc(uid).collection("followers").orderBy("at", "desc");
+  if (after) q = q.startAfter(after);
+  const snap = await q.limit(FOLLOWER_PAGE).get();
+  followersCursor = snap.docs.length ? snap.docs[snap.docs.length - 1] : after;
+  followersMore = snap.docs.length >= FOLLOWER_PAGE;
   return snap.docs.map((d) => d.id);
 }
 
@@ -893,7 +903,15 @@ export async function openFollowList(targetUid, kind) {
   const switching = uid !== listUid || kind !== listKind;
   listUid = uid;
   listKind = LIST_TITLES[kind] ? kind : "followers";
-  if (switching && listKind === "followers") loadedFollowers = null;
+  if (switching && listKind === "followers") { loadedFollowers = null; followersCursor = null; followersMore = false; }
+  if (switching) {
+    resetPager(listKey());
+    // A new list starts at its top. Left where the last one was
+    // scrolled to, its first twenty sat above the view and the list
+    // went straight on to load the next page. Done at paint time: the
+    // layer is still hidden here, and a hidden box keeps its scroll.
+    toTop = true;
+  }
 
   openOverlay("followListScreen");
   renderFollowList();
@@ -926,9 +944,26 @@ export async function openFollowList(targetUid, kind) {
 
   // Every row carries a Follow button, and that button needs to know
   // whether the person is private and whether you've already asked.
-  // Cached copies are fine to draw from — the tap itself checks.
-  await primeUsers(listMembers());
+  // Cached copies are fine to draw from — the tap itself checks. Only
+  // the rows on screen: the next twenty are fetched as you scroll.
+  await primeUsers(listMembers().slice(0, shown(listKey())));
   if (isFollowListOpen()) renderFollowList();
+}
+
+/** The sentinel came into view: the next twenty. */
+function moreFollowList(key) {
+  if (key !== listKey()) return;
+  const uid = listUid;
+  nextPage(key, async (n) => {
+    // Followers are a query: fetch the next page of people first.
+    if (listKind === "followers" && followersMore && n >= (loadedFollowers || []).length) {
+      const next = await fetchFollowers(uid, followersCursor);
+      if (listUid !== uid) return;
+      const have = new Set(loadedFollowers || []);
+      loadedFollowers = (loadedFollowers || []).concat(next.filter((x) => !have.has(x)));
+    }
+    await primeUsers(listMembers().slice(n, n + PAGE));
+  }, () => { if (isFollowListOpen() && listUid === uid) renderFollowList(); });
 }
 
 export function closeFollowList() {
@@ -957,8 +992,13 @@ export function renderFollowList() {
   }
 
   const members = listMembers();
+  // Followers arrive a page at a time, so their number comes from the
+  // profile's own count, not from how many have loaded so far.
+  const total = listKind === "followers" && followersMore
+    ? Math.max(members.length, followerCount(listUid) || 0)
+    : members.length;
   if (title) {
-    title.innerText = LIST_TITLES[listKind] + (members.length ? " · " + members.length : "");
+    title.innerText = LIST_TITLES[listKind] + (total ? " · " + total : "");
   }
 
   if (!members.length) {
@@ -972,13 +1012,14 @@ export function renderFollowList() {
     return;
   }
 
-  // Rules cap these arrays at 5000. Painting five thousand rows would
-  // lock the page up, and nobody scrolls that far anyway.
-  const LIST_CAP = 300;
-  const capped = members.slice(0, LIST_CAP);
-  const hidden = members.length - capped.length;
+  // Twenty at a time (pager.js): the rest arrive as you scroll.
+  const key = listKey();
+  const upto = shown(key);
+  const capped = members.slice(0, upto);
+  const more = members.length > upto || (listKind === "followers" && followersMore);
+  const fresh = freshFrom(key);
 
-  box.innerHTML = capped.map((uid) => {
+  box.innerHTML = capped.map((uid, i) => {
     const id = safeId(uid);
     if (!id) return "";
     const me = uid === state.uid;
@@ -1004,7 +1045,7 @@ export function renderFollowList() {
       action = `<button class="act ${on ? "joined" : "primary"}" onclick="event.stopPropagation(); window.toggleFollowInList('${id}')">${on ? "Following" : isPrivateAccount(uid) ? "Ask" : "Follow"}</button>`;
     }
     return `
-      <div class="orbit-row" onclick="window.closeFollowList(); window.openProfileScreen('${id}')">
+      <div class="orbit-row${i >= fresh ? " row-in" : ""}" onclick="window.closeFollowList(); window.openProfileScreen('${id}')">
         <div class="chat-avatar" style="width:44px;height:44px;font-size:19px;">${renderAvatar(avatarFor(uid))}</div>
         <div class="result-text">
           <div class="result-title">${escapeHtml(displayNameFor(uid))}</div>
@@ -1012,9 +1053,9 @@ export function renderFollowList() {
         </div>
         <div class="orbit-row-actions">${action}</div>
       </div>`;
-  }).join("") + (hidden
-    ? `<p class="settings-hint" style="text-align:center;">and ${hidden} more</p>`
-    : "");
+  }).join("") + (more ? sentinel(key) : "");
+  if (toTop) { box.scrollTop = 0; toTop = false; }
+  if (more) watch(box, moreFollowList);
 }
 
 /* ---------------------------------------------------------------------

@@ -35,6 +35,7 @@
 // people you know" is a much better answer than a follower count.
 // ==========================================
 
+import { PAGE, shown, freshFrom, resetPager, sentinel, nextPage, watch } from '../utils/pager.js';
 import { db, FieldValue } from '../config/firebase.js';
 import { state } from '../state/store.js';
 import { safeId, escapeHtml, renderAvatar } from '../utils/formatters.js';
@@ -351,9 +352,40 @@ function isOrbitOpen() {
 
 export function openOrbitScreen() {
   openOverlay("orbitScreen");
-  primeUsers(state.orbitUids.concat(state.orbitIncoming, state.orbitOutgoing))
+  resetPager(REQ_KEY);
+  resetPager(LINK_KEY);
+  orbitToTop = true;
+  // Names for what is on screen only: the first twenty of each long
+  // list. The rest are fetched as you scroll (pager.js) — opening this
+  // used to read every profile in your orbit at once.
+  primeUsers(state.orbitIncoming.concat(
+    state.orbitOutgoing,
+    orbitLinked().slice(0, PAGE),
+    (state.followRequests || []).slice(0, PAGE)))
     .then(() => { if (isOrbitOpen()) renderOrbit(); });
   renderOrbit();
+}
+
+const REQ_KEY = "orbit:req";
+let orbitToTop = false;
+const LINK_KEY = "orbit:linked";
+
+/** In your orbit: anyone out right now first, then in the order you linked. */
+function orbitLinked() {
+  const outNow = orbitOutNow();
+  return state.orbitUids
+    .filter((u) => !isBlocked(u))
+    .map((u, i) => [u, i])
+    .sort((a, b) => ((outNow.includes(b[0]) ? 1 : 0) - (outNow.includes(a[0]) ? 1 : 0)) || a[1] - b[1])
+    .map(([u]) => u);
+}
+
+function moreOrbit(key) {
+  const list = key === REQ_KEY
+    ? (state.followRequests || []).filter((u) => !isBlocked(u))
+    : key === LINK_KEY ? orbitLinked() : null;
+  if (!list) return;
+  nextPage(key, (n) => primeUsers(list.slice(n, n + PAGE)), () => { if (isOrbitOpen()) renderOrbit(); });
 }
 
 export function closeOrbitScreen() {
@@ -375,7 +407,7 @@ export function updateOrbitBadge() {
   });
 }
 
-function personRow(uid, kind, outNow) {
+function personRow(uid, kind, outNow, fresh = false) {
   const id = safeId(uid);
   if (!id) return "";
 
@@ -398,7 +430,7 @@ function personRow(uid, kind, outNow) {
   }
 
   return `
-    <div class="orbit-row" onclick="window.openProfileScreen('${id}')">
+    <div class="orbit-row${fresh ? " row-in" : ""}" onclick="window.openProfileScreen('${id}')">
       <div class="chat-avatar" style="width:44px;height:44px;font-size:19px;">${renderAvatar(avatarFor(uid))}</div>
       <div class="result-text">
         <div class="result-title">${escapeHtml(displayNameFor(uid))}</div>
@@ -420,12 +452,10 @@ export function renderOrbit() {
 
   // Anyone who is actually at something comes first — the whole point
   // of the list is deciding where to go next.
-  const linked = state.orbitUids
-    .filter((u) => !isBlocked(u))
-    .sort((a, b) => {
-      const d = (outNow.includes(b) ? 1 : 0) - (outNow.includes(a) ? 1 : 0);
-      return d || displayNameFor(a).localeCompare(displayNameFor(b));
-    });
+  // Anyone out right now first, then in the order you linked — NOT by
+  // name any more: sorting by name needs every name, and this list now
+  // loads its names twenty at a time.
+  const linked = orbitLinked();
 
   // Follow requests are read straight from the store rather than
   // imported, which keeps this module and followService from importing
@@ -436,11 +466,12 @@ export function renderOrbit() {
 
   if (wantToFollow.length) {
     html += `<h3 class="orbit-heading">Want to follow you <span class="orbit-count">${wantToFollow.length}</span></h3>`;
-    html += wantToFollow.map((uid) => {
+    const upto = shown(REQ_KEY), fresh = freshFrom(REQ_KEY);
+    html += wantToFollow.slice(0, upto).map((uid, i) => {
       const id = safeId(uid);
       if (!id) return "";
       return `
-        <div class="orbit-row" onclick="window.openProfileScreen('${id}')">
+        <div class="orbit-row${i >= fresh ? " row-in" : ""}" onclick="window.openProfileScreen('${id}')">
           <div class="chat-avatar" style="width:44px;height:44px;font-size:19px;">${renderAvatar(avatarFor(uid))}</div>
           <div class="result-text">
             <div class="result-title">${escapeHtml(displayNameFor(uid))}</div>
@@ -452,6 +483,7 @@ export function renderOrbit() {
           </div>
         </div>`;
     }).join("");
+    if (wantToFollow.length > upto) html += sentinel(REQ_KEY);
   }
 
   if (incoming.length) {
@@ -464,7 +496,9 @@ export function renderOrbit() {
     html += `<h3 class="orbit-heading">In your orbit <span class="orbit-count">${linked.length}</span>${
       outCount ? `<span class="orbit-out-tag"><span class="live-dot"></span> ${outCount} out now</span>` : ""
     }</h3>`;
-    html += linked.map((u) => personRow(u, "linked", outNow)).join("");
+    const upto = shown(LINK_KEY), fresh = freshFrom(LINK_KEY);
+    html += linked.slice(0, upto).map((u, i) => personRow(u, "linked", outNow, i >= fresh)).join("");
+    if (linked.length > upto) html += sentinel(LINK_KEY);
   }
 
   if (outgoing.length) {
@@ -483,6 +517,9 @@ export function renderOrbit() {
   }
 
   box.innerHTML = html;
+  // Opened afresh: from the top (a hidden box keeps its old scroll).
+  if (orbitToTop) { box.scrollTop = 0; orbitToTop = false; }
+  watch(box, moreOrbit);
 }
 
 /** The little system drawn for an empty orbit. */

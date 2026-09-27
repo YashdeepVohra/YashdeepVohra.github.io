@@ -1,62 +1,53 @@
 # livesociya — working notes
 
 **What it is.** An app for things happening *right now* — open to
-everyone, made first for college students: somebody
-starts an event, everyone nearby sees it instantly, it vanishes when it
-ends. Plus direct messages, and a social graph. Live at livesociya.com,
-Firestore, vanilla ES modules — no framework. The only build step is
-bundling `js/` into `dist/app.js` with esbuild (`build.mjs`). Open `index.html` over http (not `file://`, modules won't load).
+everyone, made first for college students: somebody starts an event,
+everyone nearby sees it instantly, it vanishes when it ends. Plus
+direct messages, memories, stories and a social graph. Live at
+livesociya.com. Firestore, vanilla ES modules, no framework; esbuild
+bundles `js/` into `dist/app.js` (`build.mjs`).
 
-This file is loaded into every session before anything is typed, so it is
-kept short on purpose. It holds the RULES. The reason behind each one —
-the bug it came from, the three things that were tried first — lives in
-`docs/`, and each rule below names the file that explains it. Read the
-matching file before changing that area; don't read them all.
+**Start here — don't read the codebase.** This file is loaded into every
+session, so it holds only the RULES and pointers. To find code, open
+**`docs/map.md`** ("I want to change X → open file Y, function Z"), then
+read only that file. Each rule below names the `docs/` file with its
+story; read that one before changing the area, and no others.
+
+| For | Read |
+|---|---|
+| Where code lives | `docs/map.md` |
+| What is built, what the USER still has to do (Blaze day, App Check) | `docs/status.md` |
+| Running the tests from here | `docs/testing.md` |
+| What each feature costs in reads | `docs/cost.md` |
+| Ceilings, rate limits, what could fall over | `docs/scale.md` |
+| Rules/attack model | `SECURITY.md` |
 
 ---
 
 ## How to work here
 
-- The repo lives on the user's machine. Edit it there; don't rebuild it
-  in the cloud container.
-- **Always `node --check` every changed .js** before committing.
-- `.vercelignore` keeps `package.json`/`build.mjs` away from Vercel. If
-  Vercel ever sees them it tries to BUILD the site and deploys stop.
-- **After any change under `js/`, run `npm run build`.** The browser loads
-  `dist/app.js`, one bundled file; `js/` is the source. `dist/` is
-  committed (no build on the host) and the smoke suite fails if it is stale.
-- **Run `test/smoke.mjs`** before saying something works (see Testing).
-- **Commit when a change is done and tested** (`git add -A`, so new files
-  come along). The user only runs `git push` — don't leave work unstaged.
-- After changing `firestore.rules`, say so — they do nothing until the
-  user redeploys, and until then every limit in them is decoration.
-- Commits: end with the Co-Authored-By / Claude-Session lines the session
-  reminder gives.
-- **Adding to these notes costs the user on every future session.** A new
-  rule goes here as one line; its story goes in the `docs/` file.
+- The repo lives on the user's machine. Edit it there (`device_bash`);
+  tests run in the cloud container (`docs/testing.md` — the device has
+  no browser).
+- **`node --check` every changed .js; `npm run build` after any change
+  under `js/`** (the browser loads `dist/app.js`; the suite fails if stale).
+- **Run `test/smoke.mjs`** before saying something works, and add a case
+  for whatever you changed.
+- **Commit when done and tested** (`git add -A`). The user only runs
+  `git push`. End commits with the Co-Authored-By / Claude-Session lines.
+- **After changing `firestore.rules`, tell the user to publish them** —
+  they paste the file into Firebase console → Firestore → Rules →
+  Publish (no terminal), BEFORE pushing.
+- `.vercelignore` keeps `package.json`/`build.mjs` off Vercel (it would try
+  to build and deploys stop). `_backup_pre_uid/` is STALE — never read it.
+- A new `window.x` used by an inline `onclick` must be added to the
+  `Object.assign(window, …)` block in `js/app.js`.
+- **Adding to these notes costs every future session.** A rule is one
+  line here; its story goes in the `docs/` file.
 
-## The shape of it
-
-```
-index.html          one page, every screen is a div that hides
-build.mjs, dist/    esbuild bundles js/ into dist/app.js — generated, committed
-style.css           one sheet, tokens at the top (--vibe-*, --s-*, --lift-*)
-js/app.js           entry: imports, window bindings, boot, back button
-js/config/          firebase init + offline persistence
-js/state/store.js   one mutable object, plus resetState() on logout
-js/services/        auth, events, chat, profile, follow, orbit, block,
-                    search, user, limits, receipt, circle — plus the
-                    pure rule files recapRules, aboutRules,
-                    messageRules, receiptRules, shareRules, matchRules,
-                    geoRules, feedRules
-js/utils/           ui (screens/toasts/repaint registry), confirm, overlays,
-                    formatters, theme, viewport
-js/interactions/    search screen, message gestures (swipe, hold)
-firestore.rules     ~700 lines, the real access control
-test/               stub.js + smoke.mjs + contrast.mjs
-docs/               why each rule below exists — read the one you need
-_backup_pre_uid/    a pre-UID copy of the whole app. STALE. Never read it.
-```
+**Waiting on the user — remind them when it's relevant:** App Check (they
+will do it on Blaze day), budget alert, the Blaze-day photo checklist,
+publishing rules after every rules change. Full list: `docs/status.md`.
 
 ## The rules
 
@@ -238,6 +229,9 @@ Each line is the whole rule. The file after it is the argument for it.
   `private/limits` in the same batch: comments, stories and reports
   4 s apart (`postAllowed`). The ledger's own rule allows only "now".
 - An event holds at most 1000 going (`HARD_CAP`, `withinCapacity`).
+- Lists of people (followers, following, orbit, blocked, requests) show
+  20 at a time with a shimmer sentinel (`utils/pager.js`); names are
+  fetched per page, never the whole list.
 
 **Starting on a bad network** → `docs/boot.md`
 
@@ -315,120 +309,15 @@ Each line is the whole rule. The file after it is the argument for it.
 - A swap counts as one edit, not two (Damerau), and an exact hit must
   always outrank a corrected one.
 
-## Cost model
 
-Firestore charges per document read. A snapshot listener bills **one read
-per changed document per connected client**, so the shape is
-`changes x people watching`. Roughly 31.5k reads/day at 300 daily actives,
-inside the 50k free tier; ~₹170/month at launch-night intensity.
+## Cost, security, tests — one line each
 
-Decisions already made, with the reason, so they don't get undone:
-
-| | why |
-|---|---|
-| Feed capped at `LIVE_LIMIT = 60`, recap paged | the recap used to load with the feed and nobody opened it |
-| Events tagged with `circleId`, filtering off for now | 60 is plenty for one campus and meaningless across many — but filtering on one value removes nothing and costs an index, so it waits for the second circle |
-| Messages: 25 live + paged scrollback | full history on every chat open |
-| Profiles cached in localStorage, 6h TTL | ~20 reads per open for data that changes twice a year |
-| Firestore offline persistence on | resume tokens: only changed docs bill |
-| Hype writes debounced 900ms | a misclick costs nothing; a burst is one write |
-| `following` stays an array on your own profile | one read gives your whole list, which is what answers "am I following them?" on every card |
-| `followers` is a subcollection + a `followerCount` field | the array was capped at 5000, rewrote a whole document per follow, and shipped a private account's follower list to anyone signed in. The count costs nothing to read; the list is queried only when somebody opens it |
-| Recap query spans 48h, filtered client-side, max 3 pages per load | retention is computed from three fields; no server to store it |
-| Profile Hosted/Joined: two `get()`s, counts from the same docs | was a listener + two duplicate count queries |
-| Pinned message in a subcollection, holding a copy of the text | a field on the event bills the whole campus a read |
-| Poster cards cost ~29% more DOM than the rows they replaced | measured: style recalc went 4.3ms -> 0.2ms, layout unchanged. The nodes cost nothing in a frame; the old transitions did |
-| A shared event card reads the event once, cached and de-duplicated | ten copies of one link in a thread are one read |
-| The receipt folds events already in the cache, debounced | a history collection would be a write per event |
-| Inbox: 20 chats live, older pages read once on request | a change to an old thread bills nobody; a long inbox costs what is on screen |
-| Inbox preview is a copy on the chat doc | the chat doc is already written on every send and already read by the inbox listener: 0 extra reads, 0 extra writes |
-| Active now: no listener, gets for the top 8 on screen, cached 3 min; heartbeat every 4 min while visible | a listener bills every watcher per heartbeat. This way ~8 reads per inbox look (≈ +7–9k/day at 300 DAU) and ~8 writes per half-hour session |
-
-The remaining lever, if reads ever bite: drop `LIVE_LIMIT` to ~30.
-
-## Security model in one paragraph
-
-Rules do the enforcing, never the client. `followers` can only be written
-by the follower adding their own uid — so a follower count cannot be
-inflated by its owner. On a private account that write is refused and the
-uid goes to `followRequests`; only the owner can move one name across, and
-the rule bounds it so approving can't smuggle in somebody who never asked.
-Rate limits use `users/{uid}/private/limits`, whose own rule pins every
-timestamp to `request.time` — it can only say "now". The action and the
-stamp go in one batch and the action's rule uses `getAfter()` to check the
-stamp landed, so skipping it just gets the action refused. The icebreaker
-(one opening message to a stranger until they reply) works the same way:
-the message only commits if the same batch flips `icebreakerUsed` false to
-true, and it can never go back.
-
-## Findable by name
-
-`index.html` carries the title, description, canonical, Open Graph,
-Twitter card and a JSON-LD graph; `robots.txt` and `sitemap.xml` sit at
-the root. The part that is not boilerplate is `alternateName` in the
-structured data: "livesociya" is a coined word, so it gets typed wrong,
-and "live sociya" / "livesocia" have to resolve to the same thing.
-
-`robots.txt` disallows `/*?e=` on purpose. A shared event link points
-at a private feed and is meant for one person; letting it into an index
-would turn a share into a publication.
-
-Worth knowing before expecting much: this is a client-rendered app
-behind a sign-in, so a crawler sees the shell and the metadata and
-nothing else. The tags make the SITE findable by name. They cannot make
-individual events findable, and should not.
-
-## Testing
-
-No emulator, no network, no credentials. `test/stub.js` is a hand-written
-stand-in for the Firebase compat SDK with working `orbit` and `events`
-collections (events `get()` really applies where / orderBy / limit /
-startAfter), batches that really apply, and counters on `window.__reads` /
-`window.__writes`.
-
-```
-npm install                        # once: esbuild (and put playwright on the path)
-python3 -m http.server 8111        # from the repo root
-node test/smoke.mjs                # CHROME_PATH=... if playwright has no browser
-node test/contrast.mjs             # no browser, no network — just the palette
-```
-
-Handles inside a page: `window.__m` (the modules), `window.__events` +
-`window.__fireEvents()`, `window.__orbit` + `window.__fireOrbit()`,
-`window.__stubDocs['users/uid']`, `window.__authSingleton.currentUser`.
-Note `window.showTab` is app.js's `goToTab`, which closes an open chat on
-its way; use `ui.showTab` when a test needs the chat to stay open.
-
-The suite is green. It was red on two for a long time — the dead scroll
-container on the laptop profile, and the claim screen on a short window
-— and `docs/layout.md` had described the fix for both the whole time.
-The CSS is in the sheet now.
-
-Every rule above came from something that broke. Add a case when
-something breaks again.
-
-## Where it is
-
-Built and working: UID migration, full rules, responsive layout, blocking
-and reporting, request-to-join, host moderation, search, Orbit (mutual connections
-+ vouches), follow and followers with private accounts and approval
-(going public lets waiting requests in), rate limits, the icebreaker,
-the day-one empty state, public/private at sign-up, dark mode, editing and
-retracting a message (hold a bubble, or right-click on a desktop),
-reactions, a host's pinned message, the Recap
-receipt, the sage-on-paper redesign, the poster/stub cards, and share
-links for an event.
-
-Built, switched off until Blaze (`docs/photos.md`): profile pictures,
-event photos with a cover in the feed, photos in chat, memory photos,
-stories with a song sticker. Built and on: the event page, likes and
-comments on finished events (memories), Report on everything, the
-admin's report screen, and the 80-character location limit.
-
-Not built: push notifications (the client half needs no Blaze; the
-sender is a Cloud Function in asia-south1, the Firestore region).
-
-Considered and parked: voice notes. Everything above costs *reads*, which
-have a 50k/day free tier. Voice notes cost storage and egress — a
-different meter, needs Blaze, and the first feature whose bill goes up
-while nobody is using it.
+- Reads are the bill: a listener bills one read per CHANGED doc per
+  watcher. Roughly 31.5k/day at 300 daily actives (free tier 50k).
+  Table of every decision: `docs/cost.md`.
+- Rules do the enforcing, never the client; rate limits are a stamp in
+  `private/limits` written in the same batch and checked with
+  `getAfter()`. `SECURITY.md`.
+- Tests: no emulator, no network — `test/stub.js` fakes Firebase;
+  `test/smoke.mjs` (one `group()` per area), `test/contrast.mjs`.
+  `docs/testing.md`.

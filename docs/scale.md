@@ -19,6 +19,7 @@ left.
 | Stories | one listener, newest 60 of the day; private accounts ≤ 10 gets per half hour |
 | Blocks, orbit | listeners capped at 500 (were unbounded) |
 | Follow requests | 200 |
+| Lists of people on screen — followers, following, orbit, blocked, requests | **20 at a time** (`utils/pager.js`): a shimmering sentinel at the end fetches the next 20 names (and, for followers, the next 20 documents) as it scrolls into view. Opening a list used to read every profile in it. |
 | Admin reports | newest 50 |
 | Names and faces (`primeUsers`) | 9 or more missing profiles are fetched thirty to a request (`in` on the document id), not one request each — same reads, a tenth of the round trips, never a burst of hundreds from one phone |
 

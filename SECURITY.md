@@ -3,6 +3,21 @@
 Written for the UID-based rewrite. Read this before you put the link in
 a college WhatsApp group.
 
+## The security model in one paragraph
+
+Rules do the enforcing, never the client. `followers` can only be written
+by the follower adding their own uid — so a follower count cannot be
+inflated by its owner. On a private account that write is refused and the
+uid goes to `followRequests`; only the owner can move one name across, and
+the rule bounds it so approving can't smuggle in somebody who never asked.
+Rate limits use `users/{uid}/private/limits`, whose own rule pins every
+timestamp to `request.time` — it can only say "now". The action and the
+stamp go in one batch and the action's rule uses `getAfter()` to check the
+stamp landed, so skipping it just gets the action refused. The icebreaker
+(one opening message to a stranger until they reply) works the same way:
+the message only commits if the same batch flips `icebreakerUsed` false to
+true, and it can never go back.
+
 ---
 
 ## 1. Why the app moved from usernames to UIDs

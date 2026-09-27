@@ -55,12 +55,17 @@ export function loadBlocks(onChange) {
     .onSnapshot(
       (snapshot) => {
         const blocked = [];
+        const byMe = [];
         snapshot.forEach((doc) => {
           const data = doc.data() || {};
           const other = (data.pair || []).find((u) => u !== state.uid);
           if (other) blocked.push(other);
+          // The ones YOU blocked — the only ones you can lift. Kept from
+          // the same snapshot, so Settings needs no query of its own.
+          if (other && data.blockerUid === state.uid) byMe.push(other);
         });
         state.blockedUids = blocked;
+        state.blockedByMe = byMe;
         if (typeof onChange === "function") onChange();
       },
       (error) => console.error("Blocks error:", error.code || error.message)

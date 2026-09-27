@@ -5146,3 +5146,26 @@ body:not(.is-admin) .admin-only { display: none !important; }
 }
 .pe-older:hover:not(:disabled) { transform: none; box-shadow: none; filter: none; border-color: var(--forest); }
 .pe-older:disabled { opacity: 0.6; }
+
+/* =====================================================================
+   LISTS OF PEOPLE, TWENTY AT A TIME (utils/pager.js)
+   The end of a list that has more is two skeleton rows that shimmer —
+   so it never looks stuck — and the next twenty slide in under them.
+   ===================================================================== */
+.list-more { display: flex; flex-direction: column; gap: var(--s-8); padding: var(--s-8) 0 var(--s-16); }
+.sk-row { display: flex; align-items: center; gap: var(--s-12); padding: 6px 4px; }
+.sk-av, .sk-lines > span {
+  background: linear-gradient(90deg, var(--bone) 0%, var(--ash) 50%, var(--bone) 100%);
+  background-size: 200% 100%;
+  animation: skShimmer 1.2s linear infinite;
+}
+.sk-av { width: 44px; height: 44px; border-radius: 50%; flex: none; }
+.sk-lines { flex: 1; display: flex; flex-direction: column; gap: 7px; }
+.sk-lines > span { display: block; height: 11px; border-radius: 6px; width: 55%; }
+.sk-lines > span + span { width: 32%; }
+@keyframes skShimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+.row-in { animation: rowIn 0.32s var(--ease) both; }
+@keyframes rowIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .sk-av, .sk-lines > span, .row-in { animation: none; }
+}

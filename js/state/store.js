@@ -25,6 +25,7 @@ export const state = {
   // ---- Caches ----
   userCache: {},           // uid -> { username, displayName, avatar }
   blockedUids: [],         // blocked in EITHER direction — always hidden
+  blockedByMe: null,       // the ones YOU blocked (null until the listener answers)
 
   // ---- Orbit: who you'd actually show up for ----
   // One listener over orbit/{pairId} fills all three of these, so a
@@ -154,6 +155,7 @@ export function resetState() {
   state.googlePfp = "";
   state.userCache = {};
   state.blockedUids = [];
+  state.blockedByMe = null;
   state.following = [];
   state.followRequests = [];
   state.isPrivate = false;

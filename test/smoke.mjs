@@ -5042,6 +5042,99 @@ group('a profile loads in pages, posting has limits, and nothing stretches');
 }
 
 /* ------------------------------------------------------------------ */
+group('lists of people load twenty at a time');
+{
+  await seed({});
+  const lists = await page.evaluate(async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const { state } = window.__m;
+    const t = Date.now();
+    const people = Array.from({ length: 45 }, (_, i) => 'p' + String(i).padStart(2, '0'));
+    // Profiles exist but are NOT cached: every name on screen is a read.
+    people.forEach((u, i) => {
+      window.__stubDocs['users/' + u] = { uid: u, username: 'user_' + u, displayName: 'Person ' + i };
+      delete state.userCache[u];
+    });
+    const out = {};
+    const scrollToEnd = async (box) => {
+      box.scrollTop = box.scrollHeight;
+      const s = box.closest('.screen-body') || box;
+      s.scrollTop = s.scrollHeight;
+      await wait(500);
+    };
+
+    // FOLLOWING: an array already in memory; names twenty at a time.
+    state.following = people.slice();
+    window.__readPaths = [];
+    window.openProfileList ? null : null;
+    await (await import('/js/services/followService.js')).openFollowList('me', 'following');
+    await wait(300);
+    const body = document.getElementById('followListBody');
+    out.followingFirst = body.querySelectorAll('.orbit-row').length;
+    out.followingSentinel = !!body.querySelector('.list-more .sk-row');
+    out.namesRead = people.filter((u) => state.userCache[u] && state.userCache[u].displayName !== 'Student').length;
+    await scrollToEnd(body);
+    out.followingSecond = body.querySelectorAll('.orbit-row').length;
+    out.slidIn = body.querySelectorAll('.orbit-row.row-in').length;
+    await scrollToEnd(body);
+    out.followingAll = body.querySelectorAll('.orbit-row').length;
+    out.followingDone = !body.querySelector('.list-more');
+    window.closeFollowList();
+    await wait(300);
+
+    // FOLLOWERS: a query, twenty documents at a time.
+    Object.keys(window.__stubDocs).filter((k) => k.startsWith('users/me/followers/')).forEach((k) => delete window.__stubDocs[k]);
+    people.forEach((u, i) => { window.__stubDocs['users/me/followers/' + u] = { at: t - i * 1000 }; });
+    state.userCache.me.followerCount = 45;
+    window.__reads = 0;
+    await (await import('/js/services/followService.js')).openFollowList('me', 'followers');
+    await wait(300);
+    out.followersFirst = body.querySelectorAll('.orbit-row').length;
+    out.followersTitle = document.getElementById('followListTitle').innerText;
+    await scrollToEnd(body);
+    out.followersSecond = body.querySelectorAll('.orbit-row').length;
+    await scrollToEnd(body);
+    await scrollToEnd(body);
+    out.followersAll = body.querySelectorAll('.orbit-row').length;
+    window.closeFollowList();
+    await wait(300);
+    people.forEach((u) => delete window.__stubDocs['users/me/followers/' + u]);
+    state.following = [];
+
+    // ORBIT: twenty linked at a time.
+    people.forEach((u) => delete state.userCache[u]);
+    state.orbitUids = people.slice();
+    window.openOrbitScreen();
+    await wait(400);
+    const orbit = document.getElementById('orbitBody');
+    out.orbitFirst = orbit.querySelectorAll('.orbit-row').length;
+    await scrollToEnd(orbit);
+    out.orbitSecond = orbit.querySelectorAll('.orbit-row').length;
+    window.closeOrbitScreen();
+    await wait(300);
+    state.orbitUids = [];
+
+    // BLOCKED: from the listener's own snapshot, twenty at a time.
+    state.blockedByMe = people.slice(0, 25);
+    const prof = await import('/js/services/profileService.js');
+    await prof.refreshBlockedList();
+    const blocked = document.getElementById('blockedList');
+    out.blockedFirst = blocked.querySelectorAll('.blocked-row').length;
+    out.blockedSentinel = !!blocked.querySelector('.list-more');
+    state.blockedByMe = [];
+    return out;
+  });
+  ok('following shows twenty, with shimmering rows where the rest will be', lists.followingFirst === 20 && lists.followingSentinel, JSON.stringify(lists));
+  ok('and reads only those twenty names', lists.namesRead === 20, String(lists.namesRead));
+  ok('scrolling to the end brings the next twenty, sliding in', lists.followingSecond === 40 && lists.slidIn === 20);
+  ok('and then the rest, and the shimmer goes', lists.followingAll === 45 && lists.followingDone);
+  ok('followers are fetched twenty at a time as you scroll', lists.followersFirst === 20 && lists.followersSecond === 40 && lists.followersAll === 45, JSON.stringify(lists));
+  ok('the followers title keeps the real total while pages load', /45/.test(lists.followersTitle), lists.followersTitle);
+  ok('your orbit loads twenty at a time too', lists.orbitFirst === 20 && lists.orbitSecond === 40);
+  ok('and so do the people you blocked', lists.blockedFirst === 20 && lists.blockedSentinel);
+}
+
+/* ------------------------------------------------------------------ */
 group('overall');
 ok('no errors, no native dialogs, all the way through', errors.length === 0, errors.join(' | '));
 

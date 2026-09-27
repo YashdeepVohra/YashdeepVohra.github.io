@@ -17,10 +17,11 @@ import { inRecap, wasCalledOff } from './recapRules.js';
 import { INTERESTS, INTERESTS_MAX, BIO_MAX, cleanBio, cleanInterests } from './aboutRules.js';
 import { openOverlay, closeOverlay } from '../utils/overlays.js';
 import { closeChat, startChatWithUid } from './chatService.js';
-import { fetchUser, displayNameFor, usernameFor, avatarFor, rememberUser } from './userService.js';
+import { fetchUser, primeUsers, displayNameFor, usernameFor, avatarFor, rememberUser } from './userService.js';
 import { features } from '../config/features.js';
 import { PHOTO, isOurPhotoUrl, eventPhotos } from './photoRules.js';
 import { hideLocally } from './hiddenService.js';
+import { PAGE, shown, freshFrom, resetPager, sentinel, nextPage, watch } from '../utils/pager.js';
 import { msUntilPostAllowed } from './limitsService.js';
 import { paintSocial } from './memoryService.js';
 import { pickImages, compressImage, uploadPhoto, deletePhotoByUrl, photoError } from './photoService.js';
@@ -1359,23 +1360,35 @@ export async function sendReport() {
    Blocked list, in Settings, so a block can always be undone
    ------------------------------------------------------------------- */
 
-export async function refreshBlockedList() {
+/* Twenty at a time (pager.js). The ids come from the blocks listener
+   the app already runs; this used to query them again and then read
+   every blocked profile at once. */
+const BLOCKED_KEY = "blocked";
+let blockedIds = [];
+
+export async function refreshBlockedList({ reset = true } = {}) {
   const box = document.getElementById("blockedList");
   if (!box) return;
 
-  box.innerHTML = `<p class="settings-hint">Loading...</p>`;
-  const uids = await myBlockList();
+  if (reset) {
+    resetPager(BLOCKED_KEY);
+    box.innerHTML = `<p class="settings-hint">Loading...</p>`;
+    blockedIds = Array.isArray(state.blockedByMe) ? state.blockedByMe.slice() : await myBlockList();
+  }
+  const uids = blockedIds;
 
   if (!uids.length) {
     box.innerHTML = `<p class="settings-hint">You haven't blocked anyone.</p>`;
     return;
   }
 
-  await Promise.all(uids.map((u) => fetchUser(u)));
-  box.innerHTML = uids.map((uid) => {
+  const upto = shown(BLOCKED_KEY);
+  const fresh = freshFrom(BLOCKED_KEY);
+  if (reset) await primeUsers(uids.slice(0, upto));
+  box.innerHTML = uids.slice(0, upto).map((uid, i) => {
     const id = safeId(uid);
     return `
-      <div class="blocked-row">
+      <div class="blocked-row${i >= fresh ? " row-in" : ""}">
         <div class="chat-avatar" style="width:34px;height:34px;font-size:16px;">${renderAvatar(avatarFor(uid))}</div>
         <div style="flex:1;min-width:0;">
           <div class="blocked-name">${escapeHtml(displayNameFor(uid))}</div>
@@ -1383,7 +1396,13 @@ export async function refreshBlockedList() {
         </div>
         <button class="btn-ghost" style="width:auto;padding:7px 14px;font-size:13px;" onclick="window.confirmUnblock('${id}')">Unblock</button>
       </div>`;
-  }).join("");
+  }).join("") + (uids.length > upto ? sentinel(BLOCKED_KEY) : "");
+  if (uids.length > upto) {
+    watch(box, (key) => {
+      if (key !== BLOCKED_KEY) return;
+      nextPage(key, (n) => primeUsers(blockedIds.slice(n, n + PAGE)), () => refreshBlockedList({ reset: false }));
+    });
+  }
 }
 
 
