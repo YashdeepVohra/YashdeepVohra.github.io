@@ -22,6 +22,7 @@
 import { db, FieldValue } from '../config/firebase.js';
 import { state } from '../state/store.js';
 import { safeId } from '../utils/formatters.js';
+import { stampPost, msUntilPostAllowed } from './limitsService.js';
 
 /** Canonical block key for two uids — the same shape as a chat id. */
 export function pairKey(a, b) {
@@ -49,6 +50,8 @@ export function loadBlocks(onChange) {
   state.blocksUnsubscribe = db
     .collection("blocks")
     .where("pair", "array-contains", state.uid)
+    // A ceiling on what one listener can ever bring down.
+    .limit(500)
     .onSnapshot(
       (snapshot) => {
         const blocked = [];
@@ -115,8 +118,12 @@ export async function unblockUser(targetUid) {
 
 export async function submitReport({ targetUid, reason, note = "", targetType = "user", targetId = "", excerpt = "" }) {
   if (!safeId(targetUid)) return false;
+  if (msUntilPostAllowed() > 0) return false;
   try {
-    await db.collection("reports").add({
+    // A report and the posting stamp go in one batch: the rules keep
+    // reports a few seconds apart, so nobody can flood the admin.
+    const batch = db.batch();
+    batch.set(db.collection("reports").doc(), {
       reporterUid: state.uid,
       targetUid,
       targetType,
@@ -128,6 +135,8 @@ export async function submitReport({ targetUid, reason, note = "", targetType = 
       excerpt: String(excerpt || "").slice(0, 1000),
       createdAt: FieldValue.serverTimestamp()
     });
+    stampPost(batch);
+    await batch.commit();
     return true;
   } catch (e) {
     console.error("Report failed:", e.code || e.message);

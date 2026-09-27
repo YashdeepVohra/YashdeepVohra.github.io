@@ -21,6 +21,7 @@ import { fetchUser, displayNameFor, usernameFor, avatarFor, rememberUser } from 
 import { features } from '../config/features.js';
 import { PHOTO, isOurPhotoUrl, eventPhotos } from './photoRules.js';
 import { hideLocally } from './hiddenService.js';
+import { msUntilPostAllowed } from './limitsService.js';
 import { paintSocial } from './memoryService.js';
 import { pickImages, compressImage, uploadPhoto, deletePhotoByUrl, photoError } from './photoService.js';
 import {
@@ -135,13 +136,22 @@ export function closeProfileScreen({ all = false } = {}) {
    history.
    ------------------------------------------------------------------- */
 
-const profileEvents = { uid: "", tab: "hosted", hosted: [], joined: [], joinedLocked: false, loaded: false };
+const profileEvents = {
+  uid: "", tab: "hosted", hosted: [], joined: [], joinedLocked: false, loaded: false,
+  // Paging: the last document of each tab's newest page, and whether
+  // there may be more behind it. See loadMoreProfileEvents().
+  cursor: { hosted: null, joined: null }, more: { hosted: false, joined: false }, paging: false
+};
 
 const DAY = 24 * 60 * 60 * 1000;
 
-// A profile shows the two tabs, not an archive. Both event queries are
-// capped at this and ordered newest-first; see loadProfileEvents().
-const PROFILE_EVENTS_LIMIT = 30;
+// A profile opens with the newest TWELVE of each tab — four rows of the
+// journal grid on a laptop, six on a phone — and "Show older" pages in
+// twelve more at a time. It used to fetch thirty of each on every open,
+// sixty reads for a visitor who mostly looks at the first few.
+// Twelve because the grid is two and three across: it always ends on a
+// full row.
+const PROFILE_EVENTS_LIMIT = 12;
 
 function startOfDay(ms) {
   const d = new Date(ms);
@@ -377,13 +387,16 @@ function paintProfileTabs() {
 
   const hc = document.getElementById("peHostedCount");
   const jc = document.getElementById("peJoinedCount");
-  if (hc) hc.innerText = loaded ? hostedCount : "";
-  if (jc) jc.innerText = loaded && !profileEvents.joinedLocked ? joinedCount : "";
+  // "12+" while there are older ones not loaded yet: a count that
+  // pretended to be the whole history would be wrong on any busy profile.
+  const plus = (kind) => (profileEvents.more[kind] ? "+" : "");
+  if (hc) hc.innerText = loaded ? hostedCount + plus("hosted") : "";
+  if (jc) jc.innerText = loaded && !profileEvents.joinedLocked ? joinedCount + plus("joined") : "";
 
   const statHosted = document.getElementById("statEventsHosted");
   const statJoined = document.getElementById("statEventsJoined");
-  if (statHosted) statHosted.innerText = loaded ? hostedCount : "-";
-  if (statJoined) statJoined.innerText = !loaded ? "-" : profileEvents.joinedLocked ? "–" : joinedCount;
+  if (statHosted) statHosted.innerText = loaded ? hostedCount + plus("hosted") : "-";
+  if (statJoined) statJoined.innerText = !loaded ? "-" : profileEvents.joinedLocked ? "–" : joinedCount + plus("joined");
 }
 
 function paintProfileEvents() {
@@ -425,7 +438,7 @@ function paintProfileEvents() {
   // Only YOU see what you took off your profile, to put it back.
   const hiddenPast = isSelf ? all.filter((e) => hid.has(e.id) && phaseOf(e, now) === "past") : [];
 
-  if (!events.length && !hiddenPast.length) {
+  if (!events.length && !hiddenPast.length && !profileEvents.more[kind]) {
     const copy = kind === "hosted"
       ? (isSelf
           ? { title: "You haven't hosted anything yet", sub: "Start something and it'll live here after it ends.", cta: true }
@@ -463,7 +476,11 @@ function paintProfileEvents() {
       ${hiddenPast.length} hidden from your profile \u00b7 ${showHidden ? "Hide them" : "Show"}
     </button>
     ${showHidden ? `<div class="jr-grid">${hiddenPast.map((e) => memoryCard(e, now, { isSelf, hidden: true })).join("")}</div>` : ""}` : "";
-  list.innerHTML = rows + journal + hiddenBlock;
+  const older = profileEvents.more[kind] ? `
+    <button type="button" class="pe-older" onclick="window.loadMoreProfileEvents()" ${profileEvents.paging ? "disabled" : ""}>
+      ${profileEvents.paging ? "Loading…" : "Show older"}
+    </button>` : "";
+  list.innerHTML = rows + journal + older + hiddenBlock;
   paintSocial(list);
 }
 
@@ -493,6 +510,7 @@ export async function loadUserEvents(targetUid) {
     uid: targetUid,
     tab: fresh ? "hosted" : profileEvents.tab,
     hosted: [], joined: [], joinedLocked, loaded: false, lockedOut: false,
+    cursor: { hosted: null, joined: null }, more: { hosted: false, joined: false }, paging: false
   });
   paintProfileTabs();
 
@@ -556,7 +574,16 @@ export async function loadUserEvents(targetUid) {
       if (!state.eventCache[e.id]) state.eventCache[e.id] = e;
     });
 
-    Object.assign(profileEvents, { hosted, joined, loaded: true });
+    const lastOf = (snap) => (snap && snap.docs && snap.docs.length ? snap.docs[snap.docs.length - 1] : null);
+    Object.assign(profileEvents, {
+      hosted, joined, loaded: true,
+      cursor: { hosted: lastOf(hostedSnap), joined: lastOf(joinedSnap) },
+      // A full page may have more behind it; a short one cannot.
+      more: {
+        hosted: !!hostedSnap && hostedSnap.size >= PROFILE_EVENTS_LIMIT,
+        joined: !!joinedSnap && joinedSnap.size >= PROFILE_EVENTS_LIMIT
+      }
+    });
     if (joined.length) primeHosts(joined);
     paintProfileEvents();
   } catch (error) {
@@ -565,6 +592,46 @@ export async function loadUserEvents(targetUid) {
     Object.assign(profileEvents, { loaded: true });
     list.innerHTML = `<div class="pe-empty"><b>Couldn't load events</b><span>Check your connection and reopen the profile.</span></div>`;
     paintProfileTabs();
+  }
+}
+
+/**
+ * "Show older": the next twelve of the tab on screen, after the last
+ * one already shown. One get, only when asked for.
+ */
+export async function loadMoreProfileEvents() {
+  const kind = profileEvents.tab;
+  const uid = profileEvents.uid;
+  if (!uid || profileEvents.paging || !profileEvents.more[kind] || !profileEvents.cursor[kind]) return;
+  if (kind === "joined" && profileEvents.joinedLocked) return;
+  profileEvents.paging = true;
+  paintProfileEvents();
+  try {
+    const base = kind === "hosted"
+      ? db.collection("events").where("hostUid", "==", uid)
+      : db.collection("events").where("participantUids", "array-contains", uid);
+    const snap = await base.orderBy("expiresAt", "desc")
+      .startAfter(profileEvents.cursor[kind]).limit(PROFILE_EVENTS_LIMIT).get();
+    if (profileEvents.uid !== uid) return;
+    const have = new Set(profileEvents[kind].map((e) => e.id));
+    const fresh = [];
+    snap.forEach((doc) => { if (!have.has(doc.id)) fresh.push({ id: doc.id, ...doc.data() }); });
+    const keep = kind === "hosted"
+      ? fresh.filter((e) => e.hostUid === uid)
+      : fresh.filter((e) => e.hostUid !== uid && (e.participantUids || []).includes(uid) && !isBlocked(e.hostUid));
+    keep.forEach((e) => { if (!state.eventCache[e.id]) state.eventCache[e.id] = e; });
+    if (kind === "joined" && keep.length) primeHosts(keep);
+    profileEvents[kind] = profileEvents[kind].concat(keep);
+    if (snap.docs.length) profileEvents.cursor[kind] = snap.docs[snap.docs.length - 1];
+    profileEvents.more[kind] = snap.size >= PROFILE_EVENTS_LIMIT;
+  } catch (e) {
+    console.error("Older events failed:", e.code || e.message);
+    toast("Couldn't load older events. Try again.");
+  } finally {
+    if (profileEvents.uid === uid) {
+      profileEvents.paging = false;
+      paintProfileEvents();
+    }
   }
 }
 
@@ -1263,6 +1330,10 @@ export async function sendReport() {
 
   const targetType = modal.dataset.targetType || "user";
   const targetId = modal.dataset.targetId || "";
+  if (msUntilPostAllowed() > 0) {
+    if (btn) { btn.disabled = false; btn.innerHTML = "Send report"; }
+    return toast("Slow down a moment — try again in a few seconds.");
+  }
   const ok = await submitReport({ targetUid, reason, note, targetType, targetId, excerpt: reportExcerpt });
   // What you reported leaves YOUR screen now (hiddenService says why
   // it can't leave everybody's until the admin has looked).

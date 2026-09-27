@@ -103,6 +103,15 @@ export function initViewportFit() {
     root.style.setProperty("--vvt", `${Math.round(vv.offsetTop)}px`);
     root.style.setProperty("--vvh", `${Math.round(vv.height)}px`);
     root.classList.toggle("kb-open", open);
+    /* NOT A KEYBOARD, BUT THE VIEW STILL MOVED. A date or time field
+       opens the phone's own picker, which is not a keyboard and often
+       shrinks the screen by less than KEYBOARD_THRESHOLD — but iOS still
+       scrolls the visible area down to the field. A full-screen layer is
+       fixed to the LAYOUT viewport, so its header (Publish) slid up
+       past the top of the screen and was only half visible. Whenever a
+       layer is open and the visible area has moved, pin the layer to
+       what can actually be seen, exactly as the keyboard case does. */
+    root.classList.toggle("vv-shifted", !open && !zoomed && layerOpen() && vv.offsetTop > 1);
 
     // Keep the newest message visible as the composer rises.
     if (open && !wasOpen) {
@@ -140,6 +149,17 @@ export function initViewportFit() {
   // The keyboard animates in over a few hundred milliseconds, and not
   // every browser fires a resize at the end of it. Measure through it.
   const settle = () => [60, 180, 360, 650].forEach((ms) => setTimeout(apply, ms));
+
+  // A picker closing is not always followed by a resize: measure again,
+  // and put the page back where it was if iOS left it scrolled.
+  document.addEventListener("focusout", () => {
+    settle();
+    setTimeout(() => {
+      if (!typingInField() && layerOpen() && Math.abs(window.scrollY - scrollBeforeKb) > 1) {
+        window.scrollTo(0, scrollBeforeKb);
+      }
+    }, 120);
+  });
 
   document.addEventListener("focusin", (event) => {
     const el = event.target;

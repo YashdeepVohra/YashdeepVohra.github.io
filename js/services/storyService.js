@@ -29,6 +29,7 @@ import { isBlocked } from './blockService.js';
 import { PHOTO, isOurPhotoUrl } from './photoRules.js';
 import { pickImages, compressImage, uploadPhoto, deletePhotoByUrl, photoError } from './photoService.js';
 import { isHidden, onHiddenChange } from './hiddenService.js';
+import { stampPost, msUntilPostAllowed } from './limitsService.js';
 import {
   STORY_HOURS, DEFAULT_HOURS, CAPTION_MAX, storyRings, isStoryLive, leftLabel, cleanSong,
   songService, spotifyEmbedFor
@@ -387,6 +388,7 @@ export async function postStory() {
   if (songUrl && !song) {
     return toast(songService(songUrl) ? "Add the song's name too." : "That song link isn't one we can use.");
   }
+  if (msUntilPostAllowed() > 0) return toast("Slow down a moment — try again in a few seconds.");
   posting = true;
   const btn = $("scPost");
   if (btn) { btn.disabled = true; btn.innerHTML = `<i class='bx bx-loader-alt bx-spin'></i>`; }
@@ -404,7 +406,11 @@ export async function postStory() {
       song,
       createdAt: FieldValue.serverTimestamp()
     };
-    await ref.set(body);
+    // With the posting stamp, in one batch (firestore.rules, postAllowed).
+    const batch = db.batch();
+    batch.set(ref, body);
+    stampPost(batch);
+    await batch.commit();
     stories.set(ref.id, Object.assign({}, body, { id: ref.id, createdAt: Date.now() }));
     closeStoryComposer();
     repaint();

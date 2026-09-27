@@ -4243,16 +4243,16 @@ group('photos, the event page and the location');
     out.follows = /B|1/.test(screen.querySelector('.going-text')?.innerText || '');
 
     // Report from the page: a report about THIS EVENT, not just its host.
-    window.__adds = [];
+    window.__adds = []; Object.keys(window.__stubDocs).filter((k) => k.startsWith('reports/')).forEach((k) => delete window.__stubDocs[k]);
     screen.querySelector('.ep-report').click();
     await wait(300);
     const modal = document.getElementById('reportModal');
     out.reportAbout = document.getElementById('reportWho')?.innerText;
     out.reportOpen = !modal.classList.contains('hidden');
     // Not awaited: after sending it asks whether to block them too.
-    window.sendReport();
+    (await import('/js/services/limitsService.js')).__resetPostGapForTest(); window.sendReport();
     await wait(400);
-    const rep = (window.__adds || []).find((a) => a.path === 'reports');
+    const rep = (() => { const d = Object.entries(window.__stubDocs).find(([k]) => k.startsWith('reports/')); return d ? { data: d[1] } : null; })();
     out.filed = rep ? [rep.data.targetUid, rep.data.targetType, rep.data.targetId].join('|') : '';
     window.confirmNo?.();
     await wait(300);
@@ -4565,24 +4565,24 @@ group('chat photos, memories, stories and reports');
     out.likeWrote = window.__writes > 0;
     // Comment.
     document.getElementById('epCommentInput').value = 'I was there!';
-    window.postEventComment();
+    (await import('/js/services/limitsService.js')).__resetPostGapForTest(); window.postEventComment();
     await wait(200);
     out.commented = [...screen.querySelectorAll('.cmt-text')].some((n) => n.innerText === 'I was there!');
     const saved = Object.entries(window.__stubDocs).find(([k, v]) => k.startsWith('events/m1/comments/') && v.text === 'I was there!');
     out.commentSaved = !!saved && saved[1].uid === 'me';
     out.cleared = document.getElementById('epCommentInput').value === '';
     // Report somebody's comment: gone from YOUR screen at once.
-    window.__adds = [];
+    window.__adds = []; Object.keys(window.__stubDocs).filter((k) => k.startsWith('reports/')).forEach((k) => delete window.__stubDocs[k]);
     const row = [...screen.querySelectorAll('.cmt')].find((n) => n.innerText.includes('best night'));
     const btns = row ? [...row.querySelectorAll('.cmt-acts .mem-link')] : [];
     btns.find((b) => b.innerText === 'Report').click();
     await wait(250);
     out.reportWho = document.getElementById('reportWho').innerText;
-    window.sendReport();
+    (await import('/js/services/limitsService.js')).__resetPostGapForTest(); window.sendReport();
     await wait(400);
     if (window.confirmNo) window.confirmNo();
     await wait(250);
-    const r = (window.__adds || []).find((a) => a.path === 'reports');
+    const r = (() => { const d = Object.entries(window.__stubDocs).find(([k]) => k.startsWith('reports/')); return d ? { data: d[1] } : null; })();
     out.reportFiled = r ? [r.data.targetType, r.data.targetId, r.data.excerpt].join('|') : '';
     out.hiddenAfter = ![...screen.querySelectorAll('.cmt-text')].some((n) => n.innerText === 'best night of the sem');
     window.__uploads = [];
@@ -4670,7 +4670,7 @@ group('chat photos, memories, stories and reports');
     out.sheetTitle = document.getElementById('csTitle').innerText;
     document.getElementById('csInput').value = 'next time!';
     window.__lastBatch = null;
-    window.postSheetComment();
+    (await import('/js/services/limitsService.js')).__resetPostGapForTest(); window.postSheetComment();
     await wait(250);
     out.inSheet = [...document.querySelectorAll('#csList .cmt-text')].some((n) => n.innerText === 'next time!');
     const ops = (window.__lastBatch || []).map((o) => o.kind + ' ' + o.path.replace(/comments\/[^/]+$/, 'comments/X'));
@@ -4689,7 +4689,8 @@ group('chat photos, memories, stories and reports');
   ok('a like works right on the card, without opening the event', quick.likedInPlace && quick.likeWrote && quick.pageStayedShut);
   ok('the comment button opens a sheet over the card, not the event', quick.sheet && quick.sheetTitle === 'Chai at the gate');
   ok('a comment posts from the sheet', quick.inSheet === true);
-  ok('the comment and its count go in ONE batch', quick.oneBatch === 'set events/m3/comments/X,set events/m3/social/likes' && quick.countMoves, quick.oneBatch);
+  ok('the comment, its count and the posting stamp go in ONE batch',
+     quick.oneBatch === 'set events/m3/comments/X,set events/m3/social/likes,set users/me/private/limits' && quick.countMoves, quick.oneBatch);
   ok('and the card\'s count moves with it', quick.cardCount === '5', quick.cardCount);
 
   // YOUR profile, and taking something off it.
@@ -4814,11 +4815,11 @@ group('chat photos, memories, stories and reports');
     window.pickStoryHours(3);
     document.getElementById('scCaption').value = 'golden hour';
     document.getElementById('scSongUrl').value = 'https://evil.example/track/1';
-    await window.postStory();
+    (await import('/js/services/limitsService.js')).__resetPostGapForTest(); await window.postStory();
     out.badSongRefused = !Object.keys(window.__stubDocs).some((k) => k.startsWith('stories/'));
     document.getElementById('scSongUrl').value = 'https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT';
     document.getElementById('scSongTitle').value = 'Kesariya — Arijit Singh';
-    await window.postStory();
+    (await import('/js/services/limitsService.js')).__resetPostGapForTest(); await window.postStory();
     for (let i = 0; i < 30 && !Object.keys(window.__stubDocs).some((k) => k.startsWith('stories/')); i++) await wait(100);
     await wait(200);
     const found = Object.entries(window.__stubDocs).find(([k]) => k.startsWith('stories/'));
@@ -4863,11 +4864,11 @@ group('chat photos, memories, stories and reports');
     window.storyNext();           // on to b's
     await wait(150);
     out.nextActs = [...document.querySelectorAll('#svActs .pv-act')].map((b) => b.innerText).join(',');
-    window.__adds = [];
+    window.__adds = []; Object.keys(window.__stubDocs).filter((k) => k.startsWith('reports/')).forEach((k) => delete window.__stubDocs[k]);
     window.reportStory();
     await wait(300);
     out.reportWho = document.getElementById('reportWho').innerText;
-    window.sendReport();
+    (await import('/js/services/limitsService.js')).__resetPostGapForTest(); window.sendReport();
     await wait(400);
     if (window.confirmNo) window.confirmNo();
     await wait(300);
@@ -4893,6 +4894,7 @@ group('chat photos, memories, stories and reports');
     await adminSvc.checkAdmin();
     out.shownForAdmin = getComputedStyle(document.querySelector('.admin-only')).display !== 'none';
     const t = Date.now();
+    Object.keys(window.__stubDocs).filter((k) => k.startsWith('reports/')).forEach((k) => delete window.__stubDocs[k]);
     window.__stubDocs['reports/r1'] = { reporterUid: 'b', targetUid: 'a', targetType: 'comment', targetId: 'm1_c2', reason: 'Harassment or bullying', note: 'not ok', excerpt: 'we go again friday', createdAt: t - 1000 };
     window.__stubDocs['reports/r2'] = { reporterUid: 'b', targetUid: 'c', targetType: 'user', targetId: '', reason: 'Spam or scam', note: '', excerpt: '', createdAt: t - 2000 };
     adminSvc.openAdminScreen();
@@ -4931,6 +4933,112 @@ group('chat photos, memories, stories and reports');
 
   await flag(false);
   await page.evaluate(() => window.__m.ev.renderEvents());
+}
+
+/* ------------------------------------------------------------------ */
+group('a profile loads in pages, posting has limits, and nothing stretches');
+{
+  await seed({});
+  const hist = await page.evaluate(async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const { state } = window.__m;
+    const now = Date.now(), D = 864e5;
+    state.userCache.me.hiddenEvents = [];
+    // Fifteen finished events hosted, newest first by end.
+    window.__events = Array.from({ length: 15 }, (_, i) => ({
+      id: 'h' + i, hostUid: 'me', title: 'Past thing ' + i, place: 'Lawn', tag: '☕ Chill', description: '',
+      startTime: now - (i + 1) * D - 2 * 36e5, expiresAt: now - (i + 1) * D,
+      participantUids: ['me'], hypedUids: [], pendingUids: [], unconfirmedUids: [], circleId: 'main'
+    }));
+    window.__reads = 0;
+    window.openProfileScreen('me');
+    await wait(900);
+    const list = document.getElementById('myProfileEvents');
+    const out = {
+      first: list.querySelectorAll('.jr-card').length,
+      older: !!list.querySelector('.pe-older'),
+      count: document.getElementById('peHostedCount').innerText,
+      newest: (list.querySelector('.jr-title') || {}).innerText
+    };
+    list.querySelector('.pe-older').click();
+    await wait(400);
+    out.after = list.querySelectorAll('.jr-card').length;
+    out.olderGone = !list.querySelector('.pe-older');
+    out.countAfter = document.getElementById('peHostedCount').innerText;
+    out.last = [...list.querySelectorAll('.jr-title')].pop().innerText;
+    window.closeProfileScreen({ all: true });
+    await wait(300);
+    window.__events = [];
+    return out;
+  });
+  ok('a profile opens with its newest twelve, not its whole history', hist.first === 12 && hist.newest === 'Past thing 0', JSON.stringify(hist));
+  ok('says there are more, and has a way to them', hist.older && hist.count === '12+');
+  ok('Show older brings the rest, in order, and then goes', hist.after === 15 && hist.olderGone && hist.last === 'Past thing 14' && hist.countAfter === '15');
+
+  // Posting is four seconds apart — the rules refuse faster, so the app
+  // says so first rather than failing.
+  const slow = await page.evaluate(async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const { state } = window.__m;
+    const lim = await import('/js/services/limitsService.js');
+    const mem = await import('/js/services/memoryService.js');
+    const now = Date.now();
+    state.eventCache.q1 = { id: 'q1', hostUid: 'a', title: 'Done', place: 'Lawn', tag: '☕ Chill', description: '',
+      startTime: now - 5 * 36e5, expiresAt: now - 36e5, participantUids: ['a', 'me'], hypedUids: [], pendingUids: [], unconfirmedUids: [] };
+    mem.retryMemories('q1');
+    await wait(200);
+    window.openComments('q1');
+    await wait(300);
+    lim.__resetPostGapForTest();
+    const input = document.getElementById('csInput');
+    input.value = 'one'; window.postSheetComment(); await wait(200);
+    input.value = 'two'; window.postSheetComment(); await wait(200);
+    const texts = Object.entries(window.__stubDocs).filter(([k]) => k.startsWith('events/q1/comments/')).map(([, v]) => v.text);
+    const out = { texts: texts.join(','), kept: input.value, stamped: !!window.__stubDocs['users/me/private/limits'] };
+    window.closeComments();
+    await wait(250);
+    return out;
+  });
+  ok('a second comment within seconds is held, not sent, and your words stay', slow.texts === 'one' && slow.kept === 'two', JSON.stringify(slow));
+  ok('each post is stamped in the ledger the rules check', slow.stamped === true);
+
+  // A thousand going is full, cap or no cap.
+  const cap = await page.evaluate(async () => {
+    const ev = await import('/js/services/eventsService.js');
+    const now = Date.now();
+    const many = Array.from({ length: 1000 }, (_, i) => 'u' + i);
+    const html = ev.cardActions({ id: 'big', hostUid: 'u0', participantUids: many, hypedUids: [], pendingUids: [],
+      startTime: now, expiresAt: now + 36e5, maxCapacity: null }, 'big');
+    return { full: /act full/.test(html), hardCap: ev.HARD_CAP };
+  });
+  ok('an event with no cap is still full at a thousand', cap.full && cap.hardCap === 1000, JSON.stringify(cap));
+
+  // No stretch: every scroller in a full-screen layer refuses Android's
+  // overscroll stretch, the way the page itself always has.
+  const stretch = await page.evaluate(async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const now = Date.now();
+    window.__m.state.eventCache.q2 = { id: 'q2', hostUid: 'a', title: 'On', place: 'Lawn', tag: '☕ Chill', description: '',
+      startTime: now - 6e5, expiresAt: now + 36e5, participantUids: ['a'], hypedUids: [], pendingUids: [], unconfirmedUids: [] };
+    window.openEventPage('q2');
+    await wait(300);
+    const out = {
+      page: getComputedStyle(document.getElementById('eventPageScroll')).overscrollBehaviorY,
+      create: getComputedStyle(document.querySelector('#createScreen .screen-body')).overscrollBehaviorY
+    };
+    window.closeEventPage();
+    await wait(250);
+    return out;
+  });
+  ok('the event page, and every full-screen layer, does not stretch when pulled', stretch.page === 'none' && stretch.create === 'none', JSON.stringify(stretch));
+
+  // A date picker moved the view without a keyboard: the layer follows it.
+  const pinned = await page.evaluate(() => {
+    const rules = [...document.styleSheets].flatMap((sh) => { try { return [...sh.cssRules]; } catch (e) { return []; } });
+    const txt = rules.map((r) => r.cssText).join('\n');
+    return /html\.vv-shifted \.full-screen-view/.test(txt);
+  });
+  ok('a layer is pinned to what you can see when a date picker moves the view', pinned === true);
 }
 
 /* ------------------------------------------------------------------ */

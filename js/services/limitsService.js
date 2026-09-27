@@ -72,6 +72,24 @@ export function stampAsk(batch) {
   batch.set(limitsRef(), { askAt: FieldValue.serverTimestamp() }, { merge: true });
 }
 
+/* POSTING — a comment, a story or a report. The rules want four
+   seconds between two of them (firestore.rules, postAllowed), stamped
+   in the same batch. Kept a little above four here so the app says
+   "slow down" itself rather than losing a race with the server's clock. */
+export const POST_GAP_MS = 4500;
+let lastPostLocal = 0;
+
+/** How long until another post would be accepted. 0 means now. */
+export function msUntilPostAllowed() {
+  return Math.max(0, lastPostLocal + POST_GAP_MS - Date.now());
+}
+
+/** Add the posting stamp to a batch. */
+export function stampPost(batch) {
+  lastPostLocal = Date.now();
+  batch.set(limitsRef(), { postAt: FieldValue.serverTimestamp() }, { merge: true });
+}
+
 /** Read the ledger. One read, and only when about to start an event. */
 export async function readLimits() {
   try {
@@ -93,3 +111,6 @@ export function limitMessage(kind) {
   }
   return "Slow down a moment — try that again in a few seconds.";
 }
+
+/** For the smoke suite only: forget when you last posted. */
+export function __resetPostGapForTest() { lastPostLocal = 0; }

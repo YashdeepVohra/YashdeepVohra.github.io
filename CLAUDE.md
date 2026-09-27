@@ -230,6 +230,15 @@ Each line is the whole rule. The file after it is the argument for it.
 - A report carries a copy of what was reported (`excerpt`); the admin
   is `admins/{uid}`, made in the console. `notBanned()` guards publishing.
 
+**Scale** → `docs/scale.md`
+
+- Every query and listener has a ceiling; a new one without a limit is a
+  bug. A profile loads 12 per tab and pages ("Show older").
+- Anything people can repeat is rate limited IN THE RULES, stamped in
+  `private/limits` in the same batch: comments, stories and reports
+  4 s apart (`postAllowed`). The ledger's own rule allows only "now".
+- An event holds at most 1000 going (`HARD_CAP`, `withinCapacity`).
+
 **Starting on a bad network** → `docs/boot.md`
 
 - The Firebase SDK is `defer`; the app is one preloaded file,

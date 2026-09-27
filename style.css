@@ -4270,7 +4270,10 @@ html.rotate-lock body *::after { animation-play-state: paused !important; }
 @media (max-width: 1099px) {
   html.kb-open #chatScreen,
   html.kb-open .full-screen-view,
-  html.kb-open .profile-screen-wrapper {
+  html.kb-open .profile-screen-wrapper,
+  html.vv-shifted #chatScreen,
+  html.vv-shifted .full-screen-view,
+  html.vv-shifted .profile-screen-wrapper {
     top: var(--vvt, 0px);
     bottom: auto;
     height: var(--vvh, 100%);
@@ -5117,3 +5120,29 @@ body:not(.is-admin) .admin-only { display: none !important; }
 
 /* A modal gives every button a bottom margin; the sheet's do not want it. */
 .cs-panel button { margin-bottom: 0; }
+
+/* =====================================================================
+   NO STRETCH. Android's overscroll effect STRETCHES a scroller's
+   content when you pull past its end, and every scroller inside a
+   full-screen layer (the event page, settings, create, the comment
+   sheet) did it: the open event visibly stretched when you scrolled to
+   the top or bottom. The page itself has had `none` at the root from
+   the start (feed.md); these are the scrollers that were missing it.
+   `none`, not `contain`: contain stops the scroll chaining but keeps
+   the stretch.
+   ===================================================================== */
+.full-screen-view .screen-body,
+.cs-list,
+#epSideBody,
+.admin-list { overscroll-behavior-y: none; }
+
+/* "Show older" under a profile's history. */
+.pe-older {
+  display: flex; align-items: center; justify-content: center;
+  width: 100%; margin: 0 0 var(--s-16); padding: 10px 16px;
+  background: var(--paper); color: var(--forest);
+  border: 1.5px solid var(--ash); border-radius: var(--r-pill);
+  box-shadow: none; font-size: 14px; font-weight: 600;
+}
+.pe-older:hover:not(:disabled) { transform: none; box-shadow: none; filter: none; border-color: var(--forest); }
+.pe-older:disabled { opacity: 0.6; }

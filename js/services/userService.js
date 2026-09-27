@@ -25,7 +25,7 @@
 // profile screen — passes { force: true } and always hits the server.
 // ==========================================
 
-import { db } from '../config/firebase.js';
+import { db, FieldPath } from '../config/firebase.js';
 import { state } from '../state/store.js';
 import { safeId } from '../utils/formatters.js';
 
@@ -198,9 +198,49 @@ export async function fetchUser(uid, { force = false } = {}) {
 
 /** Warm the cache for a batch of uids, skipping any already present. */
 export async function primeUsers(uids) {
-  const missing = [...new Set(uids)].filter((u) => safeId(u) && !state.userCache[u]);
-  await Promise.all(missing.map((u) => fetchUser(u)));
+  const missing = [...new Set(uids)].filter((u) => safeId(u) && !state.userCache[u] && !priming.has(u));
+  if (!missing.length) return;
+  /* MANY AT ONCE IS ONE REQUEST PER THIRTY, NOT ONE PER PERSON.
+     A first open of a busy feed can need a couple of hundred names
+     (hosts, the faces on every card), and this used to fire a separate
+     get for each, all at once. The reads are the same either way — one
+     per profile — but thirty to a request is a tenth of the round trips
+     and never a burst of hundreds from one phone. A few are still
+     fetched one by one, which is simpler and just as quick. */
+  if (missing.length <= 8) {
+    await Promise.all(missing.map((u) => fetchUser(u)));
+    return;
+  }
+  missing.forEach((u) => priming.add(u));
+  const chunks = [];
+  for (let i = 0; i < missing.length; i += 30) chunks.push(missing.slice(i, i + 30));
+  try {
+    await Promise.all(chunks.map(async (chunk) => {
+      try {
+        const snap = await db.collection("users").where(FieldPath.documentId(), "in", chunk).get();
+        const found = new Set();
+        snap.forEach((doc) => {
+          if (!chunk.includes(doc.id)) return;
+          found.add(doc.id);
+          const data = { uid: doc.id, ...doc.data() };
+          state.userCache[doc.id] = data;
+          freshness[doc.id] = Date.now();
+          rememberUser(doc.id, data);
+          const fromCache = !!(doc.metadata && doc.metadata.fromCache);
+          fetchedListeners.forEach((fn) => { try { fn(doc.id, data, { fromCache }); } catch (e) {} });
+        });
+        chunk.filter((u) => !found.has(u) && !state.userCache[u])
+          .forEach((u) => { state.userCache[u] = { uid: u, ...PLACEHOLDER }; });
+      } catch (e) {
+        // A refused or failed batch falls back to one at a time.
+        await Promise.all(chunk.map((u) => fetchUser(u)));
+      }
+    }));
+  } finally {
+    missing.forEach((u) => priming.delete(u));
+  }
 }
+const priming = new Set();
 
 /** Handle -> uid. Returns "" when the handle is unclaimed. */
 export async function resolveUsernameToUid(rawUsername) {

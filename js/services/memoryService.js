@@ -36,6 +36,7 @@ import { isBlocked } from './blockService.js';
 import { PHOTO, isOurPhotoUrl } from './photoRules.js';
 import { pickImages, compressImage, uploadPhoto, deletePhotoByUrl, photoError } from './photoService.js';
 import { isHidden, onHiddenChange } from './hiddenService.js';
+import { stampPost, msUntilPostAllowed } from './limitsService.js';
 
 export const COMMENT_MAX = 300;
 const cache = new Map();   // eventId -> entry
@@ -401,6 +402,8 @@ export async function postComment(eventId, where = "page") {
   const m = entry(eventId);
   if (!text || !state.uid) return;
   if (!m.loaded) { loadMemories(eventId); return; }
+  // The rules want a few seconds between posts; say so before trying.
+  if (msUntilPostAllowed() > 0) return toast("Slow down a moment — try again in a few seconds.");
   const ref = eventRef(eventId).collection("comments").doc();
   const local = { id: ref.id, uid: state.uid, text, createdAt: Date.now() };
   m.comments = m.comments.concat(local);
@@ -414,6 +417,7 @@ export async function postComment(eventId, where = "page") {
     const batch = db.batch();
     batch.set(ref, { uid: state.uid, text, createdAt: FieldValue.serverTimestamp() });
     batch.set(socialRef(eventId), { comments: FieldValue.increment(1), lastCommentId: ref.id }, { merge: true });
+    stampPost(batch);
     await batch.commit();
   } catch (e) {
     console.error("Comment failed:", e.code || e.message);

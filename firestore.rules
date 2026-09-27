@@ -108,6 +108,21 @@ service cloud.firestore {
     function stampedAsk() {
       return getAfter(limits()).data.askAt == request.time;
     }
+    // POSTING: a comment, a story or a report. Four seconds apart, and
+    // the stamp must land in the same batch — the same shape as asking.
+    // A script that posts a thousand comments, or floods the admin with
+    // reports, is refused by the database, not by the app.
+    function stampedPost() {
+      return getAfter(limits()).data.get('postAt', null) == request.time;
+    }
+    function lastPostAt() {
+      return exists(limits()) && 'postAt' in get(limits()).data
+        ? get(limits()).data.postAt
+        : timestamp.value(0);
+    }
+    function postAllowed() {
+      return stampedPost() && lastPostAt() < request.time - duration.value(4, 's');
+    }
 
     function lastEventAt() {
       return exists(limits()) && 'eventAt' in get(limits()).data
@@ -726,24 +741,41 @@ service cloud.firestore {
       // "now" into it, so it cannot hand itself an earlier last-used
       // time and start again.
       match /private/limits {
+        function limNew(f) { return request.resource.data.get(f, null); }
+        function limOld(f) { return resource == null ? null : resource.data.get(f, null); }
+        // A stamp may only ever say NOW, or stay what it was.
+        function nowOrSame(f) {
+          return limNew(f) == null || limNew(f) == request.time || limNew(f) == limOld(f);
+        }
+
         allow read: if isMe(userId);
         allow write: if isMe(userId)
           && request.resource.data.keys().hasOnly(
-               ['eventAt', 'askAt', 'eventWindowAt', 'eventCount'])
-          && (!('eventAt' in request.resource.data)
-              || request.resource.data.eventAt == request.time)
-          && (!('askAt' in request.resource.data)
-              || request.resource.data.askAt == request.time)
-          && (!('eventWindowAt' in request.resource.data)
-              || request.resource.data.eventWindowAt == request.time
-              || request.resource.data.eventWindowAt == resource.data.eventWindowAt)
-          && (!('eventCount' in request.resource.data)
-              || request.resource.data.eventCount is int);
+               ['eventAt', 'askAt', 'eventWindowAt', 'eventCount', 'postAt'])
+          && nowOrSame('eventAt')
+          && nowOrSame('askAt')
+          && nowOrSame('postAt')
+          // The day's window only restarts once the old one is a day old,
+          // and the count only goes up by one, or back to one with a new
+          // window. Before this, the ledger could be written freely (see
+          // /private/{docId} below) — reset to zero between events, which
+          // made the 25-a-day limit a suggestion.
+          && (limNew('eventWindowAt') == limOld('eventWindowAt')
+              || (limNew('eventWindowAt') == request.time
+                  && (limOld('eventWindowAt') == null
+                      || limOld('eventWindowAt') < request.time - duration.value(1, 'd'))))
+          && (limNew('eventCount') == limOld('eventCount')
+              || (limNew('eventCount') is int
+                  && (limNew('eventCount') == (limOld('eventCount') == null ? 0 : limOld('eventCount')) + 1
+                      || (limNew('eventCount') == 1 && limNew('eventWindowAt') == request.time))));
       }
 
       // Email and anything else private. Only the owner, ever.
+      // NOT the ledger: rules OR together, and this used to match
+      // private/limits as well, which let its owner write anything into
+      // the rate limits.
       match /private/{docId} {
-        allow read, write: if isMe(userId);
+        allow read, write: if isMe(userId) && docId != 'limits';
       }
     }
 
@@ -784,9 +816,17 @@ service cloud.firestore {
         return signedIn() && uid() in resource.data.participantUids;
       }
 
+      // An event with no cap still has one: a thousand going, five
+      // thousand hyped, five hundred waiting. Past that the document
+      // itself gets too big to send to every phone watching the feed on
+      // each change (and Firestore caps a document at 1 MB). Mirrors
+      // HARD_CAP in eventsService.js.
       function withinCapacity() {
-        return request.resource.data.maxCapacity == null
-            || request.resource.data.participantUids.size() <= request.resource.data.maxCapacity;
+        return request.resource.data.participantUids.size() <= 1000
+            && request.resource.data.get('hypedUids', []).size() <= 5000
+            && request.resource.data.get('pendingUids', []).size() <= 500
+            && (request.resource.data.maxCapacity == null
+                || request.resource.data.participantUids.size() <= request.resource.data.maxCapacity);
       }
 
       function needsApproval() {
@@ -1088,6 +1128,7 @@ service cloud.firestore {
           && eventEnded(eventId)
           && !blockedWith(eventData(eventId).hostUid)
           && notBanned()
+          && postAllowed()
           // Counted in the same batch (see social/likes above).
           && getAfter(/databases/$(database)/documents/events/$(eventId)/social/likes).data.get('lastCommentId', '') == commentId;
         allow update: if false;
@@ -1438,7 +1479,8 @@ service cloud.firestore {
             || get(/databases/$(database)/documents/users/$(uid())).data.get('private', false) != true)
         && okSong(request.resource.data.get('song', null))
         && request.resource.data.createdAt == request.time
-        && notBanned();
+        && notBanned()
+        && postAllowed();
 
       allow update: if false;
       allow delete: if signedIn() && (resource.data.uid == uid() || isAdmin());
@@ -1473,7 +1515,8 @@ service cloud.firestore {
         // without being given the keys to anybody's conversation.
         && request.resource.data.get('excerpt', '') is string
         && request.resource.data.get('excerpt', '').size() <= 1000
-        && !('status' in request.resource.data);
+        && !('status' in request.resource.data)
+        && postAllowed();
 
       // THE ADMIN (admins/{uid}) reads them and marks each one handled.
       // Nobody else ever reads a report — not even the person who sent it.

@@ -72,6 +72,8 @@ export function loadOrbit(onChange) {
   state.orbitUnsubscribe = db
     .collection("orbit")
     .where("pair", "array-contains", state.uid)
+    // A ceiling on what one listener can ever bring down.
+    .limit(500)
     .onSnapshot(
       (snapshot) => {
         const linked = [];

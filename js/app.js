@@ -121,7 +121,8 @@ import {
   hideFromProfile,
   showOnProfile,
   toggleHiddenOnProfile,
-  isHiddenFromMyProfile
+  isHiddenFromMyProfile,
+  loadMoreProfileEvents
 } from './services/profileService.js';
 
 import {
@@ -295,6 +296,7 @@ Object.assign(window, {
   showOnProfile,
   toggleHiddenOnProfile,
   isHiddenFromMyProfile,
+  loadMoreProfileEvents,
   pickMention,
   openProfileByHandle,
   openStories,

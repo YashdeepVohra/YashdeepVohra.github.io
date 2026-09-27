@@ -37,6 +37,11 @@ onStoriesChange(() => renderEvents());
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+/* Even an event with no cap has one: a thousand going. Past that the
+   document is too big to send to every phone on each change. Mirrors
+   withinCapacity() in firestore.rules. */
+export const HARD_CAP = 1000;
+
 /**
  * When this event's document may be swept.
  *
@@ -1219,7 +1224,7 @@ export function cardActions(e, id) {
   const hypeCount = (e.hypedUids || []).length;
   const hasJoined = participants.includes(state.uid);
   const isHost = e.hostUid === state.uid;
-  const isFull = e.maxCapacity && attendees >= e.maxCapacity;
+  const isFull = attendees >= (e.maxCapacity || HARD_CAP);
   const flame = `<svg class="hype-flame" viewBox="0 0 24 24" width="17" height="17"
     fill="${hasHyped ? "currentColor" : "none"}" stroke="currentColor"
     stroke-width="${hasHyped ? 0 : 1.7}" stroke-linejoin="round" aria-hidden="true">
@@ -1614,7 +1619,7 @@ export function renderEvents() {
 // ---------- Membership ----------
 export function joinEvent(id) {
   const e = state.eventCache[id];
-  if (e && e.maxCapacity && (e.participantUids || []).length >= e.maxCapacity) {
+  if (e && (e.participantUids || []).length >= (e.maxCapacity || HARD_CAP)) {
     return toast("This event is already full.");
   }
   db.collection("events").doc(id)
