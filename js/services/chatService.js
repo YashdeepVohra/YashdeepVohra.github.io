@@ -35,6 +35,9 @@ import { vibeColor } from './eventsService.js';
 import { inRecap } from './recapRules.js';
 import { searchPeople } from './searchService.js';
 import { closeEmojiPicker } from '../interactions/emojiPicker.js';
+import { features } from '../config/features.js';
+import { PHOTO, isOurPhotoUrl } from './photoRules.js';
+import { pickImages, compressImage, uploadPhoto, deletePhotoByUrl, photoError } from './photoService.js';
 import { activityOf, primePresence, onPresenceChange, setPresenceTargets, MAX_FETCH } from './presenceService.js';
 import {
   primeUsers, fetchUser, displayNameFor, usernameFor, avatarFor,
@@ -46,9 +49,11 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /* The inbox preview travels in the chat write every send already makes
    (see messageRules.previewOf). lastMsgId says WHICH message it is a
    copy of, so an edit or a delete of that one message can follow it. */
-function lastFields(text, msgId) {
+function lastFields(text, msgId, photo = "") {
+  const said = previewOf(text, { isOurEvent: (u) => !!eventIdFromUrl(u) });
   return {
-    lastText: previewOf(text, { isOurEvent: (u) => !!eventIdFromUrl(u) }),
+    // A photo says so in the inbox, with its caption if it has one.
+    lastText: photo ? (said ? "\u{1F4F7} " + said : "\u{1F4F7} Photo") : said,
     lastSenderUid: state.uid,
     lastMsgId: msgId
   };
@@ -472,16 +477,17 @@ const SVG_SEND = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="t
 const SVG_TICK = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
 
 // ---------- Sending ----------
-export async function sendMessage() {
+export async function sendMessage({ photo = "" } = {}) {
   const input = document.getElementById("msgInput");
   if (!input || !auth.currentUser) return;
 
   // Same box, same Enter key — but if the composer is in edit mode it
   // is rewriting something already sent, not adding to the thread.
-  if (state.editingMessage) return commitEdit();
+  if (state.editingMessage && !photo) return commitEdit();
 
+  // A photo carries whatever is in the box as its caption, or nothing.
   const text = input.value.trim();
-  if (!text || !state.currentChat) return;
+  if ((!text && !photo) || !state.currentChat) return;
   if (text.length > 2000) return toast("That message is too long.");
 
   const replyData = state.replyingToMessage
@@ -502,6 +508,7 @@ export async function sendMessage() {
       await messagesRef().add({
         senderUid: state.uid,
         text,
+        ...(photo ? { photo } : {}),
         // TWO STAMPS, on purpose. `time` is the client's own number:
         // the thread is ordered by it, it paints the instant you hit
         // send, and a message written with no signal still carries
@@ -536,7 +543,7 @@ export async function sendMessage() {
     let status = state.currentChatStatus;
     let initiatedByUid = state.currentChatInitiatorUid;
     const msgRef = messagesRef().doc();
-    const last = lastFields(text, msgRef.id);
+    const last = lastFields(text, msgRef.id, photo);
 
     let usedIcebreaker = false;
 
@@ -590,6 +597,7 @@ export async function sendMessage() {
     const body = {
       senderUid: state.uid,
       text,
+      ...(photo ? { photo } : {}),
       time: Date.now(),
       sentAt: FieldValue.serverTimestamp(),
       replyTo: replyData
@@ -606,11 +614,50 @@ export async function sendMessage() {
   } catch (error) {
     console.error("Send failed:", error.code || error.message);
     input.value = text;
+    // The upload landed but the message did not: nothing points at it.
+    if (photo) deletePhotoByUrl(photo);
     toast(error.code === "permission-denied"
-      ? "Wait for them to reply before sending another."
+      ? (photo ? "Photos unlock once they've replied." : "Wait for them to reply before sending another.")
       : "Message failed to send.");
+    if (photo) throw error;
   } finally {
     updateChatFooterUI();
+  }
+}
+
+/* ---------- Photos in a thread ----------
+   Hidden while features.photos is off. A photo is NOT an icebreaker:
+   the one opening line to a stranger stays words, and the rules refuse
+   a photo in a thread that is still locked. Whatever is typed in the
+   box goes with the photo as its caption. */
+let photoSending = false;
+
+function mayPhotoHere() {
+  if (state.currentChatType === "event") return true;
+  return state.currentChatStatus === "unlocked" || state.currentChatMutual === true;
+}
+
+export async function sendChatPhoto() {
+  if (!features.photos || photoSending || !state.currentChat) return;
+  if (!mayPhotoHere()) {
+    return toast("Photos unlock once they've replied.");
+  }
+  const [file] = await pickImages();
+  if (!file) return;
+  photoSending = true;
+  const btn = document.getElementById("photoBtn");
+  btn?.classList.add("busy");
+  toast("Sending photo…");
+  try {
+    const blob = await compressImage(file, { edge: PHOTO.EVENT_EDGE });
+    const url = await uploadPhoto("chats", blob);
+    await sendMessage({ photo: url });
+  } catch (e) {
+    console.error("Photo send failed:", e.code || e.message);
+    if (!/permission/.test(e.code || "")) toast(photoError(e));
+  } finally {
+    photoSending = false;
+    btn?.classList.remove("busy");
   }
 }
 
@@ -764,6 +811,7 @@ const ACTION_LABELS = {
   pin:    { icon: "bx-pin",      label: "Pin to the top" },
   unpin:  { icon: "bx-pin",      label: "Unpin" },
   edit:   { icon: "bx-edit-alt", label: "Edit" },
+  report: { icon: "bx-flag",     label: "Report" },
   delete: { icon: "bx-trash",    label: "Delete", danger: true }
 };
 
@@ -870,12 +918,21 @@ function runMessageAction(key) {
   closeMessageActions();
   if (!msg || key === "cancel") return;
 
-  if (key === "reply") return initiateReply(msg.senderUid, String(msg.text || ""), msg.id);
+  if (key === "reply") return initiateReply(msg.senderUid, String(msg.text || (msg.photo ? "\u{1F4F7} Photo" : "")), msg.id);
   if (key === "copy") return copyMessageText(msg);
   if (key === "pin") return pinMessage(id);
   if (key === "unpin") return unpinMessage();
   if (key === "edit") return startEditMessage(id);
   if (key === "delete") return confirmRetractMessage(id);
+  if (key === "report") {
+    // About THIS message: where it is and which one, so the admin can
+    // find it. Filed against the person who sent it.
+    return window.openReport?.(msg.senderUid, {
+      type: "message",
+      id: `${state.currentChatType === "event" ? "e" : "d"}_${state.currentChat}_${id}`,
+      excerpt: [msg.text || "", msg.photo || ""].filter(Boolean).join("\n")
+    });
+  }
 }
 
 // ---------- The pinned message ----------
@@ -1112,17 +1169,20 @@ async function confirmRetractMessage(messageId) {
 
   const chatId = state.currentChat;
   const type = state.currentChatType;
-  const before = { text: msg.text, replyTo: msg.replyTo || null, deleted: false, deletedAt: null };
+  const before = { text: msg.text, replyTo: msg.replyTo || null, deleted: false, deletedAt: null, photo: msg.photo || "" };
   // The quoted reply goes too: a tombstone that still quotes somebody
   // is half a message, and it is the half you didn't mean to keep.
-  const shown = { text: "", replyTo: null, deleted: true, deletedAt: Date.now() };
+  const shown = { text: "", replyTo: null, deleted: true, deletedAt: Date.now(), photo: "" };
   const written = { text: "", replyTo: null, deleted: true, deletedAt: FieldValue.serverTimestamp() };
+  // A photo goes with the words: off the message, and out of storage.
+  if (msg.photo) written.photo = FieldValue.delete();
 
   patchLocalMessage(messageId, shown);
 
   try {
     await messagesRef(chatId, type).doc(messageId).update(written);
     followPreview(chatId, type, messageId, "");
+    if (before.photo) deletePhotoByUrl(before.photo);
   } catch (e) {
     console.error("Delete failed:", e.code || e.message);
     patchLocalMessage(messageId, before);
@@ -1657,9 +1717,15 @@ function renderMessages(msgs, { keepScroll = null } = {}) {
       ? `<span class="msg-edited">edited</span>`
       : "";
 
+    // A photo is drawn only if it is the SENDER's own upload.
+    const photo = !gone && isOurPhotoUrl(m.photo, "chats", m.senderUid) ? m.photo : "";
+    const photoHTML = photo
+      ? `<img class="msg-photo" src="${escapeHtml(photo)}" alt="Photo" loading="lazy" decoding="async"
+             onclick="event.stopPropagation(); window.openPhoto(this.src)">`
+      : "";
     const bodyHTML = gone
       ? `<span class="msg-gone"><i class='bx bx-block'></i>This message was deleted</span>`
-      : formatMessage(rawText, isMediaOnly);
+      : photoHTML + (rawText ? `<span class="msg-text">${formatMessage(rawText, isMediaOnly)}</span>` : "");
 
     // Reaction chips sit under the bubble, on the bubble's own side.
     // The emoji is never written into the handler — the chip carries
@@ -1721,7 +1787,7 @@ function renderMessages(msgs, { keepScroll = null } = {}) {
            onclick="window.handleMessageTap(event, this)">
         ${swipeIconHTML}
         ${nameTagHTML}
-        <div class="${isMediaOnly ? "msg-bubble media-only" : "msg-bubble"} ${gone ? "msg-gone-bubble" : ""} ${isMe ? "msg-sent" : "msg-received"} ${shape}">
+        <div class="${isMediaOnly ? "msg-bubble media-only" : "msg-bubble"}${photo ? " has-photo" : ""}${photo && !rawText ? " photo-only" : ""} ${gone ? "msg-gone-bubble" : ""} ${isMe ? "msg-sent" : "msg-received"} ${shape}">
            ${replyBlock}
            ${bodyHTML}
            ${editedTag}

@@ -57,9 +57,20 @@ import {
   showSharedEvent,
   onPlaceInput
 } from './services/eventsService.js';
-import { openEventPage, closeEventPage, reportEvent } from './services/eventPage.js';
+import { openEventPage, closeEventPage, reportEvent, postEventComment } from './services/eventPage.js';
+import {
+  retryMemories, openMemoryPhoto, addMemoryPhotos, toggleMemoryLike, deleteComment, reportComment
+} from './services/memoryService.js';
 import { addDraftPhotos, removeDraftPhoto } from './services/eventPhotoService.js';
 import { applyFeatureFlags } from './config/features.js';
+import { openPhoto, closePhotoViewer, onPhotoViewerTap } from './utils/photoViewer.js';
+import {
+  openAdminScreen, closeAdminScreen, toggleAdminFilter, adminDismiss, adminRemove, adminBan
+} from './services/adminService.js';
+import {
+  openStories, closeStories, storyNext, storyPrev, playStorySong, openStoryAuthor, deleteStory,
+  reportStory, addStory, pickStoryHours, onStoryCaption, onStorySongUrl, closeStoryComposer, postStory
+} from './services/storyService.js';
 
 import {
   startChat,
@@ -78,7 +89,8 @@ import {
   jumpToPinned,
   unpinMessage,
   onInboxSearch,
-  clearInboxSearch
+  clearInboxSearch,
+  sendChatPhoto
 } from './services/chatService.js';
 
 import {
@@ -253,6 +265,37 @@ Object.assign(window, {
   reportEvent,
   addDraftPhotos,
   removeDraftPhoto,
+  openPhoto,
+  closePhotoViewer,
+  onPhotoViewerTap,
+  sendChatPhoto,
+  postEventComment,
+  retryMemories,
+  openMemoryPhoto,
+  addMemoryPhotos,
+  toggleMemoryLike,
+  deleteComment,
+  reportComment,
+  openStories,
+  closeStories,
+  storyNext,
+  storyPrev,
+  playStorySong,
+  openStoryAuthor,
+  deleteStory,
+  reportStory,
+  addStory,
+  pickStoryHours,
+  onStoryCaption,
+  onStorySongUrl,
+  closeStoryComposer,
+  postStory,
+  openAdminScreen,
+  closeAdminScreen,
+  toggleAdminFilter,
+  adminDismiss,
+  adminRemove,
+  adminBan,
 
   // Chat
   startChat,

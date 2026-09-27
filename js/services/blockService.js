@@ -113,7 +113,7 @@ export async function unblockUser(targetUid) {
   }
 }
 
-export async function submitReport({ targetUid, reason, note = "", targetType = "user", targetId = "" }) {
+export async function submitReport({ targetUid, reason, note = "", targetType = "user", targetId = "", excerpt = "" }) {
   if (!safeId(targetUid)) return false;
   try {
     await db.collection("reports").add({
@@ -123,6 +123,9 @@ export async function submitReport({ targetUid, reason, note = "", targetType = 
       targetId: String(targetId).slice(0, 128),
       reason: String(reason).slice(0, 60),
       note: String(note).slice(0, 500),
+      // What was said or shown, copied, so the admin can judge it
+      // without reading anybody's conversation (firestore.rules).
+      excerpt: String(excerpt || "").slice(0, 1000),
       createdAt: FieldValue.serverTimestamp()
     });
     return true;

@@ -756,7 +756,7 @@ group('editing and taking back a message');
     };
   });
   ok('your own fresh message offers all four actions', r.mineNow === 'reply,copy,edit,delete', r.mineNow);
-  ok("somebody else's offers only reply and copy", r.theirsNow === 'reply,copy', r.theirsNow);
+  ok("somebody else's offers reply, copy and report — never edit or delete", r.theirsNow === 'reply,copy,report', r.theirsNow);
   ok('past 15 minutes the edit is gone but delete is not', r.mineLate === 'reply,copy,delete', r.mineLate);
   ok('a tombstone offers nothing at all', r.tombstone === 0);
   ok('the window closes exactly at 15 minutes', r.atEdge === true && r.pastEdge === false);
@@ -903,7 +903,7 @@ group('editing and taking back a message');
   ok('the sheet offers edit and delete on your own message',
      dom.mineRows === 'reply,copy,edit,delete', dom.mineRows);
   ok('the sheet quotes the message it is acting on', /typo heer/.test(dom.quoted), dom.quoted);
-  ok("the sheet offers neither on somebody else's", dom.theirRows === 'reply,copy', dom.theirRows);
+  ok("the sheet offers neither on somebody else's, and Report instead", dom.theirRows === 'reply,copy,report', dom.theirRows);
   ok('the sheet refuses to open on a tombstone', dom.sheetOnTombstone === false);
   ok('editing loads the message into the box', dom.loadedIntoBox === 'typo heer', dom.loadedIntoBox);
   ok('the composer says it is editing', dom.noteIsEditing === true && dom.sendBecameTick === true,
@@ -4384,6 +4384,356 @@ group('photos, the event page and the location');
   ok('and a second bucket of this project is fine, so moving to Mumbai later is config', pure.mumbai === true);
   ok('its storage path can be read back for a delete', pure.path === 'events/abc/AbCdEfGhIj0123456789.jpg');
   ok('a phone photo is scaled to 1600 on its long edge, never up', pure.fit === '{"w":1600,"h":1200}' && pure.noUpscale === '{"w":800,"h":600}');
+}
+
+/* ------------------------------------------------------------------ */
+group('chat photos, memories, stories and reports');
+{
+  const SU = (folder, host, n) => 'https://firebasestorage.googleapis.com/v0/b/livesociyaweb.firebasestorage.app/o/'
+    + folder + '%2F' + host + '%2FPhotoNumber' + n + 'xxxxxxxx.jpg?alt=media&token=t-' + n;
+  const png = Buffer.from(await page.evaluate(async () => {
+    const c = document.createElement('canvas'); c.width = 1200; c.height = 900;
+    const x = c.getContext('2d'); x.fillStyle = '#6a9'; x.fillRect(0, 0, 1200, 900);
+    const b = await new Promise((r) => c.toBlob(r, 'image/png'));
+    return [...new Uint8Array(await b.arrayBuffer())];
+  }));
+  const pick = async (trigger) => {
+    const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.evaluate(trigger)]);
+    await chooser.setFiles({ name: 'p.png', mimeType: 'image/png', buffer: png });
+  };
+  const flag = (on) => page.evaluate(async (on) => {
+    const f = await import('/js/config/features.js');
+    f.features.photos = on; f.applyFeatureFlags();
+  }, on);
+
+  // ---- CHAT ----
+  const ended = Object.assign(mkEvent('m1', 'a', 'Rooftop jam', '\u{1F3A7} Music'),
+    { startTime: now - 5 * 36e5, expiresAt: now - 36e5, participantUids: ['a', 'b', 'me'],
+      photos: [SU('events', 'a', 1)] });
+  const live = mkEvent('m2', 'b', 'Still on', '☕ Chill');
+  await seed({ m1: ended, m2: live });
+
+  const chatOff = await page.evaluate(async () => {
+    const { state } = window.__m;
+    const chat = await import('/js/services/chatService.js');
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    state.currentChat = 'a_me'; state.currentChatType = 'direct'; state.currentChatStatus = 'unlocked';
+    state.currentChatInitiatorUid = ''; state.currentChatData = { unreadByUid: '', typingUid: '' };
+    state.currentChatLoaded = true; state.currentOtherUid = 'a';
+    window.switchScreen('chatScreen');
+    window.__docs = [];
+    chat.loadMessages();
+    await wait(150);
+    return { btn: getComputedStyle(document.getElementById('photoBtn')).display };
+  });
+  ok('while photos are off, the composer has no photo button', chatOff.btn === 'none', chatOff.btn);
+
+  await flag(true);
+  await page.evaluate(() => { window.__uploads = []; document.getElementById('msgInput').value = 'look at this'; });
+  await pick(() => document.getElementById('photoBtn').click());
+  const chatOn = await page.evaluate(async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    for (let i = 0; i < 40 && !Object.keys(window.__stubDocs).some((k) => k.startsWith('chats/a_me/messages/')); i++) await wait(100);
+    const key = Object.keys(window.__stubDocs).find((k) => k.startsWith('chats/a_me/messages/'));
+    const msg = key ? window.__stubDocs[key] : {};
+    const chatDoc = window.__stubDocs['chats/a_me'] || {};
+    return {
+      upload: (window.__uploads[0] || {}).path || '',
+      photo: msg.photo || '', caption: msg.text,
+      preview: chatDoc.lastText || '',
+      box: document.getElementById('msgInput').value
+    };
+  });
+  ok('a photo in a thread uploads into chats/<your uid>/', /^chats\/me\/[A-Za-z0-9_-]{20}\.jpg$/.test(chatOn.upload), JSON.stringify(chatOn));
+  ok('and is sent with what was typed as its caption', chatOn.photo.indexOf('chats%2Fme%2F') > 0 && chatOn.caption === 'look at this' && chatOn.box === '');
+  ok('the inbox says it was a photo', chatOn.preview === '\u{1F4F7} look at this', chatOn.preview);
+
+  const shown = await page.evaluate(async ({ mine, foreign }) => {
+    const { state } = window.__m;
+    const chat = await import('/js/services/chatService.js');
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const t = Date.now();
+    window.__docs = [
+      { id: 'q1', data: () => ({ senderUid: 'a', text: '', photo: foreign, time: t - 3000 }) },
+      { id: 'q2', data: () => ({ senderUid: 'me', text: '', photo: mine, time: t - 2000 }) }
+    ];
+    chat.loadMessages();
+    await wait(200);
+    const q2 = document.getElementById('msg-q2');
+    const out = {
+      stolen: !!document.querySelector('#msg-q1 .msg-photo'),
+      drawn: !!(q2 && q2.querySelector('.msg-photo')),
+      bare: !!(q2 && q2.querySelector('.msg-bubble.photo-only'))
+    };
+    q2.querySelector('.msg-photo').click();
+    await wait(150);
+    out.viewer = !document.getElementById('photoViewer').classList.contains('hidden');
+    window.closePhotoViewer();
+    await wait(150);
+    // A stranger's thread: no photo, even with the button there.
+    state.currentChatStatus = 'icebreaker'; state.currentChatMutual = false;
+    const before = window.__uploads.length;
+    await chat.sendChatPhoto();
+    out.lockedNoUpload = window.__uploads.length === before;
+    state.currentChatStatus = 'unlocked';
+    // Taking a photo back takes the photo too.
+    window.__storageDeletes = []; window.__updates = [];
+    chat.openMessageActions('q2');
+    await wait(80);
+    document.querySelector('#msgActionList .action-row[data-act="delete"]').click();
+    await wait(250);
+    window.confirmYes();
+    await wait(300);
+    const upd = (window.__updates || []).find((u) => /messages\/q2$/.test(u.path));
+    out.photoCleared = !!upd && upd.keys.includes('photo') && !!upd.patch.photo && upd.patch.photo.__op === 'delete';
+    out.fileGone = window.__storageDeletes.some((p) => p.startsWith('chats/me/'));
+    chat.closeChat({ silent: true });
+    await wait(150);
+    return out;
+  }, { mine: SU('chats', 'me', 7), foreign: SU('chats', 'b', 8) });
+  ok('a photo is drawn in its bubble, with no bubble round it when it has no caption', shown.drawn && shown.bare, JSON.stringify(shown));
+  ok('a photo that is not the sender\'s own upload is never drawn', shown.stolen === false);
+  ok('tapping it opens it whole', shown.viewer === true);
+  ok('no photo goes into a thread still waiting on its first reply', shown.lockedNoUpload === true);
+  ok('taking a photo back removes it from the message and from storage', shown.photoCleared && shown.fileGone);
+
+  // ---- MEMORIES ----
+  await page.evaluate(() => {
+    const t = Date.now();
+    window.__stubDocs['events/m1/memories/a_0'] = { uid: 'a', photo: 'https://firebasestorage.googleapis.com/v0/b/livesociyaweb.firebasestorage.app/o/memories%2Fa%2FPhotoNumber1xxxxxxxx.jpg?alt=media&token=t-1', createdAt: t - 5000 };
+    window.__stubDocs['events/m1/memories/b_0'] = { uid: 'b', photo: 'https://example.com/not-ours.jpg', createdAt: t - 4000 };
+    window.__stubDocs['events/m1/social/likes'] = { uids: ['a', 'b'] };
+    window.__stubDocs['events/m1/comments/c1'] = { uid: 'b', text: 'best night of the sem', createdAt: t - 3000 };
+    window.__stubDocs['events/m1/comments/c2'] = { uid: 'a', text: 'we go again friday', createdAt: t - 2000 };
+  });
+  const mem = await page.evaluate(async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    window.openEventPage('m1');
+    await wait(500);
+    const screen = document.getElementById('eventScreen');
+    const likeSpan = () => screen.querySelector('.mem-like span');
+    const out = {
+      section: !!screen.querySelector('.mem'),
+      tiles: screen.querySelectorAll('.mem-tile').length,
+      add: !!screen.querySelector('.mem-add'),
+      likeText: likeSpan() && likeSpan().innerText,
+      comments: screen.querySelectorAll('.cmt').length,
+      compose: !document.getElementById('epCompose').classList.contains('hidden')
+    };
+    // Like: straight away, then written.
+    window.__writes = 0;
+    screen.querySelector('.mem-like').click();
+    await wait(80);
+    out.liked = screen.querySelector('.mem-like').classList.contains('on') && likeSpan().innerText === '3';
+    out.likeWrote = window.__writes > 0;
+    // Comment.
+    document.getElementById('epCommentInput').value = 'I was there!';
+    window.postEventComment();
+    await wait(200);
+    out.commented = [...screen.querySelectorAll('.cmt-text')].some((n) => n.innerText === 'I was there!');
+    const saved = Object.entries(window.__stubDocs).find(([k, v]) => k.startsWith('events/m1/comments/') && v.text === 'I was there!');
+    out.commentSaved = !!saved && saved[1].uid === 'me';
+    out.cleared = document.getElementById('epCommentInput').value === '';
+    // Report somebody's comment: gone from YOUR screen at once.
+    window.__adds = [];
+    const row = [...screen.querySelectorAll('.cmt')].find((n) => n.innerText.includes('best night'));
+    const btns = row ? [...row.querySelectorAll('.cmt-acts .mem-link')] : [];
+    btns.find((b) => b.innerText === 'Report').click();
+    await wait(250);
+    out.reportWho = document.getElementById('reportWho').innerText;
+    window.sendReport();
+    await wait(400);
+    if (window.confirmNo) window.confirmNo();
+    await wait(250);
+    const r = (window.__adds || []).find((a) => a.path === 'reports');
+    out.reportFiled = r ? [r.data.targetType, r.data.targetId, r.data.excerpt].join('|') : '';
+    out.hiddenAfter = ![...screen.querySelectorAll('.cmt-text')].some((n) => n.innerText === 'best night of the sem');
+    window.__uploads = [];
+    return out;
+  });
+  ok('a finished event\'s page has its memories', mem.section, JSON.stringify(mem));
+  ok('with only real memory photos drawn', mem.tiles === 1);
+  ok('a place for yours, because you went', mem.add === true);
+  ok('its likes and its comments', mem.likeText === '2' && mem.comments === 2);
+  ok('and a comment box under it', mem.compose === true);
+  ok('a like shows at once and is written', mem.liked && mem.likeWrote);
+  ok('a comment shows at once, is saved as yours, and clears the box', mem.commented && mem.commentSaved && mem.cleared);
+  ok('reporting a comment files it with a copy of what it said', mem.reportWho === 'this comment' && mem.reportFiled === 'comment|m1_c1|best night of the sem', mem.reportFiled);
+  ok('and it is gone from your screen straight away', mem.hiddenAfter === true);
+
+  await pick(() => document.querySelector('#eventScreen .mem-add').click());
+  const memAdd = await page.evaluate(async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    for (let i = 0; i < 40 && !window.__stubDocs['events/m1/memories/me_0']; i++) await wait(100);
+    await wait(150);
+    const d = window.__stubDocs['events/m1/memories/me_0'] || {};
+    const out = {
+      upload: (window.__uploads[0] || {}).path || '',
+      doc: d.uid === 'me' && String(d.photo).indexOf('memories%2Fme%2F') > 0,
+      tiles: document.querySelectorAll('#eventScreen .mem-tile').length
+    };
+    window.closeEventPage();
+    await wait(250);
+    // A live event has no memories and no comment box.
+    window.openEventPage('m2');
+    await wait(250);
+    out.liveMem = !!document.querySelector('#eventScreen .mem');
+    out.liveCompose = !document.getElementById('epCompose').classList.contains('hidden');
+    window.closeEventPage();
+    await wait(250);
+    return out;
+  });
+  ok('adding a memory uploads into memories/<you>/ as <you>_0', /^memories\/me\//.test(memAdd.upload) && memAdd.doc, JSON.stringify(memAdd));
+  ok('and it joins the grid', memAdd.tiles === 2);
+  ok('a live event has no memories and no comment box yet', memAdd.liveMem === false && memAdd.liveCompose === false);
+
+  // A profile's finished events open their page — that is the journal.
+  const journal = await page.evaluate(async () => {
+    const prof = await import('/js/services/profileService.js');
+    const { state } = window.__m;
+    const row = document.createElement('div');
+    row.innerHTML = prof.__rowForTest(state.eventCache.m1, Date.now(), 'joined');
+    const btn = row.querySelector('.pe-row');
+    return { tag: btn && btn.tagName, tap: (btn && btn.getAttribute('onclick')) || '', thumb: !!row.querySelector('.pe-thumb img') };
+  });
+  ok('on a profile, a finished event opens its page (and its memories)', journal.tag === 'BUTTON' && journal.tap.indexOf('openEventPage') >= 0, JSON.stringify(journal));
+  ok('with its cover where its glyph was', journal.thumb === true);
+
+  // ---- STORIES ----
+  await page.evaluate(() => { window.__uploads = []; window.__m.ev.renderEvents(); });
+  await page.waitForTimeout(200);
+  const rail = await page.evaluate(() => {
+    const mine = document.querySelector('#liveRail .story-item.mine');
+    return { mine: !!mine, label: mine && mine.querySelector('.story-label').innerText };
+  });
+  ok('switched on, the rail starts with your own story ring', rail.mine && rail.label === 'You', JSON.stringify(rail));
+
+  await pick(() => document.querySelector('#liveRail .story-item.mine').click());
+  await page.waitForTimeout(300);
+  const composed = await page.evaluate(async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const out = { open: !document.getElementById('storyComposer').classList.contains('hidden'),
+                  hours: [...document.querySelectorAll('#scHours .sc-hour')].map((b) => b.innerText).join(',') };
+    window.pickStoryHours(3);
+    document.getElementById('scCaption').value = 'golden hour';
+    document.getElementById('scSongUrl').value = 'https://evil.example/track/1';
+    await window.postStory();
+    out.badSongRefused = !Object.keys(window.__stubDocs).some((k) => k.startsWith('stories/'));
+    document.getElementById('scSongUrl').value = 'https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT';
+    document.getElementById('scSongTitle').value = 'Kesariya — Arijit Singh';
+    await window.postStory();
+    for (let i = 0; i < 30 && !Object.keys(window.__stubDocs).some((k) => k.startsWith('stories/')); i++) await wait(100);
+    await wait(200);
+    const found = Object.entries(window.__stubDocs).find(([k]) => k.startsWith('stories/'));
+    const doc = found && found[1];
+    out.doc = doc ? [doc.uid, doc.hours, doc.audience, doc.caption, doc.song && doc.song.title].join('|') : '';
+    out.photoOurs = !!doc && String(doc.photo).indexOf('stories%2Fme%2F') > 0;
+    out.closed = document.getElementById('storyComposer').classList.contains('hidden');
+    out.ringOn = !!document.querySelector('#liveRail .story-item.mine .story-ring.photo');
+    return out;
+  });
+  ok('Your story opens the picker, then the composer with 2–24h to choose from', composed.open && composed.hours === '2h,3h,6h,12h,24h', JSON.stringify(composed));
+  ok('a song link from anywhere else is refused', composed.badSongRefused === true);
+  ok('a story is posted with its hours, audience, caption and song', composed.doc === 'me|3|public|golden hour|Kesariya — Arijit Singh', composed.doc);
+  ok('its photo is your own upload, and your ring lights up', composed.photoOurs && composed.closed && composed.ringOn);
+
+  const watched = await page.evaluate(async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const t = Date.now();
+    window.__stubDocs['stories/s_other'] = {
+      uid: 'b', photo: 'https://firebasestorage.googleapis.com/v0/b/livesociyaweb.firebasestorage.app/o/stories%2Fb%2FPhotoNumber4xxxxxxxx.jpg?alt=media&token=t-4',
+      caption: 'hi', hours: 6, audience: 'public', song: null, createdAt: t - 60000 };
+    // One that ended an hour ago: 2h, posted 3h ago.
+    window.__stubDocs['stories/s_old'] = {
+      uid: 'c', photo: 'https://firebasestorage.googleapis.com/v0/b/livesociyaweb.firebasestorage.app/o/stories%2Fc%2FPhotoNumber5xxxxxxxx.jpg?alt=media&token=t-5',
+      caption: '', hours: 2, audience: 'public', song: null, createdAt: t - 3 * 3600e3 };
+    const st = await import('/js/services/storyService.js');
+    st.loadStories({ force: true });
+    await wait(300);
+    const titles = () => [...document.querySelectorAll('#liveRail .story-item')].map((n) => n.getAttribute('title') || '');
+    const out = { rings: titles().length, expiredShown: titles().some((x) => x.charAt(0) === 'C') };
+    window.openStories('me');
+    await wait(200);
+    out.viewerOpen = !document.getElementById('storyViewer').classList.contains('hidden');
+    out.caption = document.getElementById('svCaption').innerText;
+    const songB = document.querySelector('#svSong .sv-song-text b');
+    out.song = songB && songB.innerText;
+    out.ownActs = [...document.querySelectorAll('#svActs .pv-act')].map((b) => b.innerText).join(',');
+    document.querySelector('#svSong .sv-song-card').click();
+    await wait(100);
+    const frame = document.querySelector('#svSong iframe');
+    out.player = (frame && frame.getAttribute('src')) || '';
+    window.storyNext();           // on to b's
+    await wait(150);
+    out.nextActs = [...document.querySelectorAll('#svActs .pv-act')].map((b) => b.innerText).join(',');
+    window.__adds = [];
+    window.reportStory();
+    await wait(300);
+    out.reportWho = document.getElementById('reportWho').innerText;
+    window.sendReport();
+    await wait(400);
+    if (window.confirmNo) window.confirmNo();
+    await wait(300);
+    out.otherRingGone = !titles().some((x) => x.charAt(0) === 'B');
+    return out;
+  });
+  ok('a story that has run its hours is not in the rail', watched.expiredShown === false && watched.rings === 2, JSON.stringify(watched));
+  ok('watching shows the caption and the song', watched.viewerOpen && watched.caption === 'golden hour' && watched.song === 'Kesariya — Arijit Singh');
+  ok('your own offers Add another and Delete', watched.ownActs === 'Add another,Delete');
+  ok('tapping the song plays it in Spotify\'s own player, only then', watched.player === 'https://open.spotify.com/embed/track/4cOdK2wGLETKBW3PvgPWqT');
+  ok('somebody else\'s offers Report', watched.nextActs === 'Report');
+  ok('and a reported story leaves your rail', watched.reportWho === 'this story' && watched.otherRingGone === true);
+
+  // ---- THE ADMIN ----
+  const admin = await page.evaluate(async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const adminSvc = await import('/js/services/adminService.js');
+    const out = {};
+    delete window.__stubDocs['admins/me'];
+    await adminSvc.checkAdmin();
+    out.hiddenForOthers = getComputedStyle(document.querySelector('.admin-only')).display === 'none';
+    window.__stubDocs['admins/me'] = { note: 'set by hand in the console' };
+    await adminSvc.checkAdmin();
+    out.shownForAdmin = getComputedStyle(document.querySelector('.admin-only')).display !== 'none';
+    const t = Date.now();
+    window.__stubDocs['reports/r1'] = { reporterUid: 'b', targetUid: 'a', targetType: 'comment', targetId: 'm1_c2', reason: 'Harassment or bullying', note: 'not ok', excerpt: 'we go again friday', createdAt: t - 1000 };
+    window.__stubDocs['reports/r2'] = { reporterUid: 'b', targetUid: 'c', targetType: 'user', targetId: '', reason: 'Spam or scam', note: '', excerpt: '', createdAt: t - 2000 };
+    adminSvc.openAdminScreen();
+    await wait(300);
+    const list = document.getElementById('adminReports');
+    out.cards = list.querySelectorAll('.ar').length;
+    const ex = list.querySelector('.ar-text');
+    out.excerpt = ex && ex.innerText;
+    window.__updates = [];
+    const card1 = [...list.querySelectorAll('.ar')].find((c) => c.innerText.includes('we go again'));
+    [...card1.querySelectorAll('.ar-btn')].find((b) => b.innerText === 'Remove').click();
+    await wait(250);
+    window.confirmYes();
+    await wait(300);
+    out.commentGone = !window.__stubDocs['events/m1/comments/c2'];
+    const upd = (window.__updates || []).find((u) => u.path === 'reports/r1');
+    out.marked = !!upd && upd.patch.status === 'removed' && upd.patch.handledBy === 'me';
+    out.openLeft = document.querySelectorAll('#adminReports .ar').length;
+    window.__stubDocs['users/c'] = { uid: 'c', username: 'c', banned: false };
+    [...document.querySelectorAll('#adminReports .ar-btn')].find((b) => b.innerText === 'Ban').click();
+    await wait(250);
+    window.confirmYes();
+    await wait(300);
+    out.banned = window.__stubDocs['users/c'].banned === true;
+    adminSvc.closeAdminScreen();
+    await wait(250);
+    delete window.__stubDocs['admins/me'];
+    await adminSvc.checkAdmin();
+    return out;
+  });
+  ok('Reports to review is there for an admin and nobody else', admin.hiddenForOthers && admin.shownForAdmin, JSON.stringify(admin));
+  ok('the admin sees each report with a copy of what was said', admin.cards === 2 && admin.excerpt === 'we go again friday');
+  ok('Remove takes the comment down and marks the report', admin.commentGone && admin.marked);
+  ok('a handled report leaves the open list', admin.openLeft === 1);
+  ok('Ban sets banned on the account', admin.banned === true);
+
+  await flag(false);
+  await page.evaluate(() => window.__m.ev.renderEvents());
 }
 
 /* ------------------------------------------------------------------ */

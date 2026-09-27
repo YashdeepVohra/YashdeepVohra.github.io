@@ -422,6 +422,9 @@
         <div class="composer-field">
           <button id="emojiBtn" class="composer-emoji" type="button" aria-label="Emoji" aria-expanded="false" aria-controls="emojiPanel" title="Emoji"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.3 14.2a4.6 4.6 0 0 0 7.4 0"/><circle cx="9" cy="9.8" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="9.8" r="1.2" fill="currentColor" stroke="none"/></svg></button>
           <input id="msgInput" placeholder="Message..." autocomplete="off" oninput="handleTyping()" onkeydown="if(event.key === 'Enter') sendMessage()" />
+          <!-- A photo, with whatever is in the box as its caption. Hidden
+               until features.photos is on. -->
+          <button id="photoBtn" class="composer-emoji composer-photo needs-photos" type="button" aria-label="Send a photo" title="Photo" onmousedown="event.preventDefault()" onclick="sendChatPhoto()"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="14" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="m20.5 16-5-5-8.5 8"/></svg></button>
         </div>
         <!-- mousedown is cancelled so a tap on Send never takes focus off
              the field: on iOS that blur dropped the keyboard, and the
@@ -621,6 +624,8 @@
       <div id="blockedList"></div>
     </div>
 
+    <!-- Only for whoever has a document at admins/{uid} (adminService.js). -->
+    <button class="btn-ghost admin-only" onclick="openAdminScreen()" style="margin-top:24px;"><i class='bx bx-flag'></i> Reports to review</button>
     <button class="logoutBtn" onclick="logout()" style="margin-top:24px;">
       <i class='bx bx-log-out'></i> Log Out
     </button>
@@ -721,6 +726,13 @@
     <div style="width:42px;"></div>
   </div>
   <div class="screen-body" id="eventPageBody"></div>
+  <!-- Comments, on a finished event only. Outside the painted body on
+       purpose: the page is repainted when the event changes, and a box
+       you are typing in must never be rebuilt under you. -->
+  <div class="ep-compose hidden" id="epCompose">
+    <input id="epCommentInput" maxlength="300" placeholder="Add a comment…" autocomplete="off" onkeydown="if(event.key === 'Enter') postEventComment()">
+    <button type="button" class="ep-post" onmousedown="event.preventDefault()" onclick="postEventComment()">Post</button>
+  </div>
 </div>
 
 <div id="deleteModal" class="modal-overlay hidden">
@@ -843,6 +855,67 @@
     <button id="reportSubmit" onclick="sendReport()">Send report</button>
     <button class="btn-ghost" onclick="closeReport()">Cancel</button>
   </div>
+</div>
+
+<!-- REPORT TRIAGE, for the admin only (js/services/adminService.js). -->
+<div id="adminScreen" class="full-screen-view hidden">
+  <div class="screen-header">
+    <button class="back-btn" aria-label="Back" onclick="closeAdminScreen()"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 5.5 4.5 12l6.5 6.5"/></svg></button>
+    <div class="header-title">Reports</div>
+    <button class="text-action-btn" id="adminFilter" onclick="toggleAdminFilter()">Show all</button>
+  </div>
+  <div class="screen-body"><div class="admin-list" id="adminReports"></div></div>
+</div>
+
+<!-- STORIES (js/services/storyService.js). Hidden until features.photos is on. -->
+<div id="storyViewer" class="story-viewer hidden" role="dialog" aria-label="Story">
+  <div class="sv-frame">
+    <img id="svImg" class="sv-img" alt="">
+    <div class="sv-top">
+      <div class="sv-bars" id="svBars"></div>
+      <div class="sv-head">
+        <div class="sv-who" id="svWho"></div>
+        <button type="button" class="sv-x" aria-label="Close" onclick="closeStories()"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button>
+      </div>
+    </div>
+    <!-- Tap the left third to go back, anywhere else to go on. -->
+    <div class="sv-tap back" onclick="storyPrev()"></div>
+    <div class="sv-tap on" onclick="storyNext()"></div>
+    <div class="sv-foot">
+      <div id="svCaption" class="sv-caption hidden"></div>
+      <div id="svSong" class="sv-song hidden"></div>
+      <div id="svActs" class="sv-acts"></div>
+    </div>
+  </div>
+</div>
+
+<div id="storyComposer" class="full-screen-view hidden">
+  <div class="screen-header">
+    <button class="back-btn" aria-label="Cancel" onclick="closeStoryComposer()"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button>
+    <div class="header-title">New story</div>
+    <button class="text-action-btn" id="scPost" onclick="postStory()">Share</button>
+  </div>
+  <div class="screen-body">
+    <div class="sc-preview"><img id="scPreview" alt=""></div>
+    <label class="settings-label about-label" for="scCaption">Caption <span class="about-count" id="scCaptionCount">0/150</span></label>
+    <textarea id="scCaption" rows="2" maxlength="150" placeholder="Say something (optional)" oninput="onStoryCaption()"></textarea>
+    <label class="settings-label">Stays up for</label>
+    <div class="sc-hours" id="scHours"></div>
+    <label class="settings-label" for="scSongUrl">A song (optional)</label>
+    <input id="scSongUrl" type="url" inputmode="url" maxlength="300" autocomplete="off" placeholder="Paste a Spotify, YouTube Music or JioSaavn link" oninput="onStorySongUrl()">
+    <input id="scSongTitle" maxlength="100" autocomplete="off" placeholder="Song — Artist">
+    <p class="settings-hint" id="scSongHint">A story can't play music by itself — people tap the song to listen on the app it's from.</p>
+  </div>
+</div>
+
+<!-- One photo, whole (js/utils/photoViewer.js). Tap anywhere to close. -->
+<div id="photoViewer" class="photo-viewer hidden" onclick="onPhotoViewerTap(event)" role="dialog" aria-label="Photo">
+  <img id="photoViewerImg" alt="">
+  <div class="pv-foot">
+    <div id="photoViewerCaption" class="pv-caption hidden"></div>
+    <div id="photoViewerActs" class="pv-acts hidden"></div>
+  </div>
+  <button type="button" class="photo-viewer-x" aria-label="Close"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></svg></button>
 </div>
 
 <div id="loading-screen">

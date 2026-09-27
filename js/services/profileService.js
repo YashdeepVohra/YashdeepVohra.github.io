@@ -19,7 +19,8 @@ import { openOverlay, closeOverlay } from '../utils/overlays.js';
 import { closeChat, startChatWithUid } from './chatService.js';
 import { fetchUser, displayNameFor, usernameFor, avatarFor, rememberUser } from './userService.js';
 import { features } from '../config/features.js';
-import { PHOTO, isOurPhotoUrl } from './photoRules.js';
+import { PHOTO, isOurPhotoUrl, eventPhotos } from './photoRules.js';
+import { hideLocally } from './hiddenService.js';
 import { pickImages, compressImage, uploadPhoto, deletePhotoByUrl, photoError } from './photoService.js';
 import {
   orbitStatus, inOrbit, hasVouched, vouchCount, vouchersYouKnow, renderOrbitRings
@@ -190,6 +191,9 @@ function sortForProfile(events, now) {
 
 function profileEventRow(e, now, kind) {
   const id = safeId(e.id);
+  // The event's cover stands in for its glyph, so a profile reads as a
+  // journal of what they went to.
+  const cover = eventPhotos(e)[0] || "";
   const phase = phaseOf(e, now);
   const vibe = vibeColor(e.tag);
   const glyph = escapeHtml((e.tag || "").trim().split(" ")[0] || "✨");
@@ -222,16 +226,21 @@ function profileEventRow(e, now, kind) {
     people = `<i class='bx bx-group'></i> ${guests} going`;
   }
 
-  // Live and upcoming open in the feed; a finished one opens in Recap
-  // while it is still there. After that there is nowhere to take you,
-  // so it isn't a button pretending to be one.
-  const reachable = id && (phase !== "past" || inRecap(e, now, state.uid));
+  // Live and upcoming open in the feed. A finished one opens its event
+  // page, which is where its MEMORIES are — photos, likes, comments —
+  // for as long as the event exists, not just while it is in Recap.
+  // That is what makes a profile's Hosted and Joined a journal.
+  const reachable = !!id;
   const tag = reachable ? "button" : "div";
-  const tap = reachable ? ` onclick="window.jumpToEvent('${id}')"` : "";
+  const tap = !reachable ? ""
+    : phase === "past" ? ` onclick="window.openEventPage('${id}')"`
+    : ` onclick="window.jumpToEvent('${id}')"`;
 
   return `
     <${tag} class="pe-row ${phase}${reachable ? " tappable" : ""}" style="--vibe:${vibe}"${tap}>
-      <span class="pe-glyph">${glyph}</span>
+      ${cover
+        ? `<span class="pe-glyph pe-thumb"><img src="${escapeHtml(cover)}" alt="" loading="lazy" decoding="async"></span>`
+        : `<span class="pe-glyph">${glyph}</span>`}
       <span class="pe-body">
         <span class="pe-title">${escapeHtml(e.title)}</span>
         <span class="pe-sub">
@@ -247,6 +256,9 @@ function profileEventRow(e, now, kind) {
       </span>
     </${tag}>`;
 }
+
+/** For the smoke suite: one profile row, as the profile would draw it. */
+export const __rowForTest = (e, now, kind) => profileEventRow(e, now, kind);
 
 function paintProfileTabs() {
   const hostedCount = profileEvents.hosted.length;
@@ -1074,16 +1086,26 @@ const REPORT_REASONS = [
  * filed against the uid responsible; the type and id tell the admin
  * WHAT to look at, which a report against a person alone never did.
  */
+// What can be reported, besides a person. firestore.rules has the same list.
+const REPORT_TYPES = ["event", "message", "comment", "memory", "story"];
+const REPORT_NOUN = {
+  event: "this event", message: "this message", comment: "this comment",
+  memory: "this photo", story: "this story"
+};
+
+let reportExcerpt = "";
+
 export function openReport(targetUid, about = null) {
   const modal = document.getElementById("reportModal");
   if (!modal) return;
 
   modal.dataset.target = safeId(targetUid);
-  const type = about && /^(event)$/.test(about.type) ? about.type : "user";
+  const type = about && REPORT_TYPES.includes(about.type) ? about.type : "user";
   modal.dataset.targetType = type;
   modal.dataset.targetId = type === "user" ? "" : (safeId(about.id) || "");
+  reportExcerpt = type === "user" ? "" : String((about && about.excerpt) || "").slice(0, 1000);
   const who = document.getElementById("reportWho");
-  if (who) who.innerText = type === "event" ? "this event" : `@${usernameFor(targetUid)}`;
+  if (who) who.innerText = type === "user" ? `@${usernameFor(targetUid)}` : REPORT_NOUN[type];
 
   const list = document.getElementById("reportReasons");
   if (list) {
@@ -1119,7 +1141,10 @@ export async function sendReport() {
 
   const targetType = modal.dataset.targetType || "user";
   const targetId = modal.dataset.targetId || "";
-  const ok = await submitReport({ targetUid, reason, note, targetType, targetId });
+  const ok = await submitReport({ targetUid, reason, note, targetType, targetId, excerpt: reportExcerpt });
+  // What you reported leaves YOUR screen now (hiddenService says why
+  // it can't leave everybody's until the admin has looked).
+  if (ok && ["comment", "memory", "story"].includes(targetType) && targetId) hideLocally(targetType, targetId);
 
   if (btn) { btn.disabled = false; btn.innerHTML = "Send report"; }
   closeReport();

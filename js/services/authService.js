@@ -29,6 +29,8 @@ import { loadMyProfile } from './followService.js';
 import { refreshSocialUI } from '../utils/ui.js';
 import { loadChatList } from './chatService.js';
 import { startPresence, stopPresence } from './presenceService.js';
+import { stopStories } from './storyService.js';
+import { checkAdmin } from './adminService.js';
 
 const REDIRECT_KEY = "isRedirecting";
 
@@ -247,6 +249,14 @@ export function initAuthListener() {
 }
 
 export function initializeUserApp(userData) {
+  // A banned account (set by the admin, docs/photos.md "Reports") is
+  // told so and signed out. The rules are what actually stop it
+  // publishing; this is so it is never left wondering why.
+  if (userData.banned === true) {
+    toast("This account has been suspended. Contact the livesociya admin if you think that's a mistake.");
+    setTimeout(() => logout(), 2500);
+    return;
+  }
   state.username = userData.username || "";
   state.userDisplayName = userData.displayName || state.username || "Student";
   state.userAvatar = userData.avatar || "\u{1F464}";
@@ -314,6 +324,8 @@ export function initializeUserApp(userData) {
   // while the app is on screen. Nothing is read about anybody else
   // until they are on your screen (presenceService.js).
   startPresence();
+  // One get, about yourself only: is there an admins/{uid} for you?
+  checkAdmin();
 
   /* The feed does NOT wait for the circle document.
      It never needed to: which circle you are in is `circleId` on your
@@ -507,6 +519,7 @@ export async function claimUsername() {
 
 export function logout() {
   stopPresence();
+  stopStories();
   clearOverlays();
   setLoading(true);
   switchScreen(null);

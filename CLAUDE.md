@@ -219,6 +219,13 @@ Each line is the whole rule. The file after it is the argument for it.
   (`commitTray` uploads behind it). Unused uploads are deleted.
 - The cover sits UNDER the band at 16:9 (max 320px), never over it.
   The event page (`eventPage.js`) is where the rest is.
+- A finished event is a MEMORY (`memoryService.js`): photos from who
+  went (id `<uid>_<n>`, three each), one `social/likes` doc, comments.
+  Read with gets on open, never listened to. Profile rows open it.
+- A story ends at the server's createdAt + `hours` (2/3/6/12/24). Rings
+  are forest, never ember. A song is a LINK, never audio under a photo.
+- A report carries a copy of what was reported (`excerpt`); the admin
+  is `admins/{uid}`, made in the console. `notBanned()` guards publishing.
 
 **Starting on a bad network** → `docs/boot.md`
 
@@ -400,15 +407,14 @@ reactions, a host's pinned message, the Recap
 receipt, the sage-on-paper redesign, the poster/stub cards, and share
 links for an event.
 
-Built, switched off until Blaze: photos (profile pictures, event
-photos with a cover in the feed) — `docs/photos.md`. Built and on: the
-event page with Report, and the 80-character location limit.
+Built, switched off until Blaze (`docs/photos.md`): profile pictures,
+event photos with a cover in the feed, photos in chat, memory photos,
+stories with a song sticker. Built and on: the event page, likes and
+comments on finished events (memories), Report on everything, the
+admin's report screen, and the 80-character location limit.
 
-Not built, roughly in the order I'd do them: push notifications (the
-client half needs no Blaze; the sender is a Cloud Function in
-asia-south1, the Firestore region), photos in chat, memories (photos,
-likes and comments on a finished event), stories, report triage for
-the admin.
+Not built: push notifications (the client half needs no Blaze; the
+sender is a Cloud Function in asia-south1, the Firestore region).
 
 Considered and parked: voice notes. Everything above costs *reads*, which
 have a 50k/day free tier. Voice notes cost storage and egress — a

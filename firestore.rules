@@ -230,6 +230,18 @@ service cloud.firestore {
         && timestamp.value(ms) > request.time - duration.value(7, 'd');
     }
 
+    // A message is words, a photo, or a photo with words under it. The
+    // photo must be the sender's own upload (okPhotoUrl), so a message
+    // can never make somebody's browser fetch an address of the
+    // sender's choosing.
+    function okMessageBody() {
+      return ('photo' in request.resource.data)
+        ? okPhotoUrl(request.resource.data.photo, 'chats', uid())
+            && request.resource.data.text is string
+            && request.resource.data.text.size() <= 2000
+        : isString(request.resource.data.text, 2000);
+    }
+
     function isMessageSender() {
       return signedIn() && resource.data.senderUid == uid();
     }
@@ -259,9 +271,11 @@ service cloud.firestore {
     }
 
     function isRetraction() {
-      return changedKeys().hasOnly(['text', 'replyTo', 'editedAt', 'deleted', 'deletedAt'])
+      return changedKeys().hasOnly(['text', 'replyTo', 'editedAt', 'deleted', 'deletedAt', 'photo'])
         && request.resource.data.deleted == true
         && request.resource.data.text == ''
+        // A photo goes with the words.
+        && !('photo' in request.resource.data)
         && request.resource.data.deletedAt == request.time
         // One way. A tombstone never comes back to life.
         && messageLives();
@@ -455,6 +469,25 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/events/$(eventId)).data;
     }
 
+    // An event that is over. Memories and comments open only then.
+    function eventEnded(eventId) {
+      return eventData(eventId).expiresAt < request.time.toMillis();
+    }
+
+    // THE ADMIN is whoever has a document at admins/{uid}, made by hand
+    // in the console. Nobody can write one from the app.
+    function isAdmin() {
+      return signedIn() && exists(/databases/$(database)/documents/admins/$(uid()));
+    }
+
+    // A banned account keeps reading but can no longer publish: events,
+    // stories, memories and comments check this. It costs one read per
+    // such write, never per read. (Messages don't check it — that would
+    // be a read on every message sent; blocking covers a thread.)
+    function notBanned() {
+      return get(/databases/$(database)/documents/users/$(uid())).data.get('banned', false) != true;
+    }
+
     function handleIsMine(handle) {
       return exists(/databases/$(database)/documents/usernames/$(handle))
         && get(/databases/$(database)/documents/usernames/$(handle)).data.uid == uid();
@@ -596,6 +629,12 @@ service cloud.firestore {
              || isMe(userId)
            )
         && countFollowsTheEdge(userId, request.resource.data.followerEdge);
+
+      // THE ADMIN may ban or unban, and touch nothing else. A banned
+      // account can still read; notBanned() stops it publishing.
+      allow update: if isAdmin()
+        && changedKeys().hasOnly(['banned'])
+        && request.resource.data.banned is bool;
 
       // Accounts are never deleted from the client — that would free a
       // handle and orphan every event and message it owns.
@@ -785,6 +824,7 @@ service cloud.firestore {
         // night is the single easiest way to kill this app, and it is
         // not something the client can be trusted to prevent.
         && stampedEvent()
+        && notBanned()
         && lastEventAt() < request.time - duration.value(90, 's')
         && (
              !windowIsOpen()
@@ -891,7 +931,8 @@ service cloud.firestore {
           && request.resource.data.expiresAt < resource.data.expiresAt
         );
 
-      allow delete: if isHost();
+      // The host, or the admin taking down a reported event.
+      allow delete: if isHost() || isAdmin();
 
       // ---- Typing, in its own subcollection ----
       //
@@ -954,6 +995,67 @@ service cloud.firestore {
                   && request.resource.data.senderUid is string));
       }
 
+      // ---- MEMORIES (docs/photos.md) ----
+      // Once an event is over it becomes a memory: photos from the
+      // people who went, likes, and comments. None of it exists while
+      // the event is live — that is what hype and the chat are for.
+
+      // A photo from somebody who went. The id is <uid>_<0|1|2>, which
+      // is how "three each" is enforced without counting anything.
+      match /memories/{memId} {
+        allow read: if signedIn();
+        allow create: if signedIn()
+          && request.resource.data.keys().hasOnly(['uid', 'photo', 'createdAt'])
+          && request.resource.data.uid == uid()
+          && memId.matches('^' + uid() + '_[0-2]$')
+          && uid() in eventData(eventId).participantUids
+          && eventEnded(eventId)
+          && okPhotoUrl(request.resource.data.photo, 'memories', uid())
+          && request.resource.data.createdAt == request.time
+          && notBanned();
+        allow update: if false;
+        // Yours, or anything on your own event, or the admin's call.
+        allow delete: if signedIn()
+          && (resource.data.uid == uid() || eventData(eventId).hostUid == uid() || isAdmin());
+      }
+
+      // Likes: ONE document, social/likes, holding every uid. One read
+      // answers both "how many" and "have I", and you may only ever add
+      // or remove yourself — the same rule as hype.
+      match /social/{docId} {
+        allow read: if signedIn();
+        allow create: if signedIn()
+          && docId == 'likes'
+          && request.resource.data.keys().hasOnly(['uids'])
+          && request.resource.data.uids == [uid()];
+        allow update: if signedIn()
+          && docId == 'likes'
+          && request.resource.data.keys().hasOnly(['uids'])
+          && request.resource.data.uids is list
+          && request.resource.data.uids.size() <= 5000
+          && selfToggleOnly(resource.data.uids, request.resource.data.uids);
+        // Only as part of the host deleting the whole event.
+        allow delete: if signedIn() && eventData(eventId).hostUid == uid();
+      }
+
+      // Comments. Short, stamped by the server, never edited. The author,
+      // the host and the admin can delete one; somebody blocked by the
+      // host cannot comment on their event.
+      match /comments/{commentId} {
+        allow read: if signedIn();
+        allow create: if signedIn()
+          && request.resource.data.keys().hasOnly(['uid', 'text', 'createdAt'])
+          && request.resource.data.uid == uid()
+          && isString(request.resource.data.text, 300)
+          && request.resource.data.createdAt == request.time
+          && eventEnded(eventId)
+          && !blockedWith(eventData(eventId).hostUid)
+          && notBanned();
+        allow update: if false;
+        allow delete: if signedIn()
+          && (resource.data.uid == uid() || eventData(eventId).hostUid == uid() || isAdmin());
+      }
+
       // ---- Event group chat ----
       // Messages are a SUBCOLLECTION so one lookup of the parent event
       // authorises the whole query, instead of one lookup per message.
@@ -967,7 +1069,7 @@ service cloud.firestore {
 
         allow create: if inEvent()
           && request.resource.data.senderUid == uid()
-          && isString(request.resource.data.text, 2000)
+          && okMessageBody()
           && sensibleTime(request.resource.data.time);
 
         // Your own message, and only as an edit or a retraction — or
@@ -1123,9 +1225,11 @@ service cloud.firestore {
         allow create: if inThisChat()
           && !exists(/databases/$(database)/documents/blocks/$(chatId))
           && request.resource.data.senderUid == uid()
-          && isString(request.resource.data.text, 2000)
+          && okMessageBody()
           && sensibleTime(request.resource.data.time)
-          && icebreakerAllowed();
+          && icebreakerAllowed()
+          // The one opening line to a stranger is words, never a photo.
+          && (!('photo' in request.resource.data) || chat().get('status', '') == 'unlocked');
 
         // Same shapes as the event chat. Note there is no block check
         // on the rewrite: taking back or fixing something you already
@@ -1256,6 +1360,51 @@ service cloud.firestore {
        the console, and the app works with no circle document at all —
        everything on one is either a display name or the position that
        events copy. */
+    // ---------------------------------------------------------------
+    // STORIES  —  stories/{id}   (docs/photos.md)
+    // ---------------------------------------------------------------
+    // A photo up for 2, 3, 6, 12 or 24 hours. When it ends is the
+    // SERVER's createdAt plus the author's `hours`, so nobody can date
+    // one to stay up for a week. A private account's stories are for
+    // its followers only, and the rule refuses a public one from it.
+    // Mirrors js/services/storyRules.js.
+    function okSong(song) {
+      return song == null
+        || (song is map
+            && song.keys().hasOnly(['url', 'title'])
+            && isString(song.title, 100)
+            && song.url is string
+            && song.url.size() <= 300
+            && song.url.matches('^https://(open[.]spotify[.]com|music[.]youtube[.]com|(www[.])?youtube[.]com|youtu[.]be|(www[.])?jiosaavn[.]com|music[.]apple[.]com|gaana[.]com|wynk[.]in)/.*'));
+    }
+
+    match /stories/{storyId} {
+      // Queries must say which they want: audience == 'public', or one
+      // person's (uid == X) — the only shapes these checks can prove.
+      allow read: if signedIn()
+        && (resource.data.audience == 'public'
+            || resource.data.uid == uid()
+            || (resource.data.audience == 'followers'
+                && exists(/databases/$(database)/documents/users/$(resource.data.uid)/followers/$(uid()))));
+
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['uid', 'photo', 'caption', 'hours', 'audience', 'song', 'createdAt'])
+        && request.resource.data.uid == uid()
+        && okPhotoUrl(request.resource.data.photo, 'stories', uid())
+        && request.resource.data.caption is string
+        && request.resource.data.caption.size() <= 600
+        && request.resource.data.hours in [2, 3, 6, 12, 24]
+        && request.resource.data.audience in ['public', 'followers']
+        && (request.resource.data.audience == 'followers'
+            || get(/databases/$(database)/documents/users/$(uid())).data.get('private', false) != true)
+        && okSong(request.resource.data.get('song', null))
+        && request.resource.data.createdAt == request.time
+        && notBanned();
+
+      allow update: if false;
+      allow delete: if signedIn() && (resource.data.uid == uid() || isAdmin());
+    }
+
     match /circles/{circleId} {
       allow read: if signedIn();
       allow write: if false;
@@ -1270,18 +1419,39 @@ service cloud.firestore {
         && request.resource.data.reason.size() <= 60
         && request.resource.data.note is string
         && request.resource.data.note.size() <= 500
-        // WHAT is being reported: a person, or one of their events (the
-        // event page's Report). Photos, stories and comments join this
-        // list as they arrive.
-        && request.resource.data.get('targetType', 'user') in ['user', 'event']
+        // WHAT is being reported: a person, or one thing of theirs — an
+        // event, a message, a comment, a memory photo or a story. The
+        // id says where to find it (docs/photos.md, "Reports").
+        && request.resource.data.get('targetType', 'user') in ['user', 'event', 'message', 'comment', 'memory', 'story']
         && request.resource.data.get('targetId', '') is string
         && request.resource.data.get('targetId', '').size() <= 128
         // Nobody reads a report from the client, so there is no
         // optimistic paint to protect: this can simply be the truth.
         // Triage will want them in the order they really arrived.
-        && request.resource.data.createdAt == request.time;
+        && request.resource.data.createdAt == request.time
+        // A copy of what was reported — the words of a message or a
+        // comment, or a photo's address — so the admin can judge it
+        // without being given the keys to anybody's conversation.
+        && request.resource.data.get('excerpt', '') is string
+        && request.resource.data.get('excerpt', '').size() <= 1000
+        && !('status' in request.resource.data);
 
-      allow read, update, delete: if false;
+      // THE ADMIN (admins/{uid}) reads them and marks each one handled.
+      // Nobody else ever reads a report — not even the person who sent it.
+      allow read: if isAdmin();
+      allow update: if isAdmin()
+        && changedKeys().hasOnly(['status', 'handledAt', 'handledBy'])
+        && request.resource.data.status in ['dismissed', 'removed', 'banned']
+        && request.resource.data.handledAt == request.time
+        && request.resource.data.handledBy == uid();
+      allow delete: if false;
+    }
+
+    // Who the admins are. Made by hand in the console; the app may only
+    // ask "am I one?", about itself.
+    match /admins/{adminUid} {
+      allow get: if isMe(adminUid);
+      allow list, write: if false;
     }
 
     // ---------------------------------------------------------------

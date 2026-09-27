@@ -288,7 +288,9 @@ const collRef = (name, parent) => {
         window.__collCbs[base] = (window.__collCbs[base] || []).filter((f) => f !== fire);
       };
     },
-    doc: (id) => docRef(base + '/' + id),
+    // doc() with no id makes one, the way Firestore does — it used to
+    // come back as ".../undefined", so every new doc was the same doc.
+    doc: (id) => docRef(base + '/' + (id || 'gen' + Math.random().toString(36).slice(2, 10))),
     // Recorded, so a report (or anything else added) can be checked.
     add: (data) => {
       (window.__adds = window.__adds || []).push({ path: base, data });

@@ -19,6 +19,7 @@ import { displayNameFor, usernameFor, avatarFor } from './userService.js';
 import { isBlocked, withoutBlocked } from './blockService.js';
 import { inRecap, wasCalledOff } from './recapRules.js';
 import { eventPhotos } from './photoRules.js';
+import { memoriesHtml, loadMemories, onMemoriesChange, postComment } from './memoryService.js';
 import {
   vibeColor, posterBand, timeStat, avatarStack, goingText, cardActions, paintVolatile
 } from './eventsService.js';
@@ -33,17 +34,25 @@ export function isEventPageOpen() {
 export function openEventPage(eventId) {
   const id = safeId(eventId);
   const e = id && state.eventCache[id];
-  const now = Date.now();
-  if (!e || isBlocked(e.hostUid) || !(e.expiresAt > now || inRecap(e, now, state.uid))) {
-    toast("That event has ended.");
+  // Any event we hold — a finished one opens too: that is where its
+  // memories are, long after it has left Recap.
+  if (!e || isBlocked(e.hostUid)) {
+    toast("That event isn't available.");
     return;
   }
   currentId = id;
+  if (e.expiresAt <= Date.now()) loadMemories(id);
   lastHtml = "";
   openOverlay("eventScreen", { onClose: () => { currentId = null; lastHtml = ""; } });
   renderEventPage();
   const body = document.getElementById("eventPageBody");
   if (body) body.scrollTop = 0;
+}
+
+onMemoriesChange(() => { if (isEventPageOpen()) renderEventPage(); });
+
+export function postEventComment() {
+  if (currentId) postComment(currentId);
 }
 
 export function closeEventPage() {
@@ -99,7 +108,8 @@ export function renderEventPage() {
   // title, the place and the time three screens down.
   const all = eventPhotos(e);
   const img = (url, i) => `
-    <img class="ep-photo" src="${escapeHtml(url)}" alt="Photo ${i + 1} of ${all.length}" decoding="async" ${i ? `loading="lazy"` : ""}>`;
+    <img class="ep-photo" src="${escapeHtml(url)}" alt="Photo ${i + 1} of ${all.length}" decoding="async" ${i ? `loading="lazy"` : ""}
+         onclick="window.openPhoto(this.src)">`;
   const cover = all.length ? `<div class="ep-photos">${img(all[0], 0)}</div>` : "";
   const rest = all.length > 1 ? `
       <div class="ep-section">
@@ -139,13 +149,18 @@ export function renderEventPage() {
         <div class="ep-label">${ended ? "Who went" : "Who's going"}</div>
         <div class="going-row">
           ${avatarStack(guests)}
-          <span class="going-text">${goingText(guests, unconfirmed.length, isHost)}</span>
+          <span class="going-text">${ended
+            // It is over: they WENT. goingText speaks in the present.
+            ? goingText(guests, 0, isHost).replace(/ going(<|$)/, " went$1")
+            : goingText(guests, unconfirmed.length, isHost)}</span>
         </div>
       </div>
 
       ${ended ? "" : cardActions(e, id)}
 
       ${rest}
+
+      ${ended ? memoriesHtml(e) : ""}
 
       ${isHost ? "" : `
         <button type="button" class="ep-report" onclick="window.reportEvent('${id}')">
@@ -160,6 +175,7 @@ export function renderEventPage() {
     body.innerHTML = html;
     lastHtml = html;
   }
+  document.getElementById("epCompose")?.classList.toggle("hidden", !ended);
   paintVolatile(body, now);
 }
 
@@ -167,5 +183,8 @@ export function renderEventPage() {
 export function reportEvent(eventId) {
   const e = state.eventCache[eventId];
   if (!e) return;
-  window.openReport?.(e.hostUid, { type: "event", id: eventId });
+  window.openReport?.(e.hostUid, {
+    type: "event", id: eventId,
+    excerpt: [e.title, e.place, e.description].filter(Boolean).join("\n")
+  });
 }

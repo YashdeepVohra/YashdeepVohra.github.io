@@ -6,6 +6,9 @@
  * all three places or the database refuses what the app just made.
  */
 
+/** Where each kind of photo lives: <folder>/<owner uid>/<random>.jpg. */
+export const FOLDERS = ["avatars", "events", "chats", "memories", "stories"];
+
 export const PHOTO = {
   // An event carries at most this many. The rules check each index by
   // hand (rules have no loops), so raising it means another line there.
@@ -20,6 +23,8 @@ export const PHOTO = {
   // these only ever stop somebody going round the app.
   EVENT_BYTES: 2 * 1024 * 1024,
   AVATAR_BYTES: 400 * 1024,
+  // Memories: each person who went may add this many to an event.
+  MEMORY_PER_PERSON: 3,
   // Anything a browser can decode goes in; the picker's own filter.
   ACCEPT: "image/*"
 };
@@ -57,7 +62,7 @@ export function photoName(rand = Math.random) {
 export function isOurPhotoUrl(url, folder, uid) {
   if (typeof url !== "string" || url.length > 600) return false;
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(String(uid || ""))) return false;
-  if (!/^(avatars|events)$/.test(folder)) return false;
+  if (!FOLDERS.includes(folder)) return false;
   const re = new RegExp(
     "^https://firebasestorage\\.googleapis\\.com/v0/b/livesociyaweb[a-z0-9._-]*/o/"
     + folder + "%2F" + uid + "%2F[A-Za-z0-9_-]{8,40}\\.jpg\\?alt=media&token=[A-Za-z0-9-]+$"

@@ -100,8 +100,11 @@ export function canReply(msg) {
  */
 export function messageActions(msg, uid, now = Date.now()) {
   if (!msg || isDeleted(msg)) return [];
-  const actions = ["reply", "copy"];
+  // A photo with no caption has no text to copy.
+  const actions = String(msg.text || "").trim() ? ["reply", "copy"] : ["reply"];
   if (canEdit(msg, uid, now)) actions.push("edit");
+  // Somebody else's message can be reported; your own can be taken back.
+  if (!isMine(msg, uid)) actions.push("report");
   if (canRetract(msg, uid)) actions.push("delete");
   return actions;
 }

@@ -29,6 +29,10 @@ import { myCircleId, circleGeo, feedIsScoped } from './circleService.js';
 import { eventPhotos } from './photoRules.js';
 import { resetPhotoTray, commitTray, deleteEventPhotos } from './eventPhotoService.js';
 import { renderEventPage, isEventPageOpen } from './eventPage.js';
+import { storyRailHtml, loadStories, onStoriesChange } from './storyService.js';
+
+// Stories land asynchronously; the rail is painted by renderEvents.
+onStoriesChange(() => renderEvents());
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -846,11 +850,16 @@ function renderLiveRail(order, now) {
     if (n && n.textContent !== String(onNow)) n.textContent = String(onNow);
   }
 
-  // An empty rail is worse than no rail.
-  wrap.classList.toggle("hidden", items.length === 0);
-  if (!items.length) { rail.innerHTML = ""; railPainted = ""; return; }
+  // Stories first (nothing while photos are off), then who is live.
+  // Throttled inside: this is a no-op on almost every call.
+  loadStories();
+  const storiesHTML = storyRailHtml(now);
 
-  const railHTML = items.map((e) => {
+  // An empty rail is worse than no rail.
+  wrap.classList.toggle("hidden", items.length === 0 && !storiesHTML);
+  if (!items.length && !storiesHTML) { rail.innerHTML = ""; railPainted = ""; return; }
+
+  const railHTML = storiesHTML + items.map((e) => {
     const id = safeId(e.id);
     if (!id) return "";
     const isLive = now >= e.startTime;
@@ -2035,7 +2044,13 @@ export async function confirmDeletePermanently() {
     await Promise.all([
       purgeCollection(eventRef.collection("messages")),
       purgeCollection(eventRef.collection("typing")),
-      purgeCollection(eventRef.collection("pinned"))
+      purgeCollection(eventRef.collection("pinned")),
+      // A finished event's memories go with it. Photos other people
+      // added stay in THEIR storage folders — the host cannot delete
+      // somebody else's file — but nothing points at them any more.
+      purgeCollection(eventRef.collection("memories")),
+      purgeCollection(eventRef.collection("comments")),
+      purgeCollection(eventRef.collection("social"))
     ]);
     await eventRef.delete();
     deleteEventPhotos(snapshot);

@@ -31,12 +31,15 @@ service firebase.storage {
       allow delete: if owner(uid);
     }
 
-    // Photos on an event. 1600px on the long edge, well under 2 MB.
-    match /events/{uid}/{file} {
-      allow read: if signedIn();
-      allow create: if owner(uid) && okName(file) && jpegUnder(2 * 1024 * 1024);
+    // Photos on an event, in a chat, in an event's memories, and in a
+    // story. 1600px on the long edge, well under 2 MB. Stories are also
+    // swept by a bucket lifecycle rule (docs/photos.md).
+    match /{folder}/{uid}/{file} {
+      allow read: if signedIn() && folder in ['events', 'chats', 'memories', 'stories'];
+      allow create: if folder in ['events', 'chats', 'memories', 'stories']
+        && owner(uid) && okName(file) && jpegUnder(2 * 1024 * 1024);
       allow update: if false;
-      allow delete: if owner(uid);
+      allow delete: if owner(uid) && folder in ['events', 'chats', 'memories', 'stories'];
     }
 
     // Everything else: nobody.
