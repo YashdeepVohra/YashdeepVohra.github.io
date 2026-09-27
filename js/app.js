@@ -57,7 +57,7 @@ import {
   showSharedEvent,
   onPlaceInput
 } from './services/eventsService.js';
-import { openEventPage, closeEventPage, reportEvent, postEventComment, onEventCommentInput } from './services/eventPage.js';
+import { openEventPage, closeEventPage, reportEvent, postEventComment, onEventCommentInput, refreshEventPage, focusCommentBox } from './services/eventPage.js';
 import {
   retryMemories, openMemoryPhoto, addMemoryPhotos, toggleMemoryLike, deleteComment, reportComment,
   openComments, closeComments, openCommentsEvent, postSheetComment, replyToComment, onCommentInput,
@@ -117,7 +117,11 @@ import {
   onBioInput,
   toggleInterest,
   setProfileEventsTab,
-  tapPhotoSlot
+  tapPhotoSlot,
+  hideFromProfile,
+  showOnProfile,
+  toggleHiddenOnProfile,
+  isHiddenFromMyProfile
 } from './services/profileService.js';
 
 import {
@@ -285,6 +289,12 @@ Object.assign(window, {
   replyToComment,
   onCommentInput,
   onEventCommentInput,
+  refreshEventPage,
+  focusCommentBox,
+  hideFromProfile,
+  showOnProfile,
+  toggleHiddenOnProfile,
+  isHiddenFromMyProfile,
   pickMention,
   openProfileByHandle,
   openStories,

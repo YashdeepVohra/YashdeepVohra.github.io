@@ -530,7 +530,12 @@ service cloud.firestore {
 
       allow update: if isMe(userId)
         // Fields the client is allowed to touch at all.
-        && changedKeys().hasOnly(['username', 'displayName', 'avatar', 'googlePfp', 'updatedAt', 'following', 'private', 'bio', 'interests', 'circleId'])
+        && changedKeys().hasOnly(['username', 'displayName', 'avatar', 'googlePfp', 'updatedAt', 'following', 'private', 'bio', 'interests', 'circleId', 'hiddenEvents'])
+        // Events you took off YOUR profile (profileService, "the
+        // journal"). Only ids, only yours, and never more than 500.
+        && (!(changedKeys().hasAny(['hiddenEvents']))
+            || (request.resource.data.hiddenEvents is list
+                && request.resource.data.hiddenEvents.size() <= 500))
         && (!(changedKeys().hasAny(['circleId']))
             || (request.resource.data.circleId is string
                 && request.resource.data.circleId.matches('^[A-Za-z0-9_-]{1,64}$')))

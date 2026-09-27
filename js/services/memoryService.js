@@ -156,8 +156,14 @@ function withMentions(escaped) {
     (all, pre, handle) => `${pre}<span class="mention" role="link" tabindex="0" onclick="event.stopPropagation(); window.openProfileByHandle('${handle.toLowerCase()}')">@${handle}</span>`);
 }
 
-/** The like + comment bar, for a Recap card or a profile row. */
-export function socialBarHtml(e) {
+/**
+ * The like + comment buttons, in the same voice as a live card's
+ * action row (`.act`: a glyph and a number, no box, colour is the only
+ * feedback). `variant`:
+ *   "card"  a Recap card: like, comment, and View at the right
+ *   "mini"  a journal card on a profile: like and comment, small
+ */
+export function socialBarHtml(e, variant = "card") {
   const id = safeId(e.id);
   if (!id) return "";
   const m = entry(id);
@@ -165,15 +171,22 @@ export function socialBarHtml(e) {
   const liked = ready && m.likes.includes(state.uid);
   const likes = ready ? likeCountOf(m) : 0;
   const comments = ready ? m.commentCount : 0;
-  return `
-    <button type="button" class="soc-btn${liked ? " on" : ""}" aria-pressed="${liked}" aria-label="Like"
+  const like = `
+    <button type="button" class="act soc-btn${liked ? " on" : ""}" aria-pressed="${liked}"
+            aria-label="${liked ? "Unlike" : "Like"}${likes ? `, ${likes}` : ""}"
             onclick="event.stopPropagation(); window.toggleMemoryLike('${id}')" ${ready ? "" : "disabled"}>
-      ${HEART(liked)}<span>${likes || "Like"}</span>
-    </button>
-    <button type="button" class="soc-btn" aria-label="Comments"
-            onclick="event.stopPropagation(); window.openComments('${id}')">
-      ${BUBBLE}<span>${comments || "Comment"}</span>
+      ${HEART(liked)}<span>${likes || (variant === "mini" ? "" : "Like")}</span>
     </button>`;
+  const comment = `
+    <button type="button" class="act soc-btn" aria-label="Comments${comments ? `, ${comments}` : ""}"
+            onclick="event.stopPropagation(); window.openComments('${id}')">
+      ${BUBBLE}<span>${comments || (variant === "mini" ? "" : "Comment")}</span>
+    </button>`;
+  const view = variant === "card" ? `
+    <button type="button" class="act soc-view" onclick="event.stopPropagation(); window.openEventPage('${id}')">
+      View <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+    </button>` : "";
+  return like + comment + view;
 }
 
 /**
@@ -204,7 +217,7 @@ export function paintSocial(root) {
     const id = slot.dataset.social;
     const e = state.eventCache[id];
     if (!e) return;
-    const html = socialBarHtml(e);
+    const html = socialBarHtml(e, slot.dataset.variant || "card");
     if (slot.dataset.html !== html) { slot.innerHTML = html; slot.dataset.html = html; }
     const m = entry(id);
     if (!m.loaded && !m.summaryLoaded && !slot.dataset.watched) {
@@ -285,11 +298,13 @@ export function memoriesHtml(e) {
   return `
     <div class="mem">
       ${grid ? `<div class="ep-label">Memories</div>${grid}` : ""}
-      <div class="mem-bar${grid ? "" : " bare"}">
-        <button type="button" class="mem-like${liked ? " on" : ""}" aria-pressed="${liked}" onclick="window.toggleMemoryLike('${id}')">
-          ${HEART(liked)} <span>${likeCount || "Like"}</span>
+      <div class="card-actions mem-bar${grid ? "" : " bare"}">
+        <button type="button" class="act soc-btn mem-like${liked ? " on" : ""}" aria-pressed="${liked}" onclick="window.toggleMemoryLike('${id}')">
+          ${HEART(liked)}<span>${likeCount || "Like"}</span>
         </button>
-        <span class="mem-count">${count ? `${count} comment${count === 1 ? "" : "s"}` : "No comments yet"}</span>
+        <button type="button" class="act soc-btn" onclick="window.focusCommentBox()">
+          ${BUBBLE}<span>${count ? `${count} comment${count === 1 ? "" : "s"}` : "Comment"}</span>
+        </button>
       </div>
       ${count ? commentsHtml(e, m, "page") : ""}
     </div>`;

@@ -141,6 +141,23 @@ Read with three gets when the page opens, never a listener: a finished
 event is not busy enough to be worth one on every phone. Likes and
 comments work with the flag off; adding photos needs it.
 
+**The journal.** On a profile, what is live or coming up stays a row
+(it is about getting there). What is over becomes a grid of memory
+cards — the cover, or the vibe colour and its glyph; the title; when
+and how many went — with the like and comment buttons INSIDE the card.
+Anyone who hosted or went can take an event off THEIR OWN profile (the
+card's ⋯, or "Remove from my profile" on the event page). The event,
+its memories and everyone else's profile are untouched; the ids go in
+`hiddenEvents` on your profile document, which the profile already
+reads, so hiding is one write and no reads. Only you see "n hidden from
+your profile", and can put any of them back.
+
+**Like and comment in the card's own voice.** The buttons are `.act`
+glyphs, like a live card's Hype and Chat — no pills. On a Recap card
+they ARE the card's action row (same dotted rule, same padding), with
+View at the right; on a phone that row never becomes the two-row layout
+a live card uses, because it has no primary to press.
+
 **Like and comment without opening anything.** Having to open an event
 to react to it is a step people skip. So every Recap card and every
 finished event on a profile carries its own heart and comment button:
@@ -164,7 +181,12 @@ commented) — no reads. An `@handle` in a comment is a tap to that
 profile, looked up only when tapped. Nobody is NOTIFIED of a tag yet:
 that arrives with push notifications.
 
-### The event page on a laptop
+### The event page, on a phone and on a laptop
+
+On a phone it is ONE card: the event, then — after a dotted tear, like
+a card's action row — the people, the actions and the comments. Labels
+sit tight on the line they label.
+
 
 Past 1100px every full-screen view centres a 640px column; the event
 page is the exception. It is two columns, 1060px across: the event on

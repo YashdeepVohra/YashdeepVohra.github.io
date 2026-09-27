@@ -222,7 +222,9 @@ Each line is the whole rule. The file after it is the argument for it.
 - A finished event is a MEMORY (`memoryService.js`): photos from who
   went (id `<uid>_<n>`, three each), one `social/likes` doc (likes AND
   the comment count, which moves in the comment's own batch), comments.
-  Never listened to. Recap cards and profile rows like/comment in place.
+  Never listened to. Recap cards and journal cards like/comment in place.
+- A profile's finished events are the JOURNAL: memory cards, like and
+  comment inside. Hiding one is `hiddenEvents` on YOUR profile, nothing else.
 - A story ends at the server's createdAt + `hours` (2/3/6/12/24). Rings
   are forest, never ember. A song is a LINK, never audio under a photo.
 - A report carries a copy of what was reported (`excerpt`); the admin

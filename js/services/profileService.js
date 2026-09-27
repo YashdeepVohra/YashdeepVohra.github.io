@@ -6,7 +6,7 @@
 // ever rendered as text.
 // ==========================================
 
-import { auth, db } from '../config/firebase.js';
+import { auth, db, FieldValue } from '../config/firebase.js';
 import { state } from '../state/store.js';
 import { renderAvatar, escapeHtml, safeId, clockTime } from '../utils/formatters.js';
 import { switchScreen, showTab, toast, setPageTitle } from '../utils/ui.js';
@@ -261,9 +261,112 @@ function profileEventRow(e, now, kind) {
 /** For the smoke suite: one profile row, as the profile would draw it. */
 export const __rowForTest = (e, now, kind) => profileEventRow(e, now, kind);
 
+/* ---------------------------------------------------------------
+   THE JOURNAL. Finished events on a profile are memory cards in a
+   grid — the cover (or the vibe and its glyph), the title, when, how
+   many went — with the like and comment buttons INSIDE the card, not
+   hanging off the bottom of a row.
+   Anybody who hosted or went can take one off THEIR OWN profile: the
+   event, its memories and everybody else's profile are untouched. The
+   ids live in `hiddenEvents` on their profile document, which the
+   profile already reads — hiding costs one write and no reads.
+   --------------------------------------------------------------- */
+let showHidden = false;
+
+function hiddenIdsFor(uid) {
+  const u = state.userCache[uid];
+  return new Set(Array.isArray(u && u.hiddenEvents) ? u.hiddenEvents : []);
+}
+
+const MORE = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="currentColor"><circle cx="6" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="18" cy="12" r="1.8"/></svg>`;
+
+function memoryCard(e, now, { isSelf, hidden = false }) {
+  const id = safeId(e.id);
+  if (!id) return "";
+  const vibe = vibeColor(e.tag);
+  const glyph = escapeHtml((e.tag || "").trim().split(" ")[0] || "✨");
+  const cover = eventPhotos(e)[0] || "";
+  const guests = withoutBlocked((e.participantUids || []).filter((u) => u !== e.hostUid)).length;
+  const when = wasCalledOff(e) ? "Called off" : dayLabel(e.startTime, now);
+  const who = wasCalledOff(e) ? "" : guests ? ` \u00b7 ${guests} went` : "";
+  return `
+    <article class="jr-card${hidden ? " is-hidden" : ""}" style="--vibe:${vibe}">
+      <button type="button" class="jr-open" onclick="window.openEventPage('${id}')">
+        <span class="jr-cover">${cover
+          ? `<img src="${escapeHtml(cover)}" alt="" loading="lazy" decoding="async">`
+          : `<span class="jr-glyph" aria-hidden="true">${glyph}</span>`}</span>
+        <span class="jr-text">
+          <span class="jr-title">${escapeHtml(e.title)}</span>
+          <span class="jr-meta">${escapeHtml(when + who)}</span>
+        </span>
+      </button>
+      ${hidden
+        ? `<div class="jr-foot"><button type="button" class="act jr-restore" onclick="window.showOnProfile('${id}')">Show on profile</button></div>`
+        : `<div class="jr-foot soc-bar" data-social="${id}" data-variant="mini"></div>`}
+      ${isSelf && !hidden
+        ? `<button type="button" class="jr-more" aria-label="Remove from your profile" title="Remove from your profile"
+                   onclick="window.hideFromProfile('${id}')">${MORE}</button>`
+        : ""}
+    </article>`;
+}
+
+/** For the smoke suite: one journal card, as the profile draws it. */
+export const __cardForTest = (e, now, opts) => memoryCard(e, now, opts);
+
+function setHidden(eventId, hide) {
+  const me = state.userCache[state.uid] || (state.userCache[state.uid] = { uid: state.uid });
+  const before = Array.isArray(me.hiddenEvents) ? me.hiddenEvents.slice() : [];
+  me.hiddenEvents = hide
+    ? before.concat(before.includes(eventId) ? [] : [eventId]).slice(-500)
+    : before.filter((x) => x !== eventId);
+  rememberUser(state.uid, me);
+  paintProfileEvents();
+  window.refreshEventPage?.();
+  return db.collection("users").doc(state.uid)
+    .update({ hiddenEvents: hide ? FieldValue.arrayUnion(eventId) : FieldValue.arrayRemove(eventId) })
+    .catch((e) => {
+      console.error("Profile change failed:", e.code || e.message);
+      me.hiddenEvents = before;
+      rememberUser(state.uid, me);
+      paintProfileEvents();
+      window.refreshEventPage?.();
+      toast("Couldn't change your profile. Try again.");
+      throw e;
+    });
+}
+
+export async function hideFromProfile(eventId) {
+  const id = safeId(eventId);
+  if (!id || !state.uid) return;
+  const yes = await askConfirm({
+    title: "Remove from your profile?",
+    body: "It stays on the event and on everyone else's profile — only yours stops showing it. You can put it back any time.",
+    confirm: "Remove"
+  });
+  if (!yes) return;
+  setHidden(id, true).then(() => toast("Removed from your profile.")).catch(() => {});
+}
+
+export function showOnProfile(eventId) {
+  const id = safeId(eventId);
+  if (!id || !state.uid) return;
+  setHidden(id, false).then(() => toast("Back on your profile.")).catch(() => {});
+}
+
+/** Is this event off YOUR profile? For the event page's own link. */
+export function isHiddenFromMyProfile(eventId) {
+  return hiddenIdsFor(state.uid).has(eventId);
+}
+
+export function toggleHiddenOnProfile() {
+  showHidden = !showHidden;
+  paintProfileEvents();
+}
+
 function paintProfileTabs() {
-  const hostedCount = profileEvents.hosted.length;
-  const joinedCount = profileEvents.joined.length;
+  const hid = hiddenIdsFor(profileEvents.uid);
+  const hostedCount = profileEvents.hosted.filter((e) => !hid.has(e.id)).length;
+  const joinedCount = profileEvents.joined.filter((e) => !hid.has(e.id)).length;
   const loaded = profileEvents.loaded;
 
   document.querySelectorAll("#profileEventTabs .pe-tab").forEach((t) => {
@@ -316,9 +419,13 @@ function paintProfileEvents() {
     return;
   }
 
-  const events = sortForProfile(profileEvents[kind], now);
+  const all = sortForProfile(profileEvents[kind], now);
+  const hid = hiddenIdsFor(profileEvents.uid);
+  const events = all.filter((e) => !hid.has(e.id));
+  // Only YOU see what you took off your profile, to put it back.
+  const hiddenPast = isSelf ? all.filter((e) => hid.has(e.id) && phaseOf(e, now) === "past") : [];
 
-  if (!events.length) {
+  if (!events.length && !hiddenPast.length) {
     const copy = kind === "hosted"
       ? (isSelf
           ? { title: "You haven't hosted anything yet", sub: "Start something and it'll live here after it ends.", cta: true }
@@ -336,18 +443,27 @@ function paintProfileEvents() {
     return;
   }
 
+  // Live and upcoming stay rows — they are about getting there. What
+  // is over becomes the journal: a grid of memory cards.
   let lastGroup = "";
-  const labels = { live: "Happening now", soon: "Coming up", past: "Earlier" };
-  list.innerHTML = events.map((e) => {
+  const labels = { live: "Happening now", soon: "Coming up" };
+  const current = events.filter((e) => phaseOf(e, now) !== "past");
+  const past = events.filter((e) => phaseOf(e, now) === "past");
+  const rows = current.map((e) => {
     const g = phaseOf(e, now);
     const head = g !== lastGroup ? `<div class="pe-group">${labels[g]}</div>` : "";
     lastGroup = g;
-    // A finished event gets its like + comment bar under the row, so
-    // a profile's journal can be reacted to without opening anything.
-    const social = g === "past" && safeId(e.id)
-      ? `<div class="soc-bar pe-social" data-social="${safeId(e.id)}"></div>` : "";
-    return head + profileEventRow(e, now, kind) + social;
+    return head + profileEventRow(e, now, kind);
   }).join("");
+  const journal = past.length ? `
+    <div class="pe-group">Memories <span class="pe-group-n">${past.length}</span></div>
+    <div class="jr-grid">${past.map((e) => memoryCard(e, now, { isSelf })).join("")}</div>` : "";
+  const hiddenBlock = hiddenPast.length ? `
+    <button type="button" class="pe-hidden-toggle" onclick="window.toggleHiddenOnProfile()">
+      ${hiddenPast.length} hidden from your profile \u00b7 ${showHidden ? "Hide them" : "Show"}
+    </button>
+    ${showHidden ? `<div class="jr-grid">${hiddenPast.map((e) => memoryCard(e, now, { isSelf, hidden: true })).join("")}</div>` : ""}` : "";
+  list.innerHTML = rows + journal + hiddenBlock;
   paintSocial(list);
 }
 

@@ -339,12 +339,13 @@ const prof = await page.evaluate(async ({ events }) => {
   prof.openProfileScreen('me');
   await wait(300);
   const text = (id) => document.getElementById(id)?.innerText.trim();
-  const rows = () => [...document.querySelectorAll('#myProfileEvents .pe-row')];
+  // Live and upcoming are rows; finished ones are journal cards. Both count.
+  const rows = () => [...document.querySelectorAll('#myProfileEvents .pe-row, #myProfileEvents .jr-card')];
   const hosted = { n: rows().length, stat: text('statEventsHosted'), tab: text('peHostedCount'),
                    first: rows()[0]?.classList.contains('live') };
   prof.setProfileEventsTab('joined');
   const joined = { n: rows().length, stat: text('statEventsJoined'), tab: text('peJoinedCount'),
-                   titles: rows().map((r) => r.querySelector('.pe-title').innerText) };
+                   titles: rows().map((r) => r.querySelector('.pe-title, .jr-title').innerText) };
   state.blockedUids = ['b'];
   prof.openProfileScreen('me'); await wait(300);
   prof.setProfileEventsTab('joined');
@@ -4691,20 +4692,48 @@ group('chat photos, memories, stories and reports');
   ok('the comment and its count go in ONE batch', quick.oneBatch === 'set events/m3/comments/X,set events/m3/social/likes' && quick.countMoves, quick.oneBatch);
   ok('and the card\'s count moves with it', quick.cardCount === '5', quick.cardCount);
 
-  const journalBar = await page.evaluate(async () => {
-    const prof = await import('/js/services/profileService.js');
-    const mem = await import('/js/services/memoryService.js');
+  // YOUR profile, and taking something off it.
+  const mine = await page.evaluate(async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     const { state } = window.__m;
-    const box = document.createElement('div');
-    box.innerHTML = prof.__rowForTest(state.eventCache.m3, Date.now(), 'joined')
-      + `<div class="soc-bar pe-social" data-social="m3"></div>`;
-    document.body.appendChild(box);
-    mem.paintSocial(box);
-    const out = { btns: box.querySelectorAll('.pe-social .soc-btn').length };
-    box.remove();
+    const t = Date.now();
+    state.userCache.me.hiddenEvents = [];
+    window.__events = ['m1', 'm3'].map((id) => Object.assign({}, state.eventCache[id], { hostUid: 'me' }));
+    window.openProfileScreen('me');
+    await wait(900);
+    const list = document.getElementById('myProfileEvents');
+    const out = {
+      cards: list.querySelectorAll('.jr-card').length,
+      bars: list.querySelectorAll('.jr-card .jr-foot .soc-btn').length,
+      head: (list.querySelector('.pe-group') || {}).innerText || ''
+    };
+    window.__updates = [];
+    const more = [...list.querySelectorAll('.jr-card')].find((c) => c.innerText.includes('Chai at the gate')).querySelector('.jr-more');
+    more.click();
+    await wait(250);
+    window.confirmYes();
+    await wait(300);
+    const upd = (window.__updates || []).find((u) => u.path === 'users/me');
+    out.wrote = !!upd && upd.patch.hiddenEvents && upd.patch.hiddenEvents.__op === 'union' && upd.patch.hiddenEvents.v === 'm3';
+    out.cardsAfter = list.querySelectorAll('.jr-card:not(.is-hidden)').length;
+    out.toggle = (list.querySelector('.pe-hidden-toggle') || {}).innerText || '';
+    out.stillOnEvent = !!state.eventCache.m3 && (state.eventCache.m3.participantUids || []).includes('me');
+    list.querySelector('.pe-hidden-toggle').click();
+    await wait(100);
+    const back = list.querySelector('.jr-card.is-hidden .jr-restore');
+    out.restoreShown = !!back;
+    back.click();
+    await wait(300);
+    out.restored = list.querySelectorAll('.jr-card:not(.is-hidden)').length === 2 && !(state.userCache.me.hiddenEvents || []).includes('m3');
+    window.closeProfileScreen({ all: true });
+    await wait(300);
     return out;
   });
-  ok('a finished event on a profile gets the same bar', journalBar.btns === 2, JSON.stringify(journalBar));
+  ok('your finished events are memory cards, each with its own like and comment', mine.cards === 2 && mine.bars === 4, JSON.stringify(mine));
+  ok('headed Memories, with how many', /memories\s*2/i.test(mine.head), mine.head);
+  ok('taking one off your profile is one write to your own profile', mine.wrote === true);
+  ok('it leaves your profile, and nothing else — you are still on the event', mine.cardsAfter === 1 && mine.stillOnEvent);
+  ok('only you see what you hid, and can put it back', /1 hidden from your profile/.test(mine.toggle) && mine.restoreShown && mine.restored);
 
   // ---- REPLYING AND TAGGING ----
   const tags = await page.evaluate(async () => {
@@ -4747,17 +4776,25 @@ group('chat photos, memories, stories and reports');
   ok('typing @ suggests people from the event', tags.suggested.indexOf('Diya @diya_b') >= 0, tags.suggested);
   ok('and picking one writes the handle for you', tags.picked === 'thanks @diya_b ' && tags.rowHidden);
 
-  // A profile's finished events open their page — that is the journal.
+  // A profile's finished events are a journal of memory cards.
   const journal = await page.evaluate(async () => {
     const prof = await import('/js/services/profileService.js');
     const { state } = window.__m;
-    const row = document.createElement('div');
-    row.innerHTML = prof.__rowForTest(state.eventCache.m1, Date.now(), 'joined');
-    const btn = row.querySelector('.pe-row');
-    return { tag: btn && btn.tagName, tap: (btn && btn.getAttribute('onclick')) || '', thumb: !!row.querySelector('.pe-thumb img') };
+    const box = document.createElement('div');
+    box.innerHTML = prof.__cardForTest(state.eventCache.m1, Date.now(), { isSelf: true });
+    const other = document.createElement('div');
+    other.innerHTML = prof.__cardForTest(state.eventCache.m1, Date.now(), { isSelf: false });
+    const open = box.querySelector('.jr-open');
+    return {
+      tap: (open && open.getAttribute('onclick')) || '',
+      cover: !!box.querySelector('.jr-cover img'),
+      slot: !!box.querySelector('.jr-card .jr-foot[data-social="m1"]'),
+      more: !!box.querySelector('.jr-more'), moreOnOthers: !!other.querySelector('.jr-more')
+    };
   });
-  ok('on a profile, a finished event opens its page (and its memories)', journal.tag === 'BUTTON' && journal.tap.indexOf('openEventPage') >= 0, JSON.stringify(journal));
-  ok('with its cover where its glyph was', journal.thumb === true);
+  ok('on a profile, a finished event is a memory card that opens its page', journal.tap.indexOf("openEventPage('m1')") >= 0, JSON.stringify(journal));
+  ok('with its cover, and its like and comment INSIDE the card', journal.cover && journal.slot);
+  ok('and, on your own profile only, a way to take it off', journal.more && !journal.moreOnOthers);
 
   // ---- STORIES ----
   await page.evaluate(() => { window.__uploads = []; window.__m.ev.renderEvents(); });

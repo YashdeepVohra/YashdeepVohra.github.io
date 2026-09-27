@@ -55,6 +55,23 @@ export function openEventPage(eventId) {
 
 onMemoriesChange(() => { if (isEventPageOpen()) renderEventPage(); });
 
+/** Repaint now — after something outside the event changed how it reads. */
+export function refreshEventPage() {
+  if (isEventPageOpen()) { lastSide = ""; renderEventPage(); }
+}
+
+/** The comment button on the page: straight to the box. */
+export function focusCommentBox() {
+  const input = document.getElementById("epCommentInput");
+  if (!input) return;
+  // On a phone the box is at the end of the page. Scroll the page's own
+  // scroller to it — never scrollIntoView inside a fixed layer, which on
+  // iOS scrolls the document behind it (layout.md).
+  const scroller = document.getElementById("eventPageScroll");
+  if (scroller && window.innerWidth < 960) scroller.scrollTop = scroller.scrollHeight;
+  input.focus({ preventScroll: true });
+}
+
 export function postEventComment() {
   if (currentId) postComment(currentId, "page");
 }
@@ -179,10 +196,17 @@ export function renderEventPage() {
 
       ${ended ? `<div class="ep-block">${memoriesHtml(e)}</div>` : ""}
 
-      ${isHost ? "" : `
+      <div class="ep-links">
+        ${ended && participants.includes(state.uid)
+          ? (window.isHiddenFromMyProfile?.(id)
+              ? `<button type="button" class="ep-report" onclick="window.showOnProfile('${id}')"><i class='bx bx-user'></i> Show on my profile</button>`
+              : `<button type="button" class="ep-report" onclick="window.hideFromProfile('${id}')"><i class='bx bx-user'></i> Remove from my profile</button>`)
+          : ""}
+        ${isHost ? "" : `
         <button type="button" class="ep-report" onclick="window.reportEvent('${id}')">
           <i class='bx bx-flag'></i> Report this event
-        </button>`}`;
+        </button>`}
+      </div>`;
 
   // Rebuilt only when something on it changed — the minute tick must
   // not reload its photos. Times go through the same data-vt slots as

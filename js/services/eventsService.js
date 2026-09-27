@@ -1531,7 +1531,7 @@ export function renderEvents() {
           <!-- Like and comment right here (memoryService). Empty in the
                markup and filled after the diff, like a data-vt slot, so
                a like never makes the card look changed. -->
-          <div class="soc-bar stub-soc" data-social="${id}"></div>
+          <div class="card-actions soc-row soc-bar" data-social="${id}" data-variant="card"></div>
         </article>` });
     }
   });

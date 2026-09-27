@@ -4686,22 +4686,10 @@ body:not(.photos-on) .needs-photos { display: none !important; }
 }
 .mem-link:hover:not(:disabled) { color: var(--ink); transform: none; box-shadow: none; filter: none; }
 .mem-bar {
-  display: flex; align-items: center; gap: var(--s-12);
+  display: flex; align-items: center; gap: 0;
   margin-top: var(--s-12); padding-top: var(--s-12);
   border-top: 1.5px dotted var(--ash);
 }
-/* Not ember: a like on a memory is not happening now. */
-.mem-like {
-  display: inline-flex; align-items: center; gap: 6px;
-  width: auto; padding: 6px 12px; margin: 0;
-  border-radius: var(--r-pill);
-  background: var(--paper); color: var(--ink);
-  border: 1.5px solid var(--ash); box-shadow: none;
-  font-size: 13.5px; font-weight: 600;
-}
-.mem-like.on { color: var(--forest); border-color: var(--forest); background: var(--wash); }
-.mem-like:hover:not(:disabled) { transform: none; box-shadow: none; filter: none; }
-.mem-count { font-family: var(--font-mono); font-size: 11.5px; letter-spacing: 0.04em; color: var(--fog); }
 .cmt-list { display: flex; flex-direction: column; gap: var(--s-12); margin-top: var(--s-16); }
 .cmt { display: flex; gap: var(--s-8); align-items: flex-start; }
 .cmt-av {
@@ -4938,24 +4926,6 @@ body:not(.is-admin) .admin-only { display: none !important; }
   .ep-compose { position: static; margin-top: 0; margin-bottom: 0; flex: none; }
 }
 
-/* ---- Like + comment, right on a Recap card or a profile row ---- */
-.soc-bar { display: flex; gap: var(--s-8); }
-.soc-bar:empty { display: none; }
-.stub-soc { padding: 0 var(--s-16) var(--s-12); margin-top: var(--s-12); }
-.pe-social { margin: calc(-1 * var(--s-4)) 0 var(--s-12) 73px; }
-.soc-btn {
-  display: inline-flex; align-items: center; gap: 6px;
-  width: auto; padding: 6px 12px; margin: 0;
-  border-radius: var(--r-pill);
-  background: var(--paper); color: var(--ink);
-  border: 1.5px solid var(--ash); box-shadow: none;
-  font-size: 13px; font-weight: 600;
-}
-.soc-btn.on { color: var(--forest); border-color: var(--forest); background: var(--wash); }
-.soc-btn:disabled { opacity: 0.55; }
-/* No chrome on hover: on touch it sticks after the tap (layout.md). */
-.soc-btn:hover:not(:disabled) { transform: none; box-shadow: none; filter: none; }
-
 /* ---- The comment sheet ---- */
 /* A sheet from the bottom on a phone, lifted above the keyboard like
    every full-screen layer (--kb, utils/viewport.js). */
@@ -5024,3 +4994,126 @@ body:not(.is-admin) .admin-only { display: none !important; }
 .mem-bar.bare { margin-top: 0; padding-top: 0; border-top: none; }
 .cmt-acts { align-items: center; }
 .cmt-acts .mem-link { display: inline-flex; align-items: center; line-height: 1.4; }
+
+/* =====================================================================
+   LIKE + COMMENT, in the voice of the card's own action row: a glyph
+   and a number, no box, colour is the feedback (see .act above). On a
+   Recap card it IS the card's action row — the same dotted rule, the
+   same padding — so a stub reads like the poster it was torn from.
+   ===================================================================== */
+.soc-bar:empty { display: none; }
+.act.soc-btn, .act.soc-view { display: inline-flex; align-items: center; gap: 6px; }
+.act.soc-btn svg, .act.soc-view svg { flex: none; }
+.act.soc-btn.on { color: var(--forest); }
+.act.soc-btn:disabled { opacity: 0.5; }
+.soc-row .soc-view { margin-left: auto; margin-right: -14px; color: var(--forest); }
+.mem-bar { margin-top: var(--s-12); }
+.mem-bar.bare { margin-top: 0; padding-top: 0; border-top: none; }
+.mem-bar > .act:first-child { margin-left: -14px; }
+/* Two actions, side by side: the card row's "last one goes right" is
+   for a primary action, and neither of these is one. */
+.card-actions.mem-bar > .act:last-child { margin-left: 0; margin-right: 0; flex: none; }
+/* And neither row is ever the phone's two-row layout (above): that is
+   for a card with a primary to press, and these have none. */
+@media (max-width: 560px) {
+  .card-actions.soc-row > .act:last-child { flex: none; margin-left: auto; margin-right: -14px; }
+  .card-actions.mem-bar > .act:last-child { flex: none; margin-left: 0; margin-right: 0; }
+}
+
+/* =====================================================================
+   THE JOURNAL on a profile (profileService, memoryCard)
+   What someone went to, as a grid of memory cards: the cover or the
+   vibe and its glyph, the title, when and how many — and the like and
+   comment buttons inside the card.
+   ===================================================================== */
+.pe-group-n {
+  margin-left: 6px; font-family: var(--font-mono); font-weight: 500;
+  color: var(--fog); letter-spacing: 0;
+}
+.jr-grid {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s-12);
+  margin-bottom: var(--s-16);
+}
+@media (min-width: 640px) { .jr-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.jr-card {
+  position: relative;
+  display: flex; flex-direction: column;
+  min-width: 0;
+  background: var(--paper);
+  border: 1.5px solid var(--ash);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+}
+.jr-card.is-hidden { opacity: 0.6; }
+.jr-open {
+  display: flex; flex-direction: column; align-items: stretch;
+  width: 100%; padding: 0; margin: 0;
+  background: transparent; color: inherit; border: none; box-shadow: none;
+  text-align: left; border-radius: 0;
+}
+.jr-open:hover:not(:disabled), .jr-open:active:not(:disabled) { transform: none; box-shadow: none; filter: none; background: transparent; }
+.jr-cover {
+  display: grid; place-items: center;
+  aspect-ratio: 4 / 3;
+  background: color-mix(in srgb, var(--vibe, var(--sage)) var(--band-mix, 40%), var(--paper));
+  border-bottom: 1.5px solid color-mix(in srgb, var(--vibe, var(--sage)) 30%, var(--ash));
+  overflow: hidden;
+}
+.jr-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.jr-glyph { font-size: 34px; line-height: 1; }
+.jr-text { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px 2px; min-width: 0; }
+.jr-title {
+  font-family: var(--font-display); font-weight: var(--display-weight);
+  font-size: 15px; line-height: 1.2; letter-spacing: -0.02em; color: var(--ink);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.jr-meta {
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em;
+  color: var(--fog); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.jr-foot { display: flex; align-items: center; gap: 0; padding: 2px 4px 4px; margin-top: auto; }
+.jr-foot .act { padding: 8px 8px; font-size: 13px; }
+.jr-foot .act.jr-restore { color: var(--forest); }
+/* Your own card: take it off your profile. Sits on the cover's corner. */
+.jr-more {
+  position: absolute; top: 6px; right: 6px;
+  display: grid; place-items: center;
+  width: 30px; height: 30px; padding: 0; margin: 0;
+  border-radius: 50%;
+  background: var(--paper); color: var(--ink);
+  border: 1px solid var(--ash); box-shadow: none;
+}
+.jr-more:hover:not(:disabled) { transform: none; box-shadow: none; filter: none; border-color: var(--ink); }
+.pe-hidden-toggle {
+  display: block; width: auto; padding: 6px 0; margin: 0 0 var(--s-12);
+  background: none; border: none; box-shadow: none;
+  color: var(--fog); font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.03em;
+}
+.pe-hidden-toggle:hover:not(:disabled) { color: var(--ink); transform: none; box-shadow: none; filter: none; }
+
+/* =====================================================================
+   THE EVENT PAGE ON A PHONE: one card, not two. The event and the
+   people/comments are joined by a dotted tear, the way a card's action
+   row is, and the gaps inside are the card's own — label, then its
+   line, close together.
+   ===================================================================== */
+.ep-block .byline, .ep-block .going-row { margin-top: 0; }
+.ep-links { display: flex; flex-wrap: wrap; gap: 0 var(--s-16); margin-top: var(--s-16); }
+.ep-side .ep-links .ep-report { margin: 0; }
+@media (max-width: 959px) {
+  .ep-layout { gap: 0; }
+  .ep-layout .ep {
+    border-bottom: none;
+    border-bottom-left-radius: 0; border-bottom-right-radius: 0;
+    padding-bottom: var(--s-4);
+  }
+  .ep-side {
+    border-top: 1.5px dotted var(--ash);
+    border-top-left-radius: 0; border-top-right-radius: 0;
+  }
+}
+
+/* A modal gives every button a bottom margin; the sheet's do not want it. */
+.cs-panel button { margin-bottom: 0; }
