@@ -38,6 +38,57 @@
 
 const KEYBOARD_THRESHOLD = 90; // px — below this it's browser chrome, not a keyboard
 
+/** A field that opens the phone's own picker rather than a keyboard. */
+const PICKER_TYPES = /^(date|time|datetime-local|month|week)$/i;
+function pickerFocused() {
+  const el = document.activeElement;
+  return !!el && ((el.matches && el.matches("select")) ||
+    (el.tagName === "INPUT" && PICKER_TYPES.test(el.type || "")));
+}
+
+/* A LAYER NEVER SCROLLS ITSELF — only the scroller inside it does.
+   `.full-screen-view` is `overflow: hidden`, and hidden is NOT "cannot
+   scroll": a script, or iOS Safari revealing a focused field, can still
+   move it. When iOS did that to the create sheet to show the date
+   picker, the whole sheet — header and all — slid up inside its own
+   box, and Publish was half off the top. The visual viewport never
+   moved, so nothing that watched it could notice. style.css now makes
+   these layers `overflow: clip` (cannot scroll, full stop); this puts
+   one back on a browser too old for clip. */
+const FIXED_LAYERS = ".full-screen-view, #chatScreen, .profile-screen-wrapper";
+function holdLayersStill(event) {
+  const el = event.target;
+  if (!(el instanceof HTMLElement) || !el.matches(FIXED_LAYERS)) return;
+  const oy = getComputedStyle(el).overflowY;
+  if (oy === "auto" || oy === "scroll") return;   // a layer that IS its own scroller
+  if (el.scrollTop !== 0) el.scrollTop = 0;
+  if (el.scrollLeft !== 0) el.scrollLeft = 0;
+}
+
+/**
+ * Bring a focused field into view by scrolling ITS OWN panel only.
+ * `scrollIntoView` scrolls every box above the field as well — the
+ * layer and, on iOS, the page — which is how a form's header got
+ * pushed off the screen.
+ */
+function revealInPanel(el) {
+  const panel = el.closest(".screen-body, .profile-scroll-body, .container");
+  if (!panel) return;
+  const oy = getComputedStyle(panel).overflowY;
+  if (oy !== "auto" && oy !== "scroll") {
+    // Not a scroller of its own (the feed scrolls the page). Outside a
+    // layer, moving the page is exactly what is wanted.
+    if (!el.closest(FIXED_LAYERS)) el.scrollIntoView({ block: "center", behavior: "smooth" });
+    return;
+  }
+  const p = panel.getBoundingClientRect();
+  const r = el.getBoundingClientRect();
+  const target = panel.scrollTop + (r.top - p.top) - (panel.clientHeight - r.height) / 2;
+  const top = Math.max(0, Math.min(target, panel.scrollHeight - panel.clientHeight));
+  if (Math.abs(top - panel.scrollTop) < 2) return;
+  try { panel.scrollTo({ top, behavior: "smooth" }); } catch (_) { panel.scrollTop = top; }
+}
+
 function typingInField() {
   const el = document.activeElement;
   if (!el || !(el instanceof HTMLElement)) return false;
@@ -112,6 +163,11 @@ export function initViewportFit() {
        layer is open and the visible area has moved, pin the layer to
        what can actually be seen, exactly as the keyboard case does. */
     root.classList.toggle("vv-shifted", !open && !zoomed && layerOpen() && vv.offsetTop > 1);
+    // A picker is up and there is no keyboard: nothing needs the page
+    // to have moved. If iOS scrolled it to show the field, put it back.
+    if (!open && pickerFocused() && layerOpen() && Math.abs(window.scrollY - scrollBeforeKb) > 1) {
+      window.scrollTo(0, scrollBeforeKb);
+    }
 
     // Keep the newest message visible as the composer rises.
     if (open && !wasOpen) {
@@ -142,6 +198,8 @@ export function initViewportFit() {
 
   vv.addEventListener("resize", apply);
   vv.addEventListener("scroll", apply);
+  // Only while a picker is up: iOS may scroll the page under it.
+  window.addEventListener("scroll", () => { if (pickerFocused()) apply(); }, { passive: true });
   window.addEventListener("resize", apply);
   window.addEventListener("orientationchange", () => { tallest = 0; setTimeout(apply, 350); });
   apply();
@@ -167,14 +225,20 @@ export function initViewportFit() {
     if (!wasOpen) scrollBeforeKb = window.scrollY;
     settle();
 
+    // A date or time field opens a picker the phone places itself:
+    // moving anything for it is what used to push Publish off screen.
+    if (pickerFocused()) return;
+
     setTimeout(() => {
       // Scrolling fields into view only makes sense inside a scrolling
       // panel. The chat composer is pinned to the bottom instead.
-      if (el.closest(".screen-body, .profile-scroll-body, .container")) {
-        el.scrollIntoView({ block: "center", behavior: "smooth" });
-      }
+      if (document.activeElement === el) revealInPanel(el);
     }, 380);
   });
+
+  // Capture: scroll events do not bubble, and a layer's own is the one
+  // that matters here.
+  document.addEventListener("scroll", holdLayersStill, true);
 
   document.addEventListener("focusout", settle);
 }

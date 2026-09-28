@@ -67,7 +67,7 @@ import {
   fetchUser, refreshUser, primeUsers, displayNameFor, usernameFor, avatarFor
 } from './userService.js';
 import { toast, refreshSocialUI } from '../utils/ui.js';
-import { openOverlay, closeOverlay } from '../utils/overlays.js';
+import { openOverlay, closeOverlay, setOverlayTitle } from '../utils/overlays.js';
 import { PAGE, shown, freshFrom, resetPager, sentinel, nextPage, watch } from '../utils/pager.js';
 import { askConfirm } from '../utils/confirm.js';
 import { stampAsk, limitMessage, msUntilAskAllowed, ASK_GAP_MS } from './limitsService.js';
@@ -913,7 +913,10 @@ export async function openFollowList(targetUid, kind) {
     toTop = true;
   }
 
-  openOverlay("followListScreen");
+  // "Followers · Sanchit Kumar" in the tab; switching lists renames it.
+  const tabTitle = `${LIST_TITLES[listKind]} · ${displayNameFor(uid)}`;
+  openOverlay("followListScreen", { title: tabTitle });
+  setOverlayTitle("followListScreen", tabTitle);
   renderFollowList();
 
   // `following` and `vouchedBy` ride along with the profile document.

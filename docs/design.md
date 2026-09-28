@@ -203,3 +203,16 @@ spots are left is the capacity bar's job, right below, and saying it
 twice was noise. Recap stubs keep the compact side-by-side stat: their
 band is a fixed height for the notches, and "7 PEOPLE WENT" has no
 clock in it to misread.
+
+## The journal as prints
+
+A profile's memories are film prints pinned to the page: a `--print`
+frame with a fat caption edge, the photo square, the date burnt into
+the corner in amber (`--film-stamp` — amber, never ember: ember is
+right-now), a push-pin in the event's vibe, and a small tilt from
+`nth-child`, swinging from the pin (`transform-origin: 50% 0`). It is
+the one surface on a profile allowed a shadow (`--print-shadow`),
+because it genuinely hangs off the page; it keeps its hairline. All
+CSS: no image, no font, no request — the tilt is a composited
+transform. A card without a photo gets no stamp (unreadable on a pale
+vibe block, and the caption has the date).

@@ -194,6 +194,19 @@
   --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   --fast: 0.16s;
   --base: 0.26s;
+  /* The journal's prints (THE JOURNAL): the photo paper, its edge and
+     the shadow it hangs by, the gloss, the push-pin, and the date a
+     film camera burns into the corner. Amber, not ember: ember is
+     right-now, and a print is the opposite of that. */
+  --print:        #fffef9;
+  --print-edge:   #cfdfcc;
+  --print-shadow: 0 1px 1px rgba(39, 51, 56, 0.06), 0 10px 18px -10px rgba(22, 33, 31, 0.30);
+  --print-shadow-up: 0 2px 2px rgba(39, 51, 56, 0.06), 0 18px 28px -12px rgba(22, 33, 31, 0.34);
+  --print-gloss:  rgba(255, 255, 255, 0.22);
+  --pin-shine:    rgba(255, 255, 255, 0.9);
+  --pin-shade:    rgba(22, 33, 31, 0.38);
+  --film-stamp:   #ffb347;
+  --film-glow:    rgba(255, 120, 30, 0.55);
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -2352,7 +2365,7 @@ html.kb-open .return-chip.floating { display: none; }
 .avatar-option:hover { transform: scale(1.08); background: var(--ash); }
 .avatar-option.selected { background: var(--wash); border-color: var(--forest); transform: scale(1.04); }
 
-.full-screen-view { position: fixed; inset: 0; bottom: var(--kb); z-index: 1500; display: flex; flex-direction: column; background: var(--canvas); overflow: hidden; animation: rise 0.28s var(--ease); }
+.full-screen-view { position: fixed; inset: 0; bottom: var(--kb); z-index: 1500; display: flex; flex-direction: column; background: var(--canvas); overflow: hidden; overflow: clip; animation: rise 0.28s var(--ease); }
 .screen-header { display: flex; align-items: center; justify-content: space-between; gap: var(--s-12); padding: var(--s-12) var(--s-16); background: var(--paper); border-bottom: 1.5px solid var(--ash); flex-shrink: 0; }
 .screen-body {
   flex: 1;
@@ -4387,6 +4400,15 @@ html.rotate-lock body *::after { animation-play-state: paused !important; }
   --knob:        #e6f2dd;
   --danger-fill: #b34a45;
   --on-danger:   #fff5f3;
+  --print:        #2f3d42;
+  --print-edge:   #43555a;
+  --print-shadow: 0 1px 1px rgba(0, 0, 0, 0.4), 0 12px 20px -10px rgba(0, 0, 0, 0.7);
+  --print-shadow-up: 0 2px 2px rgba(0, 0, 0, 0.4), 0 20px 30px -12px rgba(0, 0, 0, 0.75);
+  --print-gloss:  rgba(255, 255, 255, 0.07);
+  --pin-shine:    rgba(255, 255, 255, 0.7);
+  --pin-shade:    rgba(0, 0, 0, 0.55);
+  --film-stamp:   #ffb347;
+  --film-glow:    rgba(255, 110, 20, 0.5);
 }
 
 /* Light text on a dark ground reads heavier than the same weight the
@@ -5033,62 +5055,127 @@ body:not(.is-admin) .admin-only { display: none !important; }
   margin-left: 6px; font-family: var(--font-mono); font-weight: 500;
   color: var(--fog); letter-spacing: 0;
 }
+/* THE JOURNAL AS PRINTS. Each memory is a photo the way a film camera
+   printed it — a white frame, a fat bottom edge for the caption, the
+   date burnt into the corner — pinned to the page with a push-pin in
+   the event's own vibe colour, each one hung a little crooked.
+   All of it is CSS: no image, no font, no request. The tilt is a
+   transform, which the GPU composites; the pin is two gradients.
+   A pinned print is the one thing on a profile that genuinely hangs
+   off the surface, so it is allowed a shadow — and keeps its hairline,
+   because a surface is held by its border. */
 .jr-grid {
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--s-12);
+  gap: var(--s-24) var(--s-16);
+  /* Room above for the pins and at the sides for the tilt, so neither
+     is ever sliced by the column. */
+  padding: var(--s-12) 6px var(--s-4);
   margin-bottom: var(--s-16);
 }
-@media (min-width: 640px) { .jr-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 640px) { .jr-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s-32) var(--s-24); } }
 .jr-card {
+  --tilt: 0deg; --drop: 0px;
   position: relative;
   display: flex; flex-direction: column;
   min-width: 0;
-  background: var(--paper);
-  border: 1.5px solid var(--ash);
-  border-radius: var(--r-sm);
-  overflow: hidden;
+  padding: 8px 8px 0;
+  background: var(--print);
+  border: 1px solid var(--print-edge);
+  border-radius: 3px;
+  box-shadow: var(--print-shadow);
+  /* It swings from the pin, not from its middle. */
+  transform-origin: 50% 0;
+  transform: translateY(var(--drop)) rotate(var(--tilt));
+  transition: transform 0.35s var(--spring), box-shadow var(--base) var(--ease);
 }
-.jr-card.is-hidden { opacity: 0.6; }
+.jr-grid > .jr-card:nth-child(4n+1) { --tilt: -2deg; }
+.jr-grid > .jr-card:nth-child(4n+2) { --tilt: 1.6deg; --drop: 6px; }
+.jr-grid > .jr-card:nth-child(4n+3) { --tilt: 1.1deg; --drop: 2px; }
+.jr-grid > .jr-card:nth-child(4n+4) { --tilt: -1.4deg; --drop: 8px; }
+/* The pin: a round head lit from the top left, and the dot of shadow
+   its needle throws on the print. */
+.jr-card::before {
+  content: ""; position: absolute; z-index: 2;
+  top: -7px; left: 50%; width: 16px; height: 16px; margin-left: -8px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 34% 30%, var(--pin-shine) 0 2px, transparent 3.5px),
+    radial-gradient(circle at 45% 40%, var(--vibe, var(--sage)) 0 45%, color-mix(in srgb, var(--vibe, var(--sage)) 62%, var(--pin-shade)) 100%);
+  box-shadow: 0 2px 3px var(--pin-shade);
+  pointer-events: none;
+}
+.jr-card::after {
+  content: ""; position: absolute; z-index: 1;
+  top: 6px; left: calc(50% + 2px); width: 7px; height: 3px;
+  border-radius: 50%;
+  background: var(--pin-shade);
+  transform: rotate(38deg);
+  opacity: 0.7;
+  pointer-events: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .jr-card:hover { --tilt: 0deg; --drop: -3px; box-shadow: var(--print-shadow-up); }
+}
+.jr-card:has(.jr-open:active) { --tilt: 0deg; }
+.jr-card.is-hidden { opacity: 0.6; --tilt: 0deg; --drop: 0px; box-shadow: none; }
+.jr-card.is-hidden::before, .jr-card.is-hidden::after { display: none; }
 .jr-open {
   display: flex; flex-direction: column; align-items: stretch;
   width: 100%; padding: 0; margin: 0;
   background: transparent; color: inherit; border: none; box-shadow: none;
-  text-align: left; border-radius: 0;
+  text-align: center; border-radius: 0;
 }
 .jr-open:hover:not(:disabled), .jr-open:active:not(:disabled) { transform: none; box-shadow: none; filter: none; background: transparent; }
 .jr-cover {
+  position: relative;
   display: grid; place-items: center;
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 1 / 1;
   background: color-mix(in srgb, var(--vibe, var(--sage)) var(--band-mix, 40%), var(--paper));
-  border-bottom: 1.5px solid color-mix(in srgb, var(--vibe, var(--sage)) 30%, var(--ash));
+  border-radius: 1px;
   overflow: hidden;
 }
 .jr-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.jr-glyph { font-size: 34px; line-height: 1; }
-.jr-text { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px 2px; min-width: 0; }
+/* The gloss of a print, catching the light across one corner. */
+.jr-cover::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(135deg, var(--print-gloss) 0%, transparent 38%);
+}
+.jr-glyph { font-size: 38px; line-height: 1; }
+/* The date the camera burnt in: '26 9 27, bottom right, glowing. */
+.jr-stamp {
+  position: absolute; right: 7px; bottom: 5px; z-index: 1;
+  font-family: var(--font-mono); font-size: 10px; font-weight: 700;
+  letter-spacing: 0.06em; line-height: 1;
+  color: var(--film-stamp);
+  text-shadow: 0 0 3px var(--film-glow), 0 0 1px var(--film-glow);
+  pointer-events: none;
+}
+.jr-text { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 10px 2px 0; min-width: 0; }
 .jr-title {
   font-family: var(--font-display); font-weight: var(--display-weight);
-  font-size: 15px; line-height: 1.2; letter-spacing: -0.02em; color: var(--ink);
+  font-size: 14px; line-height: 1.2; letter-spacing: -0.02em; color: var(--ink);
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-  overflow-wrap: anywhere;
+  overflow-wrap: anywhere; max-width: 100%;
 }
 .jr-meta {
-  font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em;
-  color: var(--fog); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.04em;
+  color: var(--fog); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
 }
-.jr-foot { display: flex; align-items: center; gap: 0; padding: 2px 4px 4px; margin-top: auto; }
+/* The fat bottom edge of the print: the caption and the like/comment. */
+.jr-foot { display: flex; align-items: center; justify-content: center; gap: 0; padding: 0 0 6px; margin-top: auto; }
 .jr-foot .act { padding: 8px 8px; font-size: 13px; }
 .jr-foot .act.jr-restore { color: var(--forest); }
-/* Your own card: take it off your profile. Sits on the cover's corner. */
+/* Your own print: take it off your profile. Sits on the photo's corner. */
 .jr-more {
-  position: absolute; top: 6px; right: 6px;
+  position: absolute; top: 14px; right: 14px; z-index: 3;
   display: grid; place-items: center;
-  width: 30px; height: 30px; padding: 0; margin: 0;
+  width: 28px; height: 28px; padding: 0; margin: 0;
   border-radius: 50%;
-  background: var(--paper); color: var(--ink);
+  background: var(--glass); color: var(--ink);
   border: 1px solid var(--ash); box-shadow: none;
 }
 .jr-more:hover:not(:disabled) { transform: none; box-shadow: none; filter: none; border-color: var(--ink); }
+@media (prefers-reduced-motion: reduce) { .jr-card { transition: none; } }
 .pe-hidden-toggle {
   display: block; width: auto; padding: 6px 0; margin: 0 0 var(--s-12);
   background: none; border: none; box-shadow: none;

@@ -291,6 +291,14 @@ function hiddenIdsFor(uid) {
 
 const MORE = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="currentColor"><circle cx="6" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="18" cy="12" r="1.8"/></svg>`;
 
+/* The date a film camera burns into the corner of a print: '26 9 27.
+   Year, month, day, no leading zeros — the way those cameras did it. */
+function filmStamp(ms) {
+  const d = new Date(Number(ms) || 0);
+  if (!ms || isNaN(d.getTime())) return "";
+  return `\u2019${String(d.getFullYear()).slice(-2)} ${d.getMonth() + 1} ${d.getDate()}`;
+}
+
 function memoryCard(e, now, { isSelf, hidden = false }) {
   const id = safeId(e.id);
   if (!id) return "";
@@ -300,12 +308,16 @@ function memoryCard(e, now, { isSelf, hidden = false }) {
   const guests = withoutBlocked((e.participantUids || []).filter((u) => u !== e.hostUid)).length;
   const when = wasCalledOff(e) ? "Called off" : dayLabel(e.startTime, now);
   const who = wasCalledOff(e) ? "" : guests ? ` \u00b7 ${guests} went` : "";
+  // Only a real photo gets the burnt-in date: on a pale vibe block it
+  // could not be read, and the caption says when anyway.
+  const stamp = cover && !wasCalledOff(e) ? filmStamp(e.startTime) : "";
   return `
     <article class="jr-card${hidden ? " is-hidden" : ""}" style="--vibe:${vibe}">
       <button type="button" class="jr-open" onclick="window.openEventPage('${id}')">
         <span class="jr-cover">${cover
           ? `<img src="${escapeHtml(cover)}" alt="" loading="lazy" decoding="async">`
-          : `<span class="jr-glyph" aria-hidden="true">${glyph}</span>`}</span>
+          : `<span class="jr-glyph" aria-hidden="true">${glyph}</span>`}${stamp
+          ? `<span class="jr-stamp" aria-hidden="true">${escapeHtml(stamp)}</span>` : ""}</span>
         <span class="jr-text">
           <span class="jr-title">${escapeHtml(e.title)}</span>
           <span class="jr-meta">${escapeHtml(when + who)}</span>

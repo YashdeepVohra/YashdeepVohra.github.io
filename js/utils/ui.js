@@ -1,6 +1,6 @@
 import { state } from '../state/store.js';
 import { escapeHtml, safeId } from './formatters.js';
-import { closeAllOverlays } from './overlays.js';
+import { closeAllOverlays, onOverlayChange, overlayTitles } from './overlays.js';
 
 const SCREENS = ["login", "home", "usernameScreen", "profileScreen", "chatScreen"];
 
@@ -19,8 +19,35 @@ const SCREEN_TITLES = { login: "", usernameScreen: "Claim your handle", chatScre
 let titleLabel = "";
 let titleUnread = false;
 let currentTab = "events";
+/* A layer over a screen names the tab while it is open: the create
+   sheet, an event page, Settings. Anything not listed here (a confirm,
+   the message menu, a small sheet) is a moment inside the screen under
+   it, and leaves that screen's name alone. A layer opened with its own
+   `title` (an event's name) wins over its entry here. */
+const LAYER_TITLES = {
+  createScreen: "New event",
+  eventScreen: "Event",
+  settingsScreen: "Settings",
+  searchScreen: "Search",
+  orbitScreen: "Orbit",
+  followListScreen: "Followers",
+  adminScreen: "Reports",
+  storyViewer: "Stories",
+  storyComposer: "New story",
+  commentSheet: "Comments",
+  shareSheet: "Share",
+  photoViewer: "Photo"
+};
+function layerTitle() {
+  for (const { id, title } of overlayTitles()) {
+    const t = title || LAYER_TITLES[id];
+    if (t) return t;
+  }
+  return "";
+}
 function paintTitle() {
-  const base = titleLabel ? `${titleLabel} · livesociya` : SEARCH_TITLE;
+  const label = layerTitle() || titleLabel;
+  const base = label ? `${label} · livesociya` : SEARCH_TITLE;
   const t = titleUnread ? `(1) ${base}` : base;
   if (document.title !== t) document.title = t;
 }
@@ -28,6 +55,7 @@ function paintTitle() {
 export function setPageTitle(label) { titleLabel = label || ""; paintTitle(); }
 /** A new message is waiting: "(1)" in front, whatever screen you are on. */
 export function setTitleUnread(on) { titleUnread = !!on; paintTitle(); }
+onOverlayChange(paintTitle);
 
 /**
  * Show one screen. ONE swap, at every width.

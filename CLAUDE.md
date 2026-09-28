@@ -196,6 +196,9 @@ Each line is the whole rule. The file after it is the argument for it.
   face travels round the ring but is never turned.
 - Send, the emoji button and every emoji cell cancel their own mousedown, so the keyboard never drops; nothing
   inside a fixed layer may `scrollIntoView` (on iOS it scrolls the page).
+- A layer never scrolls itself: `.full-screen-view` is `overflow: clip`,
+  and focusing a field scrolls only its own panel (`revealInPanel`), never
+  `scrollIntoView`. Pickers move nothing. That was the half-hidden Publish.
 - Phones are portrait only. A web page cannot lock rotation, so a phone
   on its side gets `.rotate-cover` and the app behind it stops painting.
 
@@ -252,7 +255,8 @@ Each line is the whole rule. The file after it is the argument for it.
   WhatsApp and X cache previews by URL. Copy says "around you", never
   campus-only: the product is for everyone, college first.
 - `document.title` has one owner, `ui.js` (`setPageTitle`, `setTitleUnread`).
-  Signed out it is the full search title; nothing else writes it.
+  Signed out it is the full search title; nothing else writes it. A layer
+  names the tab through `LAYER_TITLES` or `openOverlay(id, { title })`.
 
 **Painting the feed** → `docs/feed.md`
 

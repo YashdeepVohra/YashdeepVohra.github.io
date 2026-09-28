@@ -329,7 +329,7 @@ export function openComments(eventId) {
   const input = document.getElementById("csInput");
   if (input) input.value = "";
   hideMentions("sheet");
-  openOverlay("commentSheet", { onClose: () => { sheetId = ""; sheetPainted = ""; } });
+  openOverlay("commentSheet", { title: `Comments · ${e.title || "Event"}`, onClose: () => { sheetId = ""; sheetPainted = ""; } });
   paintSheet();
 }
 

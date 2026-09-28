@@ -5135,6 +5135,95 @@ group('lists of people load twenty at a time');
 }
 
 /* ------------------------------------------------------------------ */
+group('the tab says what is open, prints on a profile, and Publish stays put');
+{
+  const past = Object.assign(mkEvent('q1', 'me', 'Chai at the gate', '☕ Chill'),
+    { startTime: now - 3 * 864e5, expiresAt: now - 3 * 864e5 + 72e5, participantUids: ['me', 'a'],
+      photos: ['https://firebasestorage.googleapis.com/v0/b/livesociyaweb.firebasestorage.app/o/events%2Fme%2FPhotoNumber1xxxxxxxx.jpg?alt=media&token=t-1'] });
+  const bare = Object.assign(mkEvent('q2', 'me', 'Maggi run', '\u{1F355} Food'),
+    { startTime: now - 5 * 864e5, expiresAt: now - 5 * 864e5 + 72e5, participantUids: ['me'] });
+  const live = mkEvent('q3', 'a', 'Still going', '☕ Chill');
+  await seed({ q1: past, q2: bare, q3: live });
+
+  const tabs = await page.evaluate(async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const { ui } = window.__m;
+    const out = {};
+    ui.showTab('events'); out.feed = document.title;
+    window.openCreateScreen(); await wait(50); out.create = document.title;
+    window.closeCreateScreen(); await wait(300); out.back = document.title;
+    window.openEventPage('q3'); await wait(100); out.page = document.title;
+    window.closeEventPage(); await wait(300); out.pageBack = document.title;
+    window.openSettingsScreen(); await wait(100); out.settings = document.title;
+    window.closeSettingsScreen ? window.closeSettingsScreen() : history.back(); await wait(300);
+    out.afterSettings = document.title;
+    return out;
+  });
+  ok('the create sheet names the tab', tabs.create === 'New event · livesociya', JSON.stringify(tabs));
+  ok('and closing it gives the screen its name back', tabs.back === 'Live now · livesociya' && tabs.pageBack === 'Live now · livesociya', JSON.stringify(tabs));
+  ok('an event page is named after the event', tabs.page === 'Still going · livesociya', tabs.page);
+  ok('Settings is Settings', tabs.settings === 'Settings · livesociya', tabs.settings);
+
+  // THE PUBLISH BAR. iOS scrolled the create sheet ITSELF (overflow:
+  // hidden can still be scrolled) to show the date picker, and our own
+  // scrollIntoView did the same — Publish went half off the top.
+  const bar = await page.evaluate(async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    let intoView = 0;
+    const real = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function (...a) { intoView++; return real.apply(this, a); };
+    window.openCreateScreen(); await wait(350);
+    const layer = document.getElementById('createScreen');
+    const head = layer.querySelector('.screen-header');
+    const out = { overflow: getComputedStyle(layer).overflowY };
+    layer.scrollTop = 60; await wait(30);
+    out.layerScroll = layer.scrollTop;
+    document.getElementById('startTime').focus(); await wait(700);
+    out.intoViewPicker = intoView;
+    out.headTop = Math.round(head.getBoundingClientRect().top - layer.getBoundingClientRect().top);
+    document.getElementById('startTime').blur();
+    document.getElementById('maxCapacity').focus(); await wait(700);
+    out.intoViewText = intoView;
+    out.layerScrollAfter = layer.scrollTop;
+    out.headTopAfter = Math.round(head.getBoundingClientRect().top - layer.getBoundingClientRect().top);
+    document.getElementById('maxCapacity').blur();
+    Element.prototype.scrollIntoView = real;
+    window.closeCreateScreen(); await wait(300);
+    return out;
+  });
+  ok('a layer cannot be scrolled out from under its own header', bar.layerScroll === 0 && bar.layerScrollAfter === 0, JSON.stringify(bar));
+  ok('a date picker moves nothing', bar.intoViewPicker === 0 && bar.headTop === 0, JSON.stringify(bar));
+  ok('a text field scrolls only its own panel, never the layer', bar.intoViewText === 0 && bar.headTopAfter === 0, JSON.stringify(bar));
+
+  const prints = await page.evaluate(async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const { state } = window.__m;
+    const f = await import('/js/config/features.js'); f.features.photos = true; f.applyFeatureFlags();
+    window.__events = [state.eventCache.q1, state.eventCache.q2];
+    window.openProfileScreen('me'); await wait(900);
+    const list = document.getElementById('myProfileEvents');
+    const cards = [...list.querySelectorAll('.jr-card')];
+    const withPhoto = cards.find((c) => c.innerText.includes('Chai'));
+    const without = cards.find((c) => c.innerText.includes('Maggi'));
+    const out = {
+      n: cards.length,
+      tilted: cards.every((c) => getComputedStyle(c).transform !== 'none'),
+      pinned: cards.every((c) => getComputedStyle(c, '::before').content !== 'none'),
+      stamp: (withPhoto.querySelector('.jr-stamp') || {}).innerText || '',
+      noStamp: !without.querySelector('.jr-stamp'),
+      title: document.title
+    };
+    window.closeProfileScreen({ all: true }); await wait(300);
+    f.features.photos = false; f.applyFeatureFlags();
+    return out;
+  });
+  const d = new Date(past.startTime);
+  const want = '’' + String(d.getFullYear()).slice(-2) + ' ' + (d.getMonth() + 1) + ' ' + d.getDate();
+  ok('memories hang as tilted prints, each on a pin', prints.n === 2 && prints.tilted && prints.pinned, JSON.stringify(prints));
+  ok('a photo carries the date the way a film camera burnt it', prints.stamp === want && prints.noStamp, JSON.stringify(prints) + ' want ' + want);
+}
+
+/* ------------------------------------------------------------------ */
 group('overall');
 ok('no errors, no native dialogs, all the way through', errors.length === 0, errors.join(' | '));
 

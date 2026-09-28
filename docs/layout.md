@@ -355,3 +355,17 @@ their ears, and a profile photo visibly rotated. `faceSpin` starts at
 `rotate(-a)`, so slot + ring + face sum to zero on every frame, and the
 static `transform` does the same when the animation is off (reduced
 motion, a weak phone).
+
+
+### Publish half off the top when a date picker opened (iOS Safari)
+
+The first fix pinned the layer to the visual viewport (`vv-shifted`),
+and it was still happening: the visual viewport had not moved. The
+LAYER had. `overflow: hidden` is not "cannot scroll" — iOS, revealing
+the focused field, and our own `scrollIntoView({ block: "center" })`
+in `viewport.js`, both scrolled `#createScreen` itself, so header and
+all slid up inside its own box. Now: `.full-screen-view` is
+`overflow: clip` (cannot scroll at all), a capture `scroll` listener
+puts a layer back at 0 on a browser too old for clip, a date/time
+field moves nothing, and a text field scrolls only its own
+`.screen-body` (`revealInPanel`). Smoke: "Publish stays put".
