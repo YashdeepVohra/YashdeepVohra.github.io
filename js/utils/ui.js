@@ -1,61 +1,31 @@
 import { state } from '../state/store.js';
 import { escapeHtml, safeId } from './formatters.js';
-import { closeAllOverlays, onOverlayChange, overlayTitles } from './overlays.js';
+import { closeAllOverlays } from './overlays.js';
 
 const SCREENS = ["login", "home", "usernameScreen", "profileScreen", "chatScreen"];
 
 /* ---------------------------------------------------------------------
    The page title
    ---------------------------------------------------------------------
-   One owner, because two used to fight over it: the inbox wrote
-   "livesociya" over whatever screen you were on every time a chat
-   changed. Now a screen says what it is (setPageTitle) and the inbox
-   only says whether something is unread (setTitleUnread); this paints
-   both. Signed out, the title is the full search title from index.html
-   — that is the one Google shows, so the front door never changes it. */
+   One name for the whole app: "livesociya". A name per screen ("Live
+   now", "Settings", an event's title) was tried and read as clutter in
+   a tab — an app is one thing, the way Instagram's tab says Instagram.
+   Two things still change it:
+     - signed out, it is the full search title from index.html — that
+       is the one Google shows, so the front door never changes it;
+     - a message waiting puts "(1)" in front, whatever screen you are on.
+   One owner, because two used to fight over it. */
 const SEARCH_TITLE = "livesociya — what's happening around you, right now";
-const TAB_TITLES = { events: "Live now", recap: "Recap", chats: "Messages" };
-const SCREEN_TITLES = { login: "", usernameScreen: "Claim your handle", chatScreen: "Chat", profileScreen: "Profile" };
-let titleLabel = "";
+const APP_TITLE = "livesociya";
+let signedIn = false;
 let titleUnread = false;
-let currentTab = "events";
-/* A layer over a screen names the tab while it is open: the create
-   sheet, an event page, Settings. Anything not listed here (a confirm,
-   the message menu, a small sheet) is a moment inside the screen under
-   it, and leaves that screen's name alone. A layer opened with its own
-   `title` (an event's name) wins over its entry here. */
-const LAYER_TITLES = {
-  createScreen: "New event",
-  eventScreen: "Event",
-  settingsScreen: "Settings",
-  searchScreen: "Search",
-  orbitScreen: "Orbit",
-  followListScreen: "Followers",
-  adminScreen: "Reports",
-  storyViewer: "Stories",
-  storyComposer: "New story",
-  commentSheet: "Comments",
-  shareSheet: "Share",
-  photoViewer: "Photo"
-};
-function layerTitle() {
-  for (const { id, title } of overlayTitles()) {
-    const t = title || LAYER_TITLES[id];
-    if (t) return t;
-  }
-  return "";
-}
 function paintTitle() {
-  const label = layerTitle() || titleLabel;
-  const base = label ? `${label} · livesociya` : SEARCH_TITLE;
-  const t = titleUnread ? `(1) ${base}` : base;
+  const base = signedIn ? APP_TITLE : SEARCH_TITLE;
+  const t = titleUnread && signedIn ? `(1) ${base}` : base;
   if (document.title !== t) document.title = t;
 }
-/** What this screen is, for the tab, history and bookmarks. "" = the search title. */
-export function setPageTitle(label) { titleLabel = label || ""; paintTitle(); }
 /** A new message is waiting: "(1)" in front, whatever screen you are on. */
 export function setTitleUnread(on) { titleUnread = !!on; paintTitle(); }
-onOverlayChange(paintTitle);
 
 /**
  * Show one screen. ONE swap, at every width.
@@ -93,8 +63,7 @@ export function switchScreen(screenId) {
   if (signedOut) frame?.classList.add("hidden");
   else if (screenId) frame?.classList.remove("hidden");
 
-  if (screenId === "home") setPageTitle(TAB_TITLES[currentTab]);
-  else if (screenId in SCREEN_TITLES) setPageTitle(SCREEN_TITLES[screenId]);
+  if (screenId) { signedIn = !signedOut; paintTitle(); }
 
   const hideNav = !screenId || signedOut || screenId === "usernameScreen" || screenId === "chatScreen";
   document.querySelector(".bottom-nav")?.classList.toggle("hidden", hideNav);
@@ -119,8 +88,6 @@ const TAB_PANELS = { events: "eventsTab", recap: "recapTab", chats: "chatsTab" }
  */
 export function showTab(tab) {
   const active = TAB_PANELS[tab] ? tab : "events";
-  currentTab = active;
-  if (!document.getElementById("home")?.classList.contains("hidden")) setPageTitle(TAB_TITLES[active]);
 
   Object.values(TAB_PANELS).forEach((id) =>
     document.getElementById(id)?.classList.add("hidden")

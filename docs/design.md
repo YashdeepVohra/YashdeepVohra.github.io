@@ -216,3 +216,7 @@ because it genuinely hangs off the page; it keeps its hairline. All
 CSS: no image, no font, no request — the tilt is a composited
 transform. A card without a photo gets no stamp (unreadable on a pale
 vibe block, and the caption has the date).
+Measured (Chromium, 360px phone, 36 prints, CPU slowed 6x like a
+low-end Android): scrolling holds 60fps with the tilt, the same as
+flat cards. Do not add `will-change` to the prints — a layer per card
+costs a cheap phone memory and buys nothing for a static tilt.

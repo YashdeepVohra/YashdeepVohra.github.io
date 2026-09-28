@@ -254,9 +254,9 @@ Each line is the whole rule. The file after it is the argument for it.
 - Redraw `og-image.png` → bump `?v=` on every og/twitter/JSON-LD image URL;
   WhatsApp and X cache previews by URL. Copy says "around you", never
   campus-only: the product is for everyone, college first.
-- `document.title` has one owner, `ui.js` (`setPageTitle`, `setTitleUnread`).
-  Signed out it is the full search title; nothing else writes it. A layer
-  names the tab through `LAYER_TITLES` or `openOverlay(id, { title })`.
+- `document.title` has one owner, `ui.js`: "livesociya" signed in (one name,
+  no per-screen names — the user's call), the full search title signed
+  out, "(1) " in front for unread (`setTitleUnread`). Nothing else writes it.
 
 **Painting the feed** → `docs/feed.md`
 

@@ -24,30 +24,6 @@ const stack = [];
 // touching the real stack.
 let pendingPops = 0;
 
-/* WHAT THE TAB SAYS. A layer can carry a title ("Settings", an event's
-   name), and ui.js — the one owner of document.title — is told every
-   time the stack changes so the tab names whatever is on top. Without
-   this the tab kept saying "Live now" over the create sheet, an event
-   page, Settings and every other layer. */
-let changeHook = null;
-export function onOverlayChange(fn) { changeHook = fn; }
-function changed() {
-  if (typeof changeHook === "function") {
-    try { changeHook(); } catch (_) { /* a title must never break a layer */ }
-  }
-}
-/** Top first: [{ id, title }]. */
-export function overlayTitles() {
-  return stack.slice().reverse().map((e) => ({ id: e.id, title: e.title || "" }));
-}
-/** Rename an open layer (an event page whose event was renamed). */
-export function setOverlayTitle(id, title) {
-  const entry = stack.find((e) => e.id === id);
-  if (!entry || entry.title === title) return;
-  entry.title = title || "";
-  changed();
-}
-
 export function isOverlayOpen(id) {
   return stack.some((entry) => entry.id === id);
 }
@@ -56,14 +32,13 @@ export function anyOverlayOpen() {
   return stack.length > 0;
 }
 
-export function openOverlay(id, { onClose, title } = {}) {
+export function openOverlay(id, { onClose } = {}) {
   const el = document.getElementById(id);
   if (!el || isOverlayOpen(id)) return;
 
   el.classList.remove("hidden");
-  stack.push({ id, onClose, title: title || "" });
+  stack.push({ id, onClose });
   history.pushState({ overlay: id, depth: stack.length }, "", window.location.href);
-  changed();
 }
 
 /** Ask to close a layer. Buttons should call this. */
@@ -76,7 +51,6 @@ export function closeOverlay(id) {
   const [entry] = stack.splice(index, 1);
   document.getElementById(entry.id)?.classList.add("hidden");
   if (typeof entry.onClose === "function") entry.onClose();
-  changed();
 
   // Hidden already; now let history catch up.
   pendingPops++;
@@ -99,7 +73,6 @@ export function popOverlay() {
   if (!entry) return false;
   document.getElementById(entry.id)?.classList.add("hidden");
   if (typeof entry.onClose === "function") entry.onClose();
-  changed();
   return true;
 }
 
@@ -116,7 +89,7 @@ export function isOverlayTop(id) {
  * closes the NEW layer and leaves the stack out of step with history.
  * One entry in, one entry out, no race.
  */
-export function replaceOverlay(id, { onClose, title } = {}) {
+export function replaceOverlay(id, { onClose } = {}) {
   const el = document.getElementById(id);
   if (!el) return;
 
@@ -127,8 +100,7 @@ export function replaceOverlay(id, { onClose, title } = {}) {
   }
 
   el.classList.remove("hidden");
-  stack.push({ id, onClose, title: title || "" });
-  changed();
+  stack.push({ id, onClose });
 
   // Only push if there was nothing to inherit an entry from.
   if (!previous) {
@@ -167,5 +139,4 @@ export function clearOverlays() {
     const entry = stack.pop();
     document.getElementById(entry.id)?.classList.add("hidden");
   }
-  changed();
 }

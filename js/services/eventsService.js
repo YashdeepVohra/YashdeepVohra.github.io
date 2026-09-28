@@ -248,7 +248,6 @@ export function openEditScreen(eventId) {
 
   setCreateSheetMode("edit");
   const opts = { onClose: () => { state.editingEventId = null; } };
-  opts.title = "Edit event";
   if (isOverlayTop("deleteModal")) replaceOverlay("createScreen", opts);
   else openOverlay("createScreen", opts);
 

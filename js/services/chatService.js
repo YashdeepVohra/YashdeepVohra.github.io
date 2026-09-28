@@ -18,7 +18,7 @@
 import { auth, db, FieldValue } from '../config/firebase.js';
 import { state } from '../state/store.js';
 import { renderAvatar, formatTime, formatInboxTime, clockTime, formatMessage, escapeHtml, safeId, msOf } from '../utils/formatters.js';
-import { switchScreen, showTab, showNotification, toggleTime, toast, setPageTitle, setTitleUnread } from '../utils/ui.js';
+import { switchScreen, showTab, showNotification, toggleTime, toast, setTitleUnread } from '../utils/ui.js';
 import { askConfirm } from '../utils/confirm.js';
 import { openOverlay, closeOverlay, isOverlayOpen } from '../utils/overlays.js';
 import {
@@ -311,7 +311,6 @@ export function openChat(chatId, otherUid) {
       hTitle.style.cursor = "pointer";
       hTitle.onclick = () => openProfileScreen(otherUid);
     }
-    setPageTitle(displayNameFor(otherUid));
   });
   paintHeaderPresence();
   primePresence([otherUid]);
@@ -401,7 +400,6 @@ export function openEventChat(eventId) {
 
   document.querySelector(".topbar")?.classList.add("hidden");
   switchScreen("chatScreen");
-  setPageTitle(cached.title || "Event chat");
   history.pushState({ modalOpen: true }, "", window.location.href);
 
   if (state.chatDocUnsubscribe) state.chatDocUnsubscribe();

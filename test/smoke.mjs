@@ -4136,8 +4136,8 @@ group('one file for the browser, a phone on its side, and Send');
     ui.setTitleUnread(false); ui.showTab('events');
     return out;
   });
-  ok('every screen names itself in the title', titles.recap === 'Recap · livesociya' && titles.live === 'Live now · livesociya', JSON.stringify(titles));
-  ok('and an unread message survives a tab change', titles.unread === '(1) Live now · livesociya' && titles.unreadStays === '(1) Messages · livesociya', JSON.stringify(titles));
+  ok('the tab says livesociya on every screen', titles.recap === 'livesociya' && titles.live === 'livesociya', JSON.stringify(titles));
+  ok('and an unread message survives a tab change', titles.unread === '(1) livesociya' && titles.unreadStays === '(1) livesociya', JSON.stringify(titles));
   ok('and its icon is drawn, not a font glyph', send.drawn && send.type === 'button', JSON.stringify(send));
 
   const turn = await page.evaluate(async () => {
@@ -5135,7 +5135,7 @@ group('lists of people load twenty at a time');
 }
 
 /* ------------------------------------------------------------------ */
-group('the tab says what is open, prints on a profile, and Publish stays put');
+group('one name in the tab, prints on a profile, and Publish stays put');
 {
   const past = Object.assign(mkEvent('q1', 'me', 'Chai at the gate', '☕ Chill'),
     { startTime: now - 3 * 864e5, expiresAt: now - 3 * 864e5 + 72e5, participantUids: ['me', 'a'],
@@ -5159,10 +5159,8 @@ group('the tab says what is open, prints on a profile, and Publish stays put');
     out.afterSettings = document.title;
     return out;
   });
-  ok('the create sheet names the tab', tabs.create === 'New event · livesociya', JSON.stringify(tabs));
-  ok('and closing it gives the screen its name back', tabs.back === 'Live now · livesociya' && tabs.pageBack === 'Live now · livesociya', JSON.stringify(tabs));
-  ok('an event page is named after the event', tabs.page === 'Still going · livesociya', tabs.page);
-  ok('Settings is Settings', tabs.settings === 'Settings · livesociya', tabs.settings);
+  ok('the tab is just livesociya, whatever is open over the feed',
+     Object.values(tabs).every((t) => t === 'livesociya'), JSON.stringify(tabs));
 
   // THE PUBLISH BAR. iOS scrolled the create sheet ITSELF (overflow:
   // hidden can still be scrolled) to show the date picker, and our own
@@ -5221,6 +5219,87 @@ group('the tab says what is open, prints on a profile, and Publish stays put');
   const want = '’' + String(d.getFullYear()).slice(-2) + ' ' + (d.getMonth() + 1) + ' ' + d.getDate();
   ok('memories hang as tilted prints, each on a pin', prints.n === 2 && prints.tilted && prints.pinned, JSON.stringify(prints));
   ok('a photo carries the date the way a film camera burnt it', prints.stamp === want && prints.noStamp, JSON.stringify(prints) + ' want ' + want);
+}
+
+/* ------------------------------------------------------------------ */
+group('a phone loading older memories');
+{
+  // Show older, on the widths phones actually are, with the prints
+  // tilted: nothing errors, nothing hangs past the column, no card is
+  // drawn twice however fast the button is tapped, and the page does
+  // not jump back to the top under your thumb.
+  const SU = (n) => 'https://firebasestorage.googleapis.com/v0/b/livesociyaweb.firebasestorage.app/o/events%2Fme%2FPhotoNumber'
+    + (n % 10) + 'xxxxxxxx.jpg?alt=media&token=t-' + n;
+  for (const width of [320, 360, 390, 430]) {
+    const ctx = await browser.newContext({ viewport: { width, height: 780 }, hasTouch: true, isMobile: true });
+    const p = await ctx.newPage();
+    const errs = [];
+    p.on('pageerror', (e) => errs.push(e.message.slice(0, 120)));
+    p.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errs.push(m.text().slice(0, 120)); });
+    await p.addInitScript({ path: fileURLToPath(new URL('./stub.js', import.meta.url)) });
+    await p.goto(APP_URL, { waitUntil: 'domcontentloaded' });
+    await p.waitForTimeout(1500);
+    const r = await p.evaluate(async (urls) => {
+      const wait = (ms) => new Promise((res) => setTimeout(res, ms));
+      const { state } = await import('/js/state/store.js');
+      const f = await import('/js/config/features.js'); f.features.photos = true; f.applyFeatureFlags();
+      const now = Date.now(), D = 864e5;
+      window.__authSingleton.currentUser = { uid: 'me' };
+      state.uid = 'me'; state.blockedUids = []; state.privacyChosen = true; state.userAvatar = '\u{1F43C}';
+      state.userCache = { me: { uid: 'me', username: 'me_h', displayName: 'Me', avatar: '\u{1F43C}', followers: [], following: [], vouchedBy: [], hiddenEvents: [] } };
+      state.following = []; state.orbitUids = []; state.eventCache = {}; state.eventOrder = []; state.recapOrder = []; state.recapDone = true;
+      const tags = ['☕ Chill', '\u{1F355} Food', '\u{1F389} Party', '\u{1F4DA} Study', '\u{1F3C0} Sports'];
+      window.__events = Array.from({ length: 30 }, (_, i) => ({
+        id: 'g' + i, hostUid: 'me', title: i % 4 === 0 ? 'A very long title for a night nobody will forget, ' + i : 'Thing ' + i,
+        place: 'Lawn', tag: tags[i % 5], description: '',
+        startTime: now - (i + 1) * D - 2 * 36e5, expiresAt: now - (i + 1) * D,
+        participantUids: ['me'], hypedUids: [], pendingUids: [], unconfirmedUids: [], circleId: 'main',
+        photos: i % 3 === 1 ? [] : [urls[i]]
+      }));
+      document.getElementById('loading-screen').classList.add('hidden');
+      document.querySelector('.app-frame').classList.remove('hidden');
+      window.switchScreen('home');
+      window.openProfileScreen('me');
+      await wait(900);
+      const list = document.getElementById('myProfileEvents');
+      let scroller = list.parentElement;
+      while (scroller && !/auto|scroll/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement;
+      const out = { first: list.querySelectorAll('.jr-card').length };
+      for (let page = 0; page < 2; page++) {
+        const btn = list.querySelector('.pe-older');
+        if (!btn) break;
+        btn.scrollIntoView({ block: 'end' });
+        const before = scroller ? scroller.scrollTop : window.scrollY;
+        btn.click(); btn.click();      // a double tap
+        await wait(500);
+        const after = scroller ? scroller.scrollTop : window.scrollY;
+        out['jump' + page] = Math.round(before - after);
+      }
+      await wait(300);
+      const cards = [...list.querySelectorAll('.jr-card')];
+      const ids = cards.map((c) => c.querySelector('.jr-foot')?.dataset.social || c.innerText);
+      const lr = list.getBoundingClientRect();
+      const col = { left: lr.left, right: lr.right };
+      out.total = cards.length;
+      out.dupes = ids.length - new Set(ids).size;
+      out.outside = cards.filter((c) => {
+        const cr = c.getBoundingClientRect();
+        return cr.left < col.left - 1 || cr.right > col.right + 1;
+      }).length;
+      out.pageWider = document.documentElement.scrollWidth > window.innerWidth;
+      out.pinsCut = cards.filter((c) => {
+        const grid = c.parentElement.getBoundingClientRect();
+        return c.getBoundingClientRect().top - 8 < grid.top - 1;
+      }).length;
+      out.stamps = list.querySelectorAll('.jr-stamp').length;
+      return out;
+    }, Array.from({ length: 30 }, (_, i) => SU(i)));
+    ok(`${width}px: older memories load in, all thirty, none twice`, r.first === 12 && r.total === 30 && r.dupes === 0, JSON.stringify(r));
+    ok(`${width}px: no print reaches past the column, the page never scrolls sideways`, r.outside === 0 && !r.pageWider && r.pinsCut === 0, JSON.stringify(r));
+    ok(`${width}px: loading more does not throw you back up the page`, (r.jump0 || 0) < 40 && (r.jump1 || 0) < 40, JSON.stringify(r));
+    ok(`${width}px: and nothing errors`, errs.length === 0, errs.join(' | '));
+    await ctx.close();
+  }
 }
 
 /* ------------------------------------------------------------------ */

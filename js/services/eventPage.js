@@ -14,7 +14,7 @@
 import { state } from '../state/store.js';
 import { renderAvatar, escapeHtml, safeId, clockTime } from '../utils/formatters.js';
 import { toast } from '../utils/ui.js';
-import { openOverlay, closeOverlay, setOverlayTitle } from '../utils/overlays.js';
+import { openOverlay, closeOverlay } from '../utils/overlays.js';
 import { displayNameFor, usernameFor, avatarFor } from './userService.js';
 import { isBlocked, withoutBlocked } from './blockService.js';
 import { inRecap, wasCalledOff } from './recapRules.js';
@@ -47,7 +47,7 @@ export function openEventPage(eventId) {
   lastSide = "";
   const input = document.getElementById("epCommentInput");
   if (input) input.value = "";
-  openOverlay("eventScreen", { title: e.title || "Event", onClose: () => { currentId = null; lastHtml = ""; lastSide = ""; } });
+  openOverlay("eventScreen", { onClose: () => { currentId = null; lastHtml = ""; lastSide = ""; } });
   renderEventPage();
   const scroller = document.getElementById("eventPageScroll");
   if (scroller) scroller.scrollTop = 0;
@@ -118,8 +118,6 @@ export function renderEventPage() {
   const participants = e.participantUids || [];
   const unconfirmed = e.unconfirmedUids || [];
   const guests = withoutBlocked(participants.filter((u) => u !== e.hostUid && !unconfirmed.includes(u)));
-  // The tab names the event, and follows it if the host renames it.
-  setOverlayTitle("eventScreen", e.title || "Event");
   const hostId = safeId(e.hostUid);
   const openHost = hostId ? `onclick="window.openProfileScreen('${hostId}')"` : "";
 
