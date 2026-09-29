@@ -5417,7 +5417,10 @@ html.restoring *::before, html.restoring *::after {
    box-shadow off. The first time it has something to say in a session
    it prints itself out, top to bottom, in steps like a print head.
    ===================================================================== */
-#receiptFull { filter: drop-shadow(0 6px 10px color-mix(in srgb, var(--pin-shade) 55%, transparent)); margin: 4px 6px 0; flex-shrink: 0; }
+/* No shadow round the slip: on the dimmed backdrop a drop shadow read
+   as a grey haze hugging the torn edges. The paper stands on the dark
+   layer by itself. */
+#receiptFull { margin: 4px 6px 0; flex-shrink: 0; }
 .receipt {
   --z: 8px;
   --slip: var(--paper);

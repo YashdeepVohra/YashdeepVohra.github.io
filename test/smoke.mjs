@@ -6123,6 +6123,9 @@ group('you can type, nothing selects by accident, the slip holds its shape');
       out.fits = sheet.top >= 0 && sheet.bottom <= innerHeight + 1;
       const close = document.querySelector('#receiptSheet .receipt-close').getBoundingClientRect();
       out.closeOnScreen = close.top >= 0 && close.bottom <= innerHeight + 1 && close.height > 20;
+      const bg = getComputedStyle(document.getElementById('receiptSheet')).backgroundColor;
+      out.dimmed = !(bg === 'transparent' || /rgba\(0, 0, 0, 0\)/.test(bg));
+      out.noHaze = getComputedStyle(document.getElementById('receiptFull')).filter === 'none';
       const full = document.getElementById('receiptFull');
       out.notSquashed = full.getBoundingClientRect().height >= rc.scrollHeight - 1;
       receipt.closeReceipt();
@@ -6131,6 +6134,7 @@ group('you can type, nothing selects by accident, the slip holds its shape');
     ok(`${w}x${h}: nothing on the page selects, fields still do`, sel.page === 'none' && sel.field === 'text' && sel.cardBlocked && sel.fieldAllowed && sel.dragBlocked, JSON.stringify(sel));
     ok(`${w}x${h}: the slip's torn ends are painted, it is upright, and it is never squashed`, sel.noMask && sel.teeth && sel.notTurned && sel.notSquashed, JSON.stringify(sel));
     ok(`${w}x${h}: its sheet fits the screen, top and bottom, and Close is always on it`, sel.fits && sel.closeOnScreen, JSON.stringify(sel));
+    ok(`${w}x${h}: the app is dimmed behind the receipt, with no grey haze round its edges`, sel.dimmed && sel.noHaze, JSON.stringify(sel));
     ok(`${w}x${h}: and nothing errors`, errs.length === 0, errs.join(' | '));
     await ctx.close();
   }
