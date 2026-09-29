@@ -65,8 +65,9 @@ Legal pages (`privacy.html`, `terms.html`, added 29 Sep 2026):
   move to 18+.
 - No in-app account deletion yet: the policy says "email us". An in-app
   Delete account would be the better answer.
-- The scoped-feed index (`circleId` + `expiresAt`) is ASCENDING now,
-  matching the live feed's order — create that one, not the old DESC.
+- Scoping the feed by circle needs BOTH `circleId` + `expiresAt`
+  indexes: ASCENDING for the live feed (it is `asc` now) and DESCENDING
+  for Recap. Both are in `firestore.indexes.json`.
 
 ## Findable by name
 

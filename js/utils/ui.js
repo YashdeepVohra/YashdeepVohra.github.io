@@ -244,7 +244,7 @@ export function toast(text, icon) {
   }, 2600);
 }
 
-export function showNotification(senderUid, chatId, openChatCallback) {
+export function showNotification(senderUid, chatId, openChatCallback, preview = "") {
   if (state.currentChat === chatId) return;
   if (!safeId(senderUid)) return;
 
@@ -256,7 +256,11 @@ export function showNotification(senderUid, chatId, openChatCallback) {
   const toast = document.createElement("div");
   toast.style.cssText =
     "background: var(--toast-bg); color: var(--toast-ink); padding: 14px 22px; border-radius: 100px; font-size: 15px; font-weight: 350; letter-spacing: -0.025em; cursor: pointer; transform: translateY(-150%); transition: transform 0.4s cubic-bezier(0.175,0.885,0.32,1.275); display: flex; align-items: center; gap: 10px; width: 100%; pointer-events: auto;";
-  toast.innerHTML = `<i class='bx bxs-message-rounded-dots' style="font-size:20px;"></i> New message from ${escapeHtml(displayName)}`;
+  // What they said, not only that they said something — one line of it.
+  const said = String(preview || "").trim();
+  toast.innerHTML = said
+    ? `<i class='bx bxs-message-rounded-dots' style="font-size:20px; flex-shrink:0;"></i><span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"><b style="font-weight:650;">${escapeHtml(displayName)}</b> ${escapeHtml(said.slice(0, 120))}</span>`
+    : `<i class='bx bxs-message-rounded-dots' style="font-size:20px;"></i> New message from ${escapeHtml(displayName)}`;
 
   toast.onclick = () => {
     if (openChatCallback) openChatCallback(chatId, senderUid);

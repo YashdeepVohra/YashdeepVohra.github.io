@@ -420,6 +420,11 @@
         <div id="chatWithTitle" class="header-title">User</div>
         <div id="chatPresence" class="chat-presence hidden"></div>
       </div>
+      <!-- Mute: no pop-ups from this conversation, on this device. -->
+      <button id="chatMuteBtn" class="chat-mute hidden" type="button" aria-label="Mute this chat" aria-pressed="false" title="Mute" onclick="toggleMuteChat()">
+        <svg class="ico ico-bell" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/></svg>
+        <svg class="ico ico-muted" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 0 1 9.2-5"/><path d="M18 11v5l1.5 2h-15"/><path d="M10 20.5a2.2 2.2 0 0 0 4 0"/><path d="M4 4l16 16"/></svg>
+      </button>
     </div>
 
     <!-- Filled by chatService when an event chat has a pinned message. -->
@@ -442,7 +447,7 @@
              focus off the field: see interactions/emojiPicker.js. -->
         <div class="composer-field">
           <button id="emojiBtn" class="composer-emoji" type="button" aria-label="Emoji" aria-expanded="false" aria-controls="emojiPanel" title="Emoji"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.3 14.2a4.6 4.6 0 0 0 7.4 0"/><circle cx="9" cy="9.8" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="9.8" r="1.2" fill="currentColor" stroke="none"/></svg></button>
-          <input id="msgInput" placeholder="Message..." autocomplete="off" oninput="handleTyping()" onkeydown="if(event.key === 'Enter') sendMessage()" />
+          <input id="msgInput" placeholder="Message..." autocomplete="off" enterkeyhint="send" maxlength="2000" oninput="handleTyping()" onkeydown="composerKey(event)" />
           <!-- A photo, with whatever is in the box as its caption. Hidden
                until features.photos is on. -->
           <button id="photoBtn" class="composer-emoji composer-photo needs-photos" type="button" aria-label="Send a photo" title="Photo" onmousedown="event.preventDefault()" onclick="sendChatPhoto()"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5" width="17" height="14" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="m20.5 16-5-5-8.5 8"/></svg></button>

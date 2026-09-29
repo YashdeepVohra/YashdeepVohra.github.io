@@ -237,6 +237,8 @@ Each line is the whole rule. The file after it is the argument for it.
 - Lists of people (followers, following, orbit, blocked, requests) show
   20 at a time with a shimmer sentinel (`utils/pager.js`); names are
   fetched per page, never the whole list.
+- "More" is a LOOK AHEAD: read page+1, show the page. A tab that filters
+  (Joined drops their own events) counts AFTER filtering (`fetchEventsPage`).
 
 **Starting on a bad network** → `docs/boot.md`
 
@@ -283,6 +285,10 @@ from Sign in and Settings. What they promise must stay true of the code
   never resolve are the worst outcome.
 - No `window.confirm` or `alert` anywhere: `askConfirm()` and `toast()`.
 - Overlays go through `js/utils/overlays.js`, so Android back works.
+- Moving between threads goes through `leaveCurrentThread` (draft,
+  typing, event listeners). Drafts and mute are per-device localStorage:
+  no reads, no writes, no rules. Read = seen (`markReadIfSeen`, visible
+  only); a pop-up is a NEW lastMsgId, never a typing change.
 - The thread scrolls ITSELF constantly (new message, history prepended,
   typing). Go through `scrollThread()`, so the floating date can tell
   a thumb from us.

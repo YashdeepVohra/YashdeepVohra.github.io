@@ -269,6 +269,146 @@ setPresenceTargets(() => {
   return out;
 });
 
+/* ---------------------------------------------------------------------
+   Drafts, muting, and leaving one thread for another
+   ---------------------------------------------------------------------
+   All three live on THIS DEVICE (localStorage), cost no reads and no
+   writes, and need nothing in firestore.rules. */
+const DRAFTS_KEY = "livesociya.drafts";
+const MUTED_KEY = "livesociya.muted";
+const MAX_DRAFTS = 50;
+
+function readMap(key) {
+  try {
+    const v = JSON.parse(localStorage.getItem(key) || "{}");
+    return v && typeof v === "object" && !Array.isArray(v) ? v : {};
+  } catch (e) { return {}; }
+}
+function writeMap(key, map) {
+  try { localStorage.setItem(key, JSON.stringify(map)); } catch (e) { /* full or private */ }
+}
+
+/* A DRAFT STAYS WITH ITS CONVERSATION.
+   The composer is one input shared by every thread, and nothing emptied
+   it when you moved between them: half a message to one person was
+   sitting in the box when you opened somebody else, one Enter away from
+   going to the wrong person. Now what you leave in the box is kept for
+   that chat, put back when you return, and the inbox says "Draft". */
+export function draftFor(chatId) {
+  const d = readMap(DRAFTS_KEY)[chatId];
+  return d && typeof d.text === "string" ? d.text : "";
+}
+function setDraft(chatId, text) {
+  if (!chatId) return;
+  const map = readMap(DRAFTS_KEY);
+  const t = String(text || "").slice(0, 2000);
+  if (t.trim()) map[chatId] = { text: t, at: Date.now() };
+  else delete map[chatId];
+  // Only the newest few dozen are worth keeping.
+  const keys = Object.keys(map);
+  if (keys.length > MAX_DRAFTS) {
+    keys.sort((a, b) => (map[a].at || 0) - (map[b].at || 0))
+      .slice(0, keys.length - MAX_DRAFTS).forEach((k) => delete map[k]);
+  }
+  writeMap(DRAFTS_KEY, map);
+}
+function saveComposerDraft() {
+  const input = document.getElementById("msgInput");
+  if (!input || !state.currentChat) return;
+  // An edit in progress is not a draft — it is a message already sent.
+  if (state.editingMessage) return;
+  setDraft(state.currentChat, input.value);
+}
+function restoreComposerDraft(chatId) {
+  const input = document.getElementById("msgInput");
+  if (input) input.value = draftFor(chatId);
+}
+
+/* MUTE. A muted conversation still arrives and still shows as unread;
+   it just never slides a notification over whatever you are doing. */
+export function isMuted(chatId) {
+  return !!readMap(MUTED_KEY)[chatId];
+}
+export function toggleMuteChat() {
+  const chatId = state.currentChat;
+  if (!chatId || state.currentChatType !== "direct") return;
+  const map = readMap(MUTED_KEY);
+  if (map[chatId]) delete map[chatId];
+  else map[chatId] = Date.now();
+  writeMap(MUTED_KEY, map);
+  paintMuteButton();
+  toast(map[chatId] ? "Muted. You won't get pop-ups from this chat." : "Unmuted.");
+}
+function paintMuteButton() {
+  const btn = document.getElementById("chatMuteBtn");
+  if (!btn) return;
+  const direct = state.currentChatType === "direct" && !!state.currentChat;
+  btn.classList.toggle("hidden", !direct);
+  const muted = direct && isMuted(state.currentChat);
+  btn.classList.toggle("on", muted);
+  btn.setAttribute("aria-pressed", muted ? "true" : "false");
+  btn.setAttribute("aria-label", muted ? "Unmute this chat" : "Mute this chat");
+  btn.title = muted ? "Unmute" : "Mute";
+}
+
+/* LEAVING A THREAD FOR ANOTHER ONE.
+   A notification tapped from inside an event chat opened the direct
+   chat straight over it, and nothing let go of the event: its typing
+   and pinned listeners stayed attached, so the event's pin appeared at
+   the top of a private conversation and the event's typists could
+   light up its typing bubble. And stopTyping() ran against the NEW
+   chat, leaving you "typing…" in the old one. Whatever belongs to the
+   thread on screen is let go of here, before the next one is set up. */
+function leaveCurrentThread() {
+  if (!state.currentChat) return;
+  saveComposerDraft();
+  stopTyping();
+  if (state.typingUnsubscribe) state.typingUnsubscribe();
+  if (state.pinnedUnsubscribe) state.pinnedUnsubscribe();
+  state.typingUnsubscribe = null;
+  state.pinnedUnsubscribe = null;
+  state.eventTypingUids = [];
+  state.currentEventData = null;
+  hideNewBelow();
+}
+
+/* ---------------------------------------------------------------------
+   "New messages" — when you have scrolled up and the thread moves on
+   ------------------------------------------------------------------- */
+let newBelow = 0;
+function newBelowEl() {
+  let el = document.getElementById("newBelow");
+  if (el) return el;
+  el = document.createElement("button");
+  el.id = "newBelow";
+  el.type = "button";
+  el.className = "new-below hidden";
+  el.addEventListener("mousedown", (e) => e.preventDefault());
+  el.addEventListener("click", () => {
+    const box = document.getElementById("messages");
+    if (box) box.scrollTo({ top: box.scrollHeight, behavior: "smooth" });
+    hideNewBelow();
+  });
+  // In the footer, riding just above it: whatever height the reply or
+  // edit note gives the footer, the pill stays clear of it.
+  (document.querySelector("#chatScreen .chat-footer") || document.getElementById("chatScreen"))?.appendChild(el);
+  return el;
+}
+function showNewBelow(count) {
+  newBelow += count;
+  const el = newBelowEl();
+  el.innerHTML = `${newBelow === 1 ? "1 new message" : (newBelow > 9 ? "9+" : newBelow) + " new messages"} <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg>`;
+  el.classList.remove("hidden");
+}
+function hideNewBelow() {
+  newBelow = 0;
+  document.getElementById("newBelow")?.classList.add("hidden");
+}
+
+// Set by a send of your own: whatever you were reading, your own
+// message is where the thread goes next.
+let chaseOwnSend = false;
+
 // ---------- Entry points ----------
 export async function startChat(rawUsername = null) {
   const typed = rawUsername || document.getElementById("chatUser")?.value;
@@ -296,6 +436,8 @@ export function startChatWithUid(otherUid) {
 
 export function openChat(chatId, otherUid) {
   if (!safeId(otherUid)) return;
+  if (state.currentChat === chatId) return;   // already here
+  leaveCurrentThread();
 
   state.currentChat = chatId;
   state.currentOtherUid = otherUid;
@@ -322,6 +464,8 @@ export function openChat(chatId, otherUid) {
   if (box) box.innerHTML = "";
   if (hAvatar) hAvatar.innerHTML = renderAvatar("\u{1F464}");
   if (hTitle) hTitle.innerText = "Loading...";
+  restoreComposerDraft(chatId);
+  paintMuteButton();
 
   fetchUser(otherUid).then(() => {
     if (state.currentOtherUid !== otherUid) return;
@@ -368,12 +512,7 @@ export function openChat(chatId, otherUid) {
     state.currentChatStatus = data.status || "unlocked";
     state.currentChatInitiatorUid = data.initiatedByUid || "";
 
-    if (data.unreadByUid === state.uid) {
-      db.collection("chats").doc(chatId)
-        .set({ unreadByUid: "", unreadCount: 0 }, { merge: true })
-        .catch(() => {});
-      state.currentChatData.unreadByUid = "";
-    }
+    markReadIfSeen();
 
     updateReadReceipts();
     updateTypingIndicator();
@@ -383,8 +522,28 @@ export function openChat(chatId, otherUid) {
   loadMessages();
 }
 
+/* READ MEANS SEEN.
+   A chat left open while the phone was in a pocket, or the tab in the
+   background, marked every message that arrived as Read the moment it
+   landed, and the sender saw "Read" for words nobody had looked at.
+   Now it is marked only while the page is actually on screen, and the
+   moment it comes back (app.js calls this on visibilitychange). */
+export function markReadIfSeen() {
+  const data = state.currentChatData;
+  const chatId = state.currentChat;
+  if (!data || !chatId || state.currentChatType !== "direct") return;
+  if (data.unreadByUid !== state.uid) return;
+  if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+  db.collection("chats").doc(chatId)
+    .set({ unreadByUid: "", unreadCount: 0 }, { merge: true })
+    .catch(() => {});
+  data.unreadByUid = "";
+}
+
 export function openEventChat(eventId) {
   if (!safeId(eventId)) return;
+  if (state.currentChat === eventId && state.currentChatType === "event") return;
+  leaveCurrentThread();
   const cached = state.eventCache[eventId] || {};
 
   state.currentChat = eventId;
@@ -408,6 +567,8 @@ export function openEventChat(eventId) {
     hAvatar.style.cursor = "default";
     hAvatar.onclick = null;
   }
+  restoreComposerDraft(eventId);
+  paintMuteButton();
   paintHeaderPresence();
   // innerText, not innerHTML — the title is user-supplied.
   if (hTitle) {
@@ -466,7 +627,9 @@ export function closeChat({ silent = false } = {}) {
   const chatId = state.currentChat;
   const type = state.currentChatType;
 
+  saveComposerDraft();
   stopTyping();
+  hideNewBelow();
 
   if (state.messagesUnsubscribe) state.messagesUnsubscribe();
   if (state.chatDocUnsubscribe) state.chatDocUnsubscribe();
@@ -490,6 +653,11 @@ export function closeChat({ silent = false } = {}) {
   closeMessageActions();
   closeEmojiPicker();
   paintThreadHello(false);
+  const input = document.getElementById("msgInput");
+  if (input) input.value = "";
+  paintMuteButton();
+  // The inbox shows "Draft" for the thread you just left.
+  paintInbox();
 
   document.querySelector(".topbar")?.classList.remove("hidden");
   if (!silent) switchScreen("home");
@@ -497,6 +665,25 @@ export function closeChat({ silent = false } = {}) {
 
 const SVG_SEND = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M3.4 20.4 21 12 3.4 3.6l-.01 6.53L15 12 3.39 13.87z"/></svg>';
 const SVG_TICK = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+
+/* THE COMPOSER'S KEYS.
+   Enter used to send on every Enter, including the one a Hindi, Tamil,
+   Japanese or swipe keyboard uses to CONFIRM a word it is still
+   composing — so a half-typed word went out on its own. Enter sends
+   only when nothing is being composed. Escape backs out of a reply or
+   an edit, the way the × does. */
+export function composerKey(event) {
+  if (!event) return;
+  if (event.key === "Escape") {
+    if (state.editingMessage) { event.preventDefault(); return cancelEdit(); }
+    if (state.replyingToMessage) { event.preventDefault(); return cancelReply(); }
+    return;
+  }
+  if (event.key !== "Enter" || event.shiftKey) return;
+  if (event.isComposing || event.keyCode === 229) return;
+  event.preventDefault();
+  sendMessage();
+}
 
 // ---------- Sending ----------
 export async function sendMessage({ photo = "" } = {}) {
@@ -526,7 +713,9 @@ export async function sendMessage({ photo = "" } = {}) {
   const pressedAt = Date.now();
 
   input.value = "";
+  setDraft(state.currentChat, "");
   state.replyingToMessage = null;
+  chaseOwnSend = true;
   updateChatFooterUI();
   keepComposerFocused(input);
 
@@ -650,6 +839,7 @@ export async function sendMessage({ photo = "" } = {}) {
   } catch (error) {
     console.error("Send failed:", error.code || error.message);
     input.value = text;
+    chaseOwnSend = false;
     // The upload landed but the message did not: nothing points at it.
     if (photo) deletePhotoByUrl(photo);
     toast(error.code === "permission-denied"
@@ -1319,6 +1509,8 @@ export function handleChatScroll() {
 
   // Near the top? Pull in the previous page of history.
   if (box.scrollTop < 120) loadOlderMessages();
+  // Back at the bottom: whatever was new has been seen.
+  if (newBelow && box.scrollHeight - box.scrollTop - box.clientHeight < 80) hideNewBelow();
 
   // Ours, not theirs. Nothing to say about where they are.
   if (Date.now() - selfScrolledAt < SELF_SCROLL_MS) return;
@@ -1424,8 +1616,11 @@ export function updateTypingIndicator() {
   if (!bubble || !box) return;
 
   const show = () => {
+    // Somebody starting to type used to pull you to the bottom from
+    // wherever you were reading. Only follow if you were already there.
+    const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
     bubble.classList.remove("hidden");
-    scrollThread(box, box.scrollHeight);
+    if (atBottom) scrollThread(box, box.scrollHeight);
   };
 
   if (state.currentChatType === "event") {
@@ -1873,6 +2068,7 @@ function renderMessages(msgs, { keepScroll = null } = {}) {
 
   const holder = document.createElement("div");
   const keep = new Set();
+  const arrivedNow = new Set();
   let prev = null;
 
   // A thread opening for the first time may rise in as a whole; after
@@ -1889,6 +2085,7 @@ function renderMessages(msgs, { keepScroll = null } = {}) {
     // then rebuilt, which is what sending a message does to the bubble
     // above it when a lone message becomes the top of a pair.
     const arriving = !paintedMsgs.has(b.key);
+    if (arriving) arrivedNow.add(b.key);
 
     let nodes;
     if (reusable) {
@@ -1938,11 +2135,24 @@ function renderMessages(msgs, { keepScroll = null } = {}) {
 
   fillEventEmbeds(box);
 
+  // Messages from them that have just arrived at the END of the thread
+  // (history prepended above is not "new").
+  const lastKey = blocks.length ? blocks[blocks.length - 1].key : "";
+  const newFromThem = firstPaint || keepScroll ? 0 : msgs.filter((m) =>
+    m.senderUid !== state.uid && arrivedNow.has(safeId(m.id))).length;
+  const mineJustSent = chaseOwnSend && msgs.length && msgs[msgs.length - 1].senderUid === state.uid;
+
   if (keepScroll) {
     // Stay anchored to the message you were looking at.
     scrollThread(box, box.scrollHeight - keepScroll.heightBefore + keepScroll.topBefore);
-  } else if (atBottom) {
+  } else if (atBottom || mineJustSent) {
+    // Your own message always comes into view, even from far up.
     scrollThread(box, box.scrollHeight);
+    if (mineJustSent) chaseOwnSend = false;
+    hideNewBelow();
+  } else if (newFromThem && lastKey && arrivedNow.has(lastKey)) {
+    // Reading further up: don't move them, say that something came.
+    showNewBelow(newFromThem);
   }
 
   // The icebreaker unlocks as soon as the other side replies.
@@ -2074,7 +2284,9 @@ function paintInbox(list = document.getElementById("chatList")) {
     // Several waiting: say how many rather than quote only the
     // newest, which reads as if that was all they said.
     const waiting = isUnread ? Math.max(1, Number(chat.unreadCount) || 1) : 0;
+    const draft = state.currentChat === chat.id ? "" : draftFor(chat.id);
     if (chat.typingUid === otherUid) { sub = "typing\u2026"; subClass = " live"; }
+    else if (draft && !isUnread) { sub = `<span class="chat-draft">Draft:</span> ${escapeHtml(draft.slice(0, 80))}`; }
     else if (waiting >= 2) {
       sub = waiting >= 4 ? "4+ new messages" : `${waiting} new messages`;
       subClass = " strong";
@@ -2097,7 +2309,7 @@ function paintInbox(list = document.getElementById("chatList")) {
         </div>
         <div class="chat-main">
           <div class="chat-top">
-            <span class="chat-name">${escapeHtml(displayNameFor(otherUid))}</span>
+            <span class="chat-name">${escapeHtml(displayNameFor(otherUid))}${isMuted(chat.id) ? `<svg class="chat-muted" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-label="Muted"><path d="M13 5 8 9H5v6h3l5 4z"/><path d="m17 9 5 6M22 9l-5 6"/></svg>` : ""}</span>
             <span class="chat-when">${escapeHtml(formatInboxTime(chat.lastUpdated))}</span>
           </div>
           <div class="chat-sub${subClass}">
@@ -2111,6 +2323,14 @@ function paintInbox(list = document.getElementById("chatList")) {
 
   if (liveFull && !olderDone) {
     html += `<button type="button" class="inbox-more" id="inboxMore">${olderLoading ? "Loading\u2026" : "Show older chats"}</button>`;
+  }
+  /* Searching: the results stay. A message arriving while you typed a
+     name used to repaint the inbox over the top of what you were
+     searching for. The badge and the tab title still move. */
+  if (inboxQuery.length >= 2) {
+    setUnreadBadge(hasGlobalUnread);
+    setTitleUnread(hasGlobalUnread);
+    return;
   }
   list.innerHTML = html;
   list.querySelector("#inboxMore")?.addEventListener("click", loadOlderChats);
@@ -2141,10 +2361,12 @@ export async function loadOlderChats() {
       .where("userUids", "array-contains", state.uid)
       .orderBy("lastUpdated", "desc")
       .startAfter(cursor)
-      .limit(INBOX_LIMIT)
+      // One past the page, as a look ahead — see LOOK AHEAD below.
+      .limit(INBOX_LIMIT + 1)
       .get();
+    const docs = snap.docs.slice(0, INBOX_LIMIT);
     const page = [];
-    snap.forEach((doc) => {
+    docs.forEach((doc) => {
       const data = doc.data();
       const other = (data.userUids || []).find((u) => u !== state.uid);
       if (isBlocked(other)) return;
@@ -2152,8 +2374,8 @@ export async function loadOlderChats() {
     });
     await primeUsers(page.map((c) => (c.userUids || []).find((u) => u !== state.uid)).filter(Boolean)).catch(() => {});
     olderChats = olderChats.concat(page.filter((c) => !olderChats.some((o) => o.id === c.id)));
-    if (snap.docs.length) olderCursor = snap.docs[snap.docs.length - 1];
-    if (snap.docs.length < INBOX_LIMIT) olderDone = true;
+    if (docs.length) olderCursor = docs[docs.length - 1];
+    if (snap.docs.length <= INBOX_LIMIT) olderDone = true;
   } catch (e) {
     console.error("Older chats failed:", e.code || e.message);
     toast("Couldn't load older chats.");
@@ -2164,8 +2386,11 @@ export async function loadOlderChats() {
 }
 
 let inboxGen = 0;
+const seenLast = new Map();   // chat id -> the last message we've told you about
+let inboxPrimed = false;
 export function loadChatList() {
   if (state.chatListUnsubscribe) state.chatListUnsubscribe();
+  inboxPrimed = false;
 
   const listEl = document.getElementById("chatList");
   if (listEl && !listEl.children.length) {
@@ -2186,7 +2411,11 @@ export function loadChatList() {
     // without it deployed this listener errors and retryInbox() gives
     // up after five tries.
     .orderBy("lastUpdated", "desc")
-    .limit(INBOX_LIMIT)
+    /* LOOK AHEAD. One more than is shown, so "Show older chats" appears
+       only when there IS an older chat. With exactly twenty it used to
+       appear anyway, and pressing it found nothing. The twenty-first is
+       never painted; it only answers that question. */
+    .limit(INBOX_LIMIT + 1)
     .onSnapshot(
       async (snapshot) => {
         inboxRetries = 0;
@@ -2194,17 +2423,34 @@ export function loadChatList() {
         if (!list) return;
         const gen = ++inboxGen;
 
+        /* A pop-up for a NEW MESSAGE, and only that. It used to fire on
+           every change to a chat that was waiting on you — so each time
+           they started or stopped typing in a thread you had not opened
+           yet, "New message from…" slid down again for the same
+           message. A message is new when the chat's lastMsgId moves to
+           one of theirs (or, for a chat from before previews,
+           lastUpdated moves). Muted chats never pop up. */
+        // The first snapshot is what was already there: nothing in it is
+        // news. After that, a chat ADDED to the top twenty with a message
+        // waiting for you is news too (a stranger's first message).
+        const first = !inboxPrimed;
+        inboxPrimed = true;
         snapshot.docChanges().forEach((change) => {
-          if (change.type !== "modified") return;
+          const id = change.doc.id;
           const data = change.doc.data();
-          if (data.unreadByUid === state.uid && state.currentChat !== change.doc.id) {
-            const senderUid = (data.userUids || []).find((u) => u !== state.uid);
-            if (senderUid && !isBlocked(senderUid)) showNotification(senderUid, change.doc.id, openChat);
-          }
+          const stamp = data.lastMsgId || String(data.lastUpdated || "");
+          const before = seenLast.get(id);
+          seenLast.set(id, stamp);
+          if (first || change.type === "removed" || before === stamp) return;
+          if (data.unreadByUid !== state.uid || state.currentChat === id || isMuted(id)) return;
+          if (data.lastSenderUid && data.lastSenderUid === state.uid) return;
+          const senderUid = (data.userUids || []).find((u) => u !== state.uid);
+          if (senderUid && !isBlocked(senderUid)) showNotification(senderUid, id, openChat, data.lastText || "");
         });
 
         const chats = [];
-        snapshot.forEach((doc) => {
+        const shownDocs = snapshot.docs.slice(0, INBOX_LIMIT);
+        shownDocs.forEach((doc) => {
           const data = doc.data();
           const other = (data.userUids || []).find((u) => u !== state.uid);
           if (isBlocked(other)) return;   // blocked conversations disappear
@@ -2230,7 +2476,7 @@ export function loadChatList() {
         // order it was in a moment ago (see loadMessages).
         if (gen !== inboxGen) return;
 
-        if (!chats.length) {
+        if (!chats.length && inboxQuery.length < 2) {
           list.innerHTML = `<div class="empty-state inbox-empty"><i class='bx bx-message-rounded-dots'></i><h4>No conversations yet</h4><p>Find someone by their handle above, or tap Chat on any event to talk to the people going.</p></div>`;
           setUnreadBadge(false);
           setTitleUnread(false);
@@ -2238,8 +2484,8 @@ export function loadChatList() {
         }
 
         liveChats = chats;
-        liveCursor = snapshot.docs.length ? snapshot.docs[snapshot.docs.length - 1] : null;
-        liveFull = snapshot.docs.length >= INBOX_LIMIT;
+        liveCursor = shownDocs.length ? shownDocs[shownDocs.length - 1] : null;
+        liveFull = snapshot.docs.length > INBOX_LIMIT;
         paintInbox(list);
       },
       (error) => {
@@ -2290,7 +2536,7 @@ export function onInboxSearch(value) {
   }
 
   inboxDebounce = setTimeout(async () => {
-    const uids = await searchPeople(q);
+    const uids = (await searchPeople(q)).filter((u) => u !== state.uid && !isBlocked(u));
     if (inboxQuery !== q) return;
 
     const list = document.getElementById("chatList");

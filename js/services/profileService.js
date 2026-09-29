@@ -573,12 +573,6 @@ export async function loadUserEvents(targetUid) {
   }
   list.innerHTML = `<div class="pe-skeleton"></div><div class="pe-skeleton"></div>`;
 
-  const toEvents = (snap) => {
-    const out = [];
-    snap.forEach((doc) => out.push({ id: doc.id, ...doc.data() }));
-    return out;
-  };
-
   /* Both of these used to be unbounded and unordered: every event the
      person had EVER hosted, and every one they had ever joined. Events
      are never deleted — they only age out of Recap on screen — so this
@@ -588,29 +582,14 @@ export async function loadUserEvents(targetUid) {
      Newest first, one screenful. Both need a composite index; see
      firestore.indexes.json. */
   try {
-    const [hostedSnap, joinedSnap] = await Promise.all([
-      db.collection("events")
-        .where("hostUid", "==", targetUid)
-        .orderBy("expiresAt", "desc")
-        .limit(PROFILE_EVENTS_LIMIT)
-        .get(),
-      joinedLocked
-        ? Promise.resolve(null)
-        : db.collection("events")
-            .where("participantUids", "array-contains", targetUid)
-            .orderBy("expiresAt", "desc")
-            .limit(PROFILE_EVENTS_LIMIT)
-            .get(),
+    const [hostedPage, joinedPage] = await Promise.all([
+      fetchEventsPage("hosted", targetUid, null),
+      joinedLocked ? Promise.resolve(null) : fetchEventsPage("joined", targetUid, null)
     ]);
     if (state.currentProfileUid !== targetUid) return;
 
-    const hosted = toEvents(hostedSnap).filter((e) => e.hostUid === targetUid);
-    const joined = joinedSnap
-      ? toEvents(joinedSnap).filter((e) =>
-          e.hostUid !== targetUid                              // hosting isn't going
-          && (e.participantUids || []).includes(targetUid)
-          && !isBlocked(e.hostUid))                          // blocking is total
-      : [];
+    const hosted = hostedPage.events;
+    const joined = joinedPage ? joinedPage.events : [];
 
     // Anything you can reach from here should already be in the cache
     // the feed and Recap draw from.
@@ -618,15 +597,10 @@ export async function loadUserEvents(targetUid) {
       if (!state.eventCache[e.id]) state.eventCache[e.id] = e;
     });
 
-    const lastOf = (snap) => (snap && snap.docs && snap.docs.length ? snap.docs[snap.docs.length - 1] : null);
     Object.assign(profileEvents, {
       hosted, joined, loaded: true,
-      cursor: { hosted: lastOf(hostedSnap), joined: lastOf(joinedSnap) },
-      // A full page may have more behind it; a short one cannot.
-      more: {
-        hosted: !!hostedSnap && hostedSnap.size >= PROFILE_EVENTS_LIMIT,
-        joined: !!joinedSnap && joinedSnap.size >= PROFILE_EVENTS_LIMIT
-      }
+      cursor: { hosted: hostedPage.cursor, joined: joinedPage ? joinedPage.cursor : null },
+      more: { hosted: hostedPage.more, joined: !!joinedPage && joinedPage.more }
     });
     if (joined.length) primeHosts(joined);
     paintProfileEvents();
@@ -651,23 +625,15 @@ export async function loadMoreProfileEvents() {
   profileEvents.paging = true;
   paintProfileEvents();
   try {
-    const base = kind === "hosted"
-      ? db.collection("events").where("hostUid", "==", uid)
-      : db.collection("events").where("participantUids", "array-contains", uid);
-    const snap = await base.orderBy("expiresAt", "desc")
-      .startAfter(profileEvents.cursor[kind]).limit(PROFILE_EVENTS_LIMIT).get();
+    const page = await fetchEventsPage(kind, uid, profileEvents.cursor[kind]);
     if (profileEvents.uid !== uid) return;
     const have = new Set(profileEvents[kind].map((e) => e.id));
-    const fresh = [];
-    snap.forEach((doc) => { if (!have.has(doc.id)) fresh.push({ id: doc.id, ...doc.data() }); });
-    const keep = kind === "hosted"
-      ? fresh.filter((e) => e.hostUid === uid)
-      : fresh.filter((e) => e.hostUid !== uid && (e.participantUids || []).includes(uid) && !isBlocked(e.hostUid));
+    const keep = page.events.filter((e) => !have.has(e.id));
     keep.forEach((e) => { if (!state.eventCache[e.id]) state.eventCache[e.id] = e; });
     if (kind === "joined" && keep.length) primeHosts(keep);
     profileEvents[kind] = profileEvents[kind].concat(keep);
-    if (snap.docs.length) profileEvents.cursor[kind] = snap.docs[snap.docs.length - 1];
-    profileEvents.more[kind] = snap.size >= PROFILE_EVENTS_LIMIT;
+    if (page.cursor) profileEvents.cursor[kind] = page.cursor;
+    profileEvents.more[kind] = page.more;
   } catch (e) {
     console.error("Older events failed:", e.code || e.message);
     toast("Couldn't load older events. Try again.");
@@ -677,6 +643,49 @@ export async function loadMoreProfileEvents() {
       paintProfileEvents();
     }
   }
+}
+
+/* ONE PAGE OF A PROFILE'S EVENTS — COUNTED AFTER FILTERING.
+   Joined is "events they're a participant of", and a host is a
+   participant of their own event, so the query also returns everything
+   they HOSTED, which the tab then filters out (along with events by
+   people you've blocked). "Is there more?" used to be asked of the RAW
+   page: twelve documents back meant "more", even when nine of them
+   were their own events and only three were joins. So the tab said
+   "3+" and offered "Show older" — which fetched another page of their
+   own events, showed nothing, and offered itself again.
+   Now a page keeps reading until it has a real page of rows, or the
+   query runs dry, and "more" means the last read came back full. It is
+   bounded (MAX_READS pages) so one profile can never read without end;
+   when the bound is hit the button stays, and pressing it carries on. */
+const MAX_READS = 4;
+async function fetchEventsPage(kind, uid, cursor) {
+  const base = kind === "hosted"
+    ? db.collection("events").where("hostUid", "==", uid)
+    : db.collection("events").where("participantUids", "array-contains", uid);
+  const keepIt = kind === "hosted"
+    ? (e) => e.hostUid === uid
+    : (e) => e.hostUid !== uid && (e.participantUids || []).includes(uid) && !isBlocked(e.hostUid);
+  const events = [];
+  const seen = new Set();
+  let after = cursor;
+  let more = false;
+  for (let reads = 0; reads < MAX_READS; reads++) {
+    let q = base.orderBy("expiresAt", "desc");
+    if (after) q = q.startAfter(after);
+    // One more than a page, and the extra one is only a look ahead: it
+    // is what tells "exactly twelve" (no button) from "twelve and more".
+    const snap = await q.limit(PROFILE_EVENTS_LIMIT + 1).get();
+    const docs = (snap.docs || []).slice(0, PROFILE_EVENTS_LIMIT);
+    docs.forEach((doc) => {
+      const e = { id: doc.id, ...doc.data() };
+      if (!seen.has(e.id) && keepIt(e)) { seen.add(e.id); events.push(e); }
+    });
+    if (docs.length) after = docs[docs.length - 1];
+    more = snap.size > PROFILE_EVENTS_LIMIT;
+    if (!more || events.length >= PROFILE_EVENTS_LIMIT) break;
+  }
+  return { events, cursor: after, more };
 }
 
 /** Host names on the Joined tab come from the profile cache. */

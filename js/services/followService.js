@@ -891,10 +891,13 @@ function listMembers() {
 async function fetchFollowers(uid, after = null) {
   let q = db.collection("users").doc(uid).collection("followers").orderBy("at", "desc");
   if (after) q = q.startAfter(after);
-  const snap = await q.limit(FOLLOWER_PAGE).get();
-  followersCursor = snap.docs.length ? snap.docs[snap.docs.length - 1] : after;
-  followersMore = snap.docs.length >= FOLLOWER_PAGE;
-  return snap.docs.map((d) => d.id);
+  // One past the page as a look ahead: exactly twenty followers is no
+  // shimmering "more" at the end of the list.
+  const snap = await q.limit(FOLLOWER_PAGE + 1).get();
+  const docs = snap.docs.slice(0, FOLLOWER_PAGE);
+  followersCursor = docs.length ? docs[docs.length - 1] : after;
+  followersMore = snap.docs.length > FOLLOWER_PAGE;
+  return docs.map((d) => d.id);
 }
 
 export async function openFollowList(targetUid, kind) {

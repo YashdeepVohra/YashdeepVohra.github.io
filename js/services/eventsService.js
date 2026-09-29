@@ -2325,16 +2325,19 @@ export async function loadRecap({ reset = false } = {}) {
         .where("expiresAt", "<=", now)
         .where("expiresAt", ">", now - RECAP_MAX_MS)
         .orderBy("expiresAt", "desc")
-        .limit(RECAP_PAGE);
+        // One past the page: the look ahead that keeps "Load more" off
+        // a Recap with exactly a page in it.
+        .limit(RECAP_PAGE + 1);
 
       if (state.recapCursor) q = q.startAfter(state.recapCursor);
 
       const snap = await q.get();
+      const docs = snap.docs.slice(0, RECAP_PAGE);
 
-      if (snap.size < RECAP_PAGE) state.recapDone = true;
-      if (snap.size) state.recapCursor = snap.docs[snap.docs.length - 1];
+      if (snap.size <= RECAP_PAGE) state.recapDone = true;
+      if (docs.length) state.recapCursor = docs[docs.length - 1];
 
-      snap.forEach((doc) => {
+      docs.forEach((doc) => {
         const data = { id: doc.id, ...doc.data() };
         state.eventCache[doc.id] = data;
         if (!inRecap(data, now, state.uid) || isBlocked(data.hostUid)) return;

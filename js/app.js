@@ -81,6 +81,10 @@ import {
   closeChat,
   openEventChat,
   sendMessage,
+  composerKey,
+  toggleMuteChat,
+  markReadIfSeen,
+  stopTyping,
   handleTyping,
   cancelReply,
   cancelEdit,
@@ -328,6 +332,8 @@ Object.assign(window, {
   closeChat,
   openEventChat,
   sendMessage,
+  composerKey,
+  toggleMuteChat,
   handleTyping,
   cancelReply,
   cancelEdit,
@@ -454,6 +460,8 @@ function boot() {
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState !== "visible") return;
     if (state.uid && !state.eventsUnsubscribe) retryFeedNow();
+    // A chat left open in the background is read now, when it is seen.
+    markReadIfSeen();
   });
 
   // The service worker is registered by the watchdog in index.html, so
@@ -464,7 +472,9 @@ function boot() {
   // immediately locking the phone would lose it.
   // Where you were goes with it: a phone may throw this tab away while
   // it is in the background, and the reload should put you back.
-  const flushPending = () => { flushAllHype(); flushReceipt(); saveRestorePoint(); };
+  // And a "typing…" left on as the page goes would stay on for the other
+  // person: nothing is left running to take it down.
+  const flushPending = () => { flushAllHype(); flushReceipt(); stopTyping(); saveRestorePoint(); };
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") flushPending();
   });
