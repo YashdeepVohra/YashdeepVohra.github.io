@@ -157,7 +157,7 @@ import { pickAccountType } from './services/authService.js';
 import { initTheme, setThemeChoice, syncThemeUI } from './utils/theme.js';
 import { confirmYes, confirmNo } from './utils/confirm.js';
 
-import { flushReceipt } from './services/receiptService.js';
+import { flushReceipt, openReceipt, closeReceipt } from './services/receiptService.js';
 import { openShare, closeShare, capturePendingEvent, consumePendingEvent } from './services/shareService.js';
 import { initSwipeListeners } from './interactions/swipeReply.js';
 import { initPullRefresh } from './interactions/pullRefresh.js';
@@ -221,6 +221,10 @@ function goToTab(tab) {
 }
 
 Object.assign(window, {
+  // Your receipt, in Recap
+  openReceipt,
+  closeReceipt,
+
   // The in-app replacement for window.confirm
   confirmYes,
   confirmNo,

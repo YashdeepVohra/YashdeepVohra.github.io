@@ -787,6 +787,15 @@
   </div>
 </div>
 
+<!-- Your receipt, printed (receiptService openReceipt). Tapping the
+     backdrop or Close puts it away; so does Android back. -->
+<div id="receiptSheet" class="modal-overlay receipt-overlay hidden" role="dialog" aria-label="Your receipt" onclick="if (event.target === this) closeReceipt()">
+  <div class="receipt-sheet">
+    <div id="receiptFull"></div>
+    <button type="button" class="receipt-close" onclick="closeReceipt()">Close</button>
+  </div>
+</div>
+
 <div id="deleteModal" class="modal-overlay hidden">
   <div class="modal-content">
     <div style="font-size:40px; margin-bottom:8px;">🎛️</div>

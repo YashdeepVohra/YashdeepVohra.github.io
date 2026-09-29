@@ -22,6 +22,7 @@ import {
   emptyReceipt, countable, foldAll, summarise, monthKey, stampFor, barcodeOf
 } from './receiptRules.js';
 import { vibeColor } from './eventsService.js';
+import { openOverlay, closeOverlay, isOverlayOpen } from '../utils/overlays.js';
 
 const SAVE_DEBOUNCE_MS = 1500;
 
@@ -164,6 +165,16 @@ export function receiptSummary(key = monthKey(Date.now())) {
    The card
    ------------------------------------------------------------------- */
 
+/* ---------------------------------------------------------------------
+   A TILE IN RECAP, THE SLIP BEHIND IT
+   ---------------------------------------------------------------------
+   The printed receipt is long — line items, regulars, totals, a
+   barcode — and sitting open at the top of Recap it pushed what just
+   wrapped (the reason anybody opens Recap) a whole screen down. So
+   Recap carries a one-line tile, and the slip prints out in a sheet
+   when you tap it: a fresh print every time you ask for one. The sheet
+   is an overlay, so Android back closes it.
+   ------------------------------------------------------------------- */
 export function renderReceipt() {
   const el = document.getElementById("receiptCard");
   if (!el) return;
@@ -175,13 +186,78 @@ export function renderReceipt() {
   if (!loaded) return;
 
   const s = receiptSummary();
+  const empty = !s.went && !s.total;
+  const sub = empty
+    ? "Nothing printed yet"
+    : s.went
+      ? `${s.went === 1 ? "Out once" : `Out ${s.went} times`}${s.topTag ? ` · mostly ${s.topTag}` : ""}`
+      : "Nothing yet this month";
+  const tile = `
+    <button type="button" class="receipt-tile" onclick="window.openReceipt()" aria-haspopup="dialog">
+      <span class="rt-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-2-1.4-2 1.4-2-1.4-2 1.4-2-1.4L6 21z"/><path d="M9 8h6M9 11.5h6M9 15h3.5"/></svg></span>
+      <span class="rt-text"><b>Your ${escapeHtml(s.label)} receipt</b><small>${escapeHtml(sub)}</small></span>
+      <span class="rt-go">Print <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></span>
+    </button>`;
+  if (tile !== lastTileHtml || !el.firstElementChild) {
+    lastTileHtml = tile;
+    el.innerHTML = tile;
+  }
 
-  /* A RECEIPT, PRINTED. The card used to be a sentence in a box; it is
-     a till slip now — torn at both ends, set in the mono voice, line
-     items for what you went to, the regulars, a total, a stamp for the
-     month and a barcode that is always the same for the same receipt.
-     It prints itself out once per session (the first time it has
-     something to say), and never again while you scroll. */
+  // The slip itself only while its sheet is open.
+  if (isOverlayOpen("receiptSheet")) paintSlip(s);
+}
+let lastTileHtml = "";
+let lastSlipHtml = "";
+
+/** Tap the tile: the slip prints out in its sheet. */
+export function openReceipt() {
+  primeReceipt();
+  lastSlipHtml = "";
+  openOverlay("receiptSheet", { onClose: () => { lastSlipHtml = ""; } });
+  if (loaded) paintSlip(receiptSummary(), { print: true });
+  else {
+    const box = document.getElementById("receiptFull");
+    if (box) box.innerHTML = `<div class="receipt receipt-empty"><div class="rc-meta rc-c">Printing…</div></div>`;
+  }
+}
+
+export function closeReceipt() {
+  if (isOverlayOpen("receiptSheet")) closeOverlay("receiptSheet");
+}
+
+function paintSlip(s, { print = false } = {}) {
+  const box = document.getElementById("receiptFull");
+  if (!box) return;
+  const html = slipHtml(s);
+  // Only written when it says something new, so a repaint underneath
+  // never cuts the print-out off halfway.
+  if (html === lastSlipHtml && box.firstElementChild) return;
+  const fresh = !lastSlipHtml;
+  lastSlipHtml = html;
+  box.innerHTML = html;
+  if ((print || fresh) && !lowEndDevice()) box.firstElementChild?.classList.add("printing");
+}
+
+/* THE PRINT-OUT IS CHEAP, AND SKIPPED WHERE EVEN CHEAP IS TOO MUCH.
+   It runs only when you tap, on one element, for 1.1 s, and in 14
+   STEPS rather than smoothly — so it is 14 repaints of one card, not
+   60 frames a second. Nothing on the server knows it exists, so it
+   costs the same with ten users or ten lakh. On a phone with 2 GB of
+   memory or 2 cores or fewer (what the browser will admit to), or with
+   reduced motion asked for, the slip just appears. */
+function lowEndDevice() {
+  try {
+    const mem = navigator.deviceMemory;
+    const cores = navigator.hardwareConcurrency;
+    return (typeof mem === "number" && mem <= 2) || (typeof cores === "number" && cores <= 2);
+  } catch (e) { return false; }
+}
+
+/* A RECEIPT, PRINTED: a till slip — torn at both ends, set in the mono
+   voice, line items for what you went to, the regulars, a total, a
+   stamp for the month and a barcode that is always the same for the
+   same receipt. */
+function slipHtml(s) {
   const now = new Date();
   // Spelled out by hand: en-GB's short month is "Sept", which no till prints.
   const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -194,17 +270,14 @@ export function renderReceipt() {
   const top = `
       <div class="rc-brand"><img src="/logo-mark.svg" alt="" width="18" height="18">livesociya</div>
       <div class="rc-meta">Receipt for ${escapeHtml(s.label)}</div>
-      <div class="rc-meta">No. ${escapeHtml(number)} \u00b7 ${escapeHtml(printed)}</div>`;
+      <div class="rc-meta">No. ${escapeHtml(number)} · ${escapeHtml(printed)}</div>`;
   const tail = `
       <div class="rc-bars" aria-hidden="true">${bars}</div>
       <div class="rc-meta rc-c">see you out there</div>`;
 
-  // Nothing to show is not the same as nothing to say. Somebody who
-  // has never been to anything gets the point of the thing explained
-  // once; after that the card earns its place.
+  // Nothing to show is not the same as nothing to say.
   if (!s.went && !s.total) {
-    lastReceiptHtml = "";
-    el.innerHTML = `
+    return `
       <div class="receipt receipt-empty">
         ${top}
         <hr class="rc-rule">
@@ -213,11 +286,10 @@ export function renderReceipt() {
            what you went to, and who you keep running into.</p>
         ${tail}
       </div>`;
-    return;
   }
 
-  const row = (q, item, extra = "") =>
-    `<div class="rc-row${extra}"><span class="rc-q">${q}</span><span class="rc-i">${item}</span></div>`;
+  const row = (q, item) =>
+    `<div class="rc-row"><span class="rc-q">${q}</span><span class="rc-i">${item}</span></div>`;
   const items = [
     s.went ? row(s.went, s.went === 1 ? "Time you showed up" : "Times you showed up") : "",
     s.hosted ? row(s.hosted, s.hosted === 1 ? "Thing you started" : "Things you started") : "",
@@ -225,9 +297,11 @@ export function renderReceipt() {
       `<span class="rc-sw" style="background:${vibeColor(t.tag)}"></span>${escapeHtml(t.tag)}`))
   ].join("");
 
+  // Tapping a regular goes to their profile — and the sheet closes on
+  // the way, because a screen change closes every layer.
   const people = s.people.map((p) => {
     const id = safeId(p.uid);
-    const inner = `<span class="receipt-face">${renderAvatar(avatarFor(p.uid))}</span><span class="rc-name">${escapeHtml(displayNameFor(p.uid))}</span><span class="rc-dots"></span><b>\u00d7${p.count}</b>`;
+    const inner = `<span class="receipt-face">${renderAvatar(avatarFor(p.uid))}</span><span class="rc-name">${escapeHtml(displayNameFor(p.uid))}</span><span class="rc-dots"></span><b>×${p.count}</b>`;
     return id
       ? `<div class="receipt-person" role="button" onclick="window.openProfileScreen('${id}')">${inner}</div>`
       : `<div class="receipt-person">${inner}</div>`;
@@ -238,7 +312,7 @@ export function renderReceipt() {
     ? `<div class="rc-stamp" style="--c:${s.topTag ? vibeColor(s.topTag) : "var(--forest)"}" aria-label="${escapeHtml(stamp.title)}">${escapeHtml(stamp.title)}<small>${escapeHtml(stamp.sub)}</small></div>`
     : "";
 
-  const html = `
+  return `
     <div class="receipt">
       ${top}
       ${stampHtml}
@@ -259,17 +333,4 @@ export function renderReceipt() {
       <div class="rc-thanks">Thank you for showing up</div>
       ${tail}
     </div>`;
-  // Repainted with the feed; only written when it says something new —
-  // which is also what lets the print-out finish: the Recap repaint
-  // straight after the first paint used to replace the slip halfway
-  // through printing.
-  if (html === lastReceiptHtml && el.firstElementChild) return;
-  lastReceiptHtml = html;
-  el.innerHTML = html;
-  if (!printedOnce) {
-    printedOnce = true;
-    el.firstElementChild?.classList.add("printing");
-  }
 }
-let printedOnce = false;
-let lastReceiptHtml = "";

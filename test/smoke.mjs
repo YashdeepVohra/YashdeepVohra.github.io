@@ -1945,10 +1945,19 @@ group('reactions, pins and the receipt');
     events.renderEvents();
     await wait(450);
 
+    // Recap shows a tile; the slip is behind it.
     const card = document.getElementById('receiptCard');
-    out.receipt = (card.innerText || '').replace(/\s+/g, ' ').trim();
-    out.receiptPeople = card.querySelectorAll('.receipt-person').length;
+    out.tile = (card.innerText || '').replace(/\s+/g, ' ').trim();
+    out.slipHidden = !card.querySelector('.receipt') && document.getElementById('receiptSheet').classList.contains('hidden');
+    card.querySelector('.receipt-tile').click();
+    await wait(120);
+    const slip = document.getElementById('receiptFull');
+    out.receipt = (slip.innerText || '').replace(/\s+/g, ' ').trim();
+    out.receiptPeople = slip.querySelectorAll('.receipt-person').length;
     out.summary = receipt.receiptSummary();
+    receipt.closeReceipt();
+    await wait(120);
+    out.sheetClosed = document.getElementById('receiptSheet').classList.contains('hidden');
 
     // Running the feed again must not count the same events twice.
     const writesBefore = window.__writes;
@@ -1980,6 +1989,8 @@ group('reactions, pins and the receipt');
   ok('unpinning hides the bar', dom.barGone === true);
   ok('leaving the chat clears the bar', dom.barGoneOnClose === true);
 
+  ok('Recap shows a one-line receipt tile, and the slip only when tapped',
+     /receipt/i.test(dom.tile) && /Out 3 times/.test(dom.tile) && dom.slipHidden && dom.sheetClosed, JSON.stringify({ t: dom.tile, h: dom.slipHidden, c: dom.sheetClosed }));
   ok('the receipt card fills in from events already on screen',
      /showed up/.test(dom.receipt) && /3 Times you showed up/.test(dom.receipt)
      && dom.summary.went === 3 && dom.summary.hosted === 1, dom.receipt);
@@ -2125,8 +2136,12 @@ group('a receipt that already has history');
 
     window.showTab('recap');
     await wait(500);
-    const card = document.getElementById('receiptCard');
+    receipt.openReceipt();
+    await wait(150);
+    const card = document.getElementById('receiptFull');
     const text = (card.innerText || '').replace(/\s+/g, ' ').trim();
+    receipt.closeReceipt();
+    await wait(100);
     window.showTab('events');
     await wait(150);
     return { text, went: receipt.receiptSummary().went };
@@ -4047,7 +4062,7 @@ group('the event band reads top to bottom, and the inbox counts');
   ok('durations are said in words', JSON.stringify(r.durs) === JSON.stringify(['5min', '45min', '1hr', '1h 40m', '11hrs', '1day', '3days']), JSON.stringify(r.durs));
   ok('and when is a day and a time', JSON.stringify(r.days) === JSON.stringify(['at 6:40 pm', 'tomorrow 7:38 am', 'Tue 7:00 pm', '10 Oct, 9:05 am']), JSON.stringify(r.days));
   ok('an upcoming band reads "Starts in / 45 min / at …"',
-     !!r.soon && /starts in/i.test(r.soon.label) && /^45\s?min$/i.test(r.soon.value) && /^at \d{1,2}:\d\d [ap]m$/i.test(r.soon.sub),
+     !!r.soon && /starts in/i.test(r.soon.label) && /^45\s?min$/i.test(r.soon.value) && /^(at|tomorrow) \d{1,2}:\d\d [ap]m$/i.test(r.soon.sub),   // after 11:15 pm, 45 min from now is tomorrow
      JSON.stringify(r.soon));
   ok('label, number and detail are stacked, not side by side', r.soon?.stacked && r.live?.stacked, JSON.stringify([r.soon, r.live]));
   ok('a live band says how long is left and until when',
@@ -5940,6 +5955,12 @@ group('the receipt, printed');
   for (const [w, theme] of [[320, 'light'], [390, 'dark']]) {
     const ctx = await browser.newContext({ viewport: { width: w, height: 760 }, hasTouch: true, isMobile: true });
     await ctx.addInitScript((t) => { try { localStorage.setItem('livesociya.theme', t); } catch (e) {} }, theme);
+    // A phone with room to spare, whatever this machine is: the print-out
+    // is skipped on 2 cores or 2 GB (checked separately below).
+    await ctx.addInitScript(() => {
+      Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => (window.__cores || 8), configurable: true });
+      Object.defineProperty(navigator, 'deviceMemory', { get: () => (window.__mem || 8), configurable: true });
+    });
     const p = await ctx.newPage();
     const errs = [];
     p.on('pageerror', (e) => errs.push(e.message.slice(0, 120)));
@@ -5961,7 +5982,12 @@ group('the receipt, printed');
       window.__stubDocs['users/me/private/receipt'] = { months: { [key]: { went: 6, hosted: 1, tags: { '🎉 Party': 4, '☕ Chill': 2 }, people: { a: 5 } } }, counted: [] };
       window.showTab('recap');
       await wait(700);
-      const card = document.getElementById('receiptCard');
+      const tile = document.querySelector('#receiptCard .receipt-tile');
+      const tileBox = tile.getBoundingClientRect();
+      const tileShort = tileBox.height < 90;
+      tile.click();
+      await wait(150);
+      const card = document.getElementById('receiptFull');
       const rc = card.querySelector('.receipt');
       const out = {
         printing: rc?.classList.contains('printing'),
@@ -5970,7 +5996,9 @@ group('the receipt, printed');
         items: card.querySelectorAll('.rc-row:not(.rc-head)').length,
         bars: card.querySelectorAll('.rc-bars i').length,
         person: !!card.querySelector('.receipt-person[onclick*="openProfileScreen(\'a\')"]'),
-        wide: document.documentElement.scrollWidth > innerWidth
+        wide: document.documentElement.scrollWidth > innerWidth,
+        tileShort,
+        sheetFits: document.querySelector('#receiptSheet .receipt-sheet').getBoundingClientRect().bottom <= innerHeight + 1
       };
       // Nothing in it may reach past the paper.
       const box = rc.getBoundingClientRect();
@@ -5984,22 +6012,44 @@ group('the receipt, printed');
       receipt.renderReceipt();
       await wait(50);
       out.samePrint = card.firstElementChild === node;
-      window.showTab('events'); window.showTab('recap');
-      receipt.renderReceipt();
-      out.printsOnce = !card.querySelector('.receipt.printing') || card.firstElementChild === node;
+      out.printsOnce = true;
+      // Android back puts it away, and a second tap prints it again.
+      history.back();
+      await wait(250);
+      out.backCloses = document.getElementById('receiptSheet').classList.contains('hidden');
+      document.querySelector('#receiptCard .receipt-tile').click();
+      await wait(120);
+      out.printsAgain = !!card.querySelector('.receipt.printing');
+      receipt.closeReceipt();
+      await wait(150);
+      // A low-end phone: the slip just appears.
+      window.__cores = 2;
+      receipt.openReceipt();
+      await wait(120);
+      out.lowEndStill = !!card.querySelector('.receipt') && !card.querySelector('.receipt.printing');
+      receipt.closeReceipt();
+      window.__cores = 8;
+      await wait(150);
       // An empty receipt still says how it fills in.
       receipt.clearReceipt();
       window.__stubDocs['users/me/private/receipt'] = { months: {}, counted: [] };
       receipt.primeReceipt();
       await wait(300);
+      out.emptyTile = /Nothing printed yet/i.test(document.getElementById('receiptCard').innerText);
+      receipt.openReceipt();
+      await wait(200);
       out.empty = /Nothing printed yet/i.test(card.innerText) && /fills in/.test(card.innerText);
+      receipt.closeReceipt();
       return out;
     });
     ok(`${w}px ${theme}: a torn slip, line items, the regulars, a stamp and a barcode`,
       r.torn && r.items === 4 && r.person && /Regular/.test(r.stamp) && r.bars > 30, JSON.stringify(r));
     ok(`${w}px ${theme}: nothing on it reaches past the paper, and the page never scrolls sideways`, !r.wide && r.outside.length === 0, JSON.stringify(r));
-    ok(`${w}px ${theme}: it prints out once, and a repaint touches nothing`, r.printing && r.samePrint && r.printsOnce, JSON.stringify(r));
-    ok(`${w}px ${theme}: an empty receipt says how it fills in`, r.empty, JSON.stringify(r));
+    ok(`${w}px ${theme}: Recap carries one short tile; the slip opens in a sheet that fits the screen`, r.tileShort && r.sheetFits, JSON.stringify(r));
+    ok(`${w}px ${theme}: it prints out when opened, and a repaint underneath touches nothing`, r.printing && r.samePrint, JSON.stringify(r));
+    ok(`${w}px ${theme}: back closes it, and opening it again prints again`, r.backCloses && r.printsAgain, JSON.stringify(r));
+    ok(`${w}px ${theme}: on a 2-core phone it simply appears, no animation`, r.lowEndStill, JSON.stringify(r));
+    ok(`${w}px ${theme}: an empty receipt says how it fills in`, r.empty && r.emptyTile, JSON.stringify(r));
     ok(`${w}px ${theme}: and nothing errors`, errs.length === 0, errs.join(' | '));
     await ctx.close();
   }
