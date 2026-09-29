@@ -5469,19 +5469,23 @@ html.restoring *::before, html.restoring *::after {
 .rc-thanks { text-align: center; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; font-size: 12.5px; }
 .rc-bars { display: flex; justify-content: center; height: 38px; margin: 12px 0 6px; overflow: hidden; }
 .rc-bars i { display: block; flex-shrink: 0; background: var(--ink); }
+/* THE STAMP HAS A LINE OF ITS OWN, under the receipt number.
+   It used to sit in the top corner, absolutely placed, sized for
+   "Host" — and "Local legend" is three times as long: it ran over the
+   livesociya wordmark and off the edge of the paper. In the flow it can
+   never cover a word or leave the slip, whatever it says and however
+   narrow the phone. */
+.rc-stamp-row { display: flex; justify-content: center; margin: 12px 0 2px; }
 .rc-stamp {
-  /* In the top corner, over the torn edge, where nothing is printed at
-     any width — lower down it landed on the first line item on a
-     320px phone. */
-  position: absolute; right: 8px; top: calc(var(--z) - 1px);
-  transform: rotate(9deg);
-  padding: 4px 10px 5px; border: 2.5px solid var(--c); border-radius: 8px;
+  display: inline-block; max-width: calc(100% - 20px);
+  transform: rotate(-4deg);
+  padding: 4px 12px 5px; border: 2.5px solid var(--c); border-radius: 8px;
   color: var(--c); text-align: center; opacity: 0.88;
-  font: var(--display-weight) 13px/1.1 var(--font-display); letter-spacing: 0.04em; text-transform: uppercase;
+  font: var(--display-weight) 14px/1.1 var(--font-display); letter-spacing: 0.05em; text-transform: uppercase;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   pointer-events: none;
 }
 .rc-stamp small { display: block; font: 600 8.5px/1.3 var(--font-mono); letter-spacing: 0.12em; }
-@media (max-width: 370px) { .rc-stamp { font-size: 11px; padding: 3px 8px 4px; right: 4px; } .rc-stamp small { font-size: 7.5px; } }
 .rc-empty-title { display: block; text-align: center; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--fog); margin-bottom: 6px; }
 .receipt-empty p { font-family: var(--font); font-size: 14px; color: var(--fog); line-height: 1.5; margin: 0; text-align: center; }
 /* The regulars: rows with dot leaders, not pills. */

@@ -2718,7 +2718,7 @@ group('dark mode');
 
   const sysDark = await themeRun('dark');
   ok('a dark-mode device gets dark from the first paint', sysDark.firstPaint === 'dark' && sysDark.theme === 'dark'
-     && sysDark.bg === 'rgb(26, 35, 39)' && sysDark.bar === '#1a2327', JSON.stringify({ ...sysDark, p: 0, ctx: 0 }));
+     && sysDark.bg === 'rgb(20, 29, 24)' && sysDark.bar === '#141d18', JSON.stringify({ ...sysDark, p: 0, ctx: 0 }));
 
   // Picking Light in Settings wins over the device, and sticks.
   const picked = await sysDark.p.evaluate(async () => {
@@ -6003,7 +6003,6 @@ group('the receipt, printed');
       // Nothing in it may reach past the paper.
       const box = rc.getBoundingClientRect();
       out.outside = [...rc.querySelectorAll('*')].filter((el) => {
-        if (el.closest('.rc-stamp')) return false;
         const b = el.getBoundingClientRect();
         return b.width && (b.right > box.right + 2 || b.left < box.left - 2);
       }).map((el) => el.className).slice(0, 4);
@@ -6135,6 +6134,55 @@ group('you can type, nothing selects by accident, the slip holds its shape');
     ok(`${w}x${h}: and nothing errors`, errs.length === 0, errs.join(' | '));
     await ctx.close();
   }
+}
+
+/* ------------------------------------------------------------------ */
+group('every stamp stays on the paper and off the words');
+{
+  const ctx = await browser.newContext({ viewport: { width: 320, height: 640 }, hasTouch: true, isMobile: true });
+  const p = await ctx.newPage();
+  await p.addInitScript({ path: fileURLToPath(new URL('./stub.js', import.meta.url)) });
+  await p.goto(APP_URL, { waitUntil: 'domcontentloaded' });
+  await p.waitForTimeout(1400);
+  const r = await p.evaluate(async () => {
+    const wait = (ms) => new Promise((res) => setTimeout(res, ms));
+    const { state } = await import('/js/state/store.js');
+    const receipt = await import('/js/services/receiptService.js');
+    window.__authSingleton.currentUser = { uid: 'me' };
+    state.uid = 'me'; state.username = 'a_very_long_handle'; state.blockedUids = []; state.following = []; state.orbitUids = [];
+    state.userCache = { me: { uid: 'me', username: 'a_very_long_handle', displayName: 'Me' } };
+    document.getElementById('loading-screen').classList.add('hidden');
+    document.querySelector('.app-frame').classList.remove('hidden');
+    window.switchScreen('home');
+    const key = new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0');
+    const hit = (a, b) => !(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom);
+    const out = {};
+    for (const [went, hosted] of [[3, 0], [6, 0], [6, 3], [14, 5]]) {
+      receipt.clearReceipt();
+      window.__stubDocs['users/me/private/receipt'] = { months: { [key]: { went, hosted, tags: { '🎉 Party': went }, people: {} } }, counted: [] };
+      window.showTab('events'); window.showTab('recap');
+      await wait(400);
+      receipt.openReceipt();
+      await wait(1400);
+      const rc = document.querySelector('#receiptFull .receipt');
+      const st = rc.querySelector('.rc-stamp');
+      const paper = rc.getBoundingClientRect();
+      const b = st.getBoundingClientRect();
+      const words = [...rc.querySelectorAll('.rc-brand, .rc-meta, .rc-row, .rc-rule')].map((e) => e.getBoundingClientRect());
+      out[st.textContent.replace(/\d.*/, '').trim()] = {
+        inside: b.left >= paper.left && b.right <= paper.right && b.top >= paper.top,
+        clear: !words.some((w) => hit(b, w)),
+        whole: st.scrollWidth <= st.clientWidth + 1
+      };
+      receipt.closeReceipt();
+      await wait(150);
+    }
+    return out;
+  });
+  const all = Object.values(r);
+  ok('every stamp — even "Local legend" — sits inside the paper at 320px', all.length === 4 && all.every((x) => x.inside), JSON.stringify(r));
+  ok('and covers none of the printing, and is never cut short', all.every((x) => x.clear && x.whole), JSON.stringify(r));
+  await ctx.close();
 }
 
 /* ------------------------------------------------------------------ */

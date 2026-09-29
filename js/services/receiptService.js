@@ -309,7 +309,7 @@ function slipHtml(s) {
 
   const stamp = stampFor(s.went, s.hosted);
   const stampHtml = stamp
-    ? `<div class="rc-stamp" style="--c:${s.topTag ? vibeColor(s.topTag) : "var(--forest)"}" aria-label="${escapeHtml(stamp.title)}">${escapeHtml(stamp.title)}<small>${escapeHtml(stamp.sub)}</small></div>`
+    ? `<div class="rc-stamp-row"><div class="rc-stamp" style="--c:${s.topTag ? vibeColor(s.topTag) : "var(--forest)"}" aria-label="${escapeHtml(stamp.title)}">${escapeHtml(stamp.title)}<small>${escapeHtml(stamp.sub)}</small></div></div>`
     : "";
 
   return `
