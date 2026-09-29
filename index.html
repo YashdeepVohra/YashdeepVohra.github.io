@@ -157,6 +157,26 @@
       if (m) m.setAttribute("content", t === "dark" ? "#1a2327" : "#e6f2dd");
     })();
   </script>
+  <!-- A WARM START: somebody was signed in here, so this is almost
+       certainly the browser reloading a tab it threw away, not a first
+       visit. The loader stays a plain canvas for a second and the entry
+       animations stand down until the screen is back where it was
+       (js/utils/restore.js), so coming back reads as coming back. -->
+  <script>
+    (function () {
+      try {
+        if (localStorage.getItem("livesociya.warm") === "1") {
+          var r = document.documentElement;
+          r.classList.add("warm", "restoring");
+          if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+          // A slow network still gets its spinner, just not straight away.
+          setTimeout(function () { r.classList.remove("warm"); }, 1200);
+          // And nothing stays frozen if the app never comes up at all.
+          setTimeout(function () { r.classList.remove("restoring"); }, 6000);
+        }
+      } catch (e) {}
+    })();
+  </script>
   <!-- Portrait only, on phones. Turning an iPhone sideways made Safari
        re-lay-out and repaint the whole app at once, and that was
        enough to kill the tab. A phone on its side now gets the cover
@@ -235,6 +255,7 @@
       </svg>
       Continue with Google
     </button>
+    <p class="login-legal">By continuing you agree to our <a href="/terms.html" target="_blank" rel="noopener">Terms</a> and <a href="/privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.</p>
 
   </div>
 </div>
@@ -626,7 +647,11 @@
 
     <!-- Only for whoever has a document at admins/{uid} (adminService.js). -->
     <button class="btn-ghost admin-only" onclick="openAdminScreen()" style="margin-top:24px;"><i class='bx bx-flag'></i> Reports to review</button>
-    <button class="logoutBtn" onclick="logout()" style="margin-top:24px;">
+    <nav class="legal-links" aria-label="Legal">
+      <a href="/privacy.html" target="_blank" rel="noopener">Privacy Policy</a>
+      <a href="/terms.html" target="_blank" rel="noopener">Terms of Service</a>
+    </nav>
+    <button class="logoutBtn" onclick="logout()" style="margin-top:16px;">
       <i class='bx bx-log-out'></i> Log Out
     </button>
   </div>

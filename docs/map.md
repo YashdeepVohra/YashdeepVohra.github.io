@@ -36,6 +36,8 @@ change; function names don't — search for the name.
 | Layers + Android back | `js/utils/overlays.js` — `openOverlay`, `closeOverlay` | |
 | Keyboard / date pickers on phones | `js/utils/viewport.js` — `initViewportFit` (`--vvt`, `--vvh`, `kb-open`, `vv-shifted`) | `docs/layout.md` |
 | Theme | `utils/theme.js` | |
+| Coming back after a reload (warm start: tab, scroll, open chat) | `js/utils/restore.js`; applied in `app.js` `restoreWhereWeWere` | head script in `index.html`, `html.restoring` in style.css |
+| Privacy Policy, Terms | `privacy.html`, `terms.html`, `legal.css` | links in `#settingsScreen .legal-links`, `#login .login-legal` |
 | Global handlers used by inline `onclick` | `js/app.js` — the `Object.assign(window, {...})` block. A new `window.x` MUST be added there. | |
 | Feature switches | `js/config/features.js` (`photos`) | |
 | Firebase init | `js/config/firebase.js` | |

@@ -34,7 +34,11 @@ const docRef = (path) => ({
     window.__readPaths = window.__readPaths || [];
     window.__readPaths.push(path || '?');
     const fixture = window.__stubDocs[path];
-    return Promise.resolve({ exists: !!fixture, data: () => fixture || {} });
+    const answer = { exists: !!fixture, data: () => fixture || {} };
+    // window.__slowReads['users/x'] = ms makes one document slow to
+    // arrive, so a test can have two snapshots finish out of order.
+    const slow = window.__slowReads && window.__slowReads[path];
+    return slow ? new Promise((r) => setTimeout(() => r(answer), slow)) : Promise.resolve(answer);
   },
   set: (data, opts) => {
     // The stand-in for firestore.rules is consulted on creates and

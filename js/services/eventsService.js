@@ -424,6 +424,7 @@ function socialGraph(events) {
 }
 
 // ---------- Feed ----------
+let feedGen = 0;
 export function loadEvents() {
   if (state.eventsUnsubscribe) state.eventsUnsubscribe();
 
@@ -447,11 +448,19 @@ export function loadEvents() {
     // every user paid for it on every launch. It is paged in on demand
     // now, by loadRecap().
     .where("expiresAt", ">", Date.now())
-    .orderBy("expiresAt", "desc")
+    /* SOONEST TO END FIRST, so a crowded feed drops the FAR end.
+       This was "desc", and with more than LIVE_LIMIT live events the
+       ones cut were the ones ending soonest — the things happening
+       right now — while events three months away kept their place.
+       Past 60 that is backwards for an app about right now. The feed
+       is re-ranked by rankFeed() either way; this only decides which
+       60 make it in. */
+    .orderBy("expiresAt", "asc")
     .limit(LIVE_LIMIT)
     .onSnapshot(
       async (snapshot) => {
         feedRetries = 0;
+        const gen = ++feedGen;
         const events = [];
         const uids = new Set();
 
@@ -463,7 +472,17 @@ export function loadEvents() {
           (data.participantUids || []).forEach((u) => uids.add(u));
         });
 
-        await primeUsers([...uids]);
+        try {
+          await primeUsers([...uids]);
+        } catch (e) { /* bylines fill in later; the feed must not wait */ }
+
+        /* MANY EVENTS AT ONCE. Each snapshot waits for the names of the
+           people on it, and one that brought a new host waits longer
+           than the one after it. Without this, the later snapshot
+           painted and then the earlier one painted over it — a burst of
+           new events could leave the newest missing from the feed until
+           something else changed. Only the newest snapshot paints. */
+        if (gen !== feedGen) return;
 
         /* Happening now first, then what starts soonest — and inside
            each hour of that, the people you would actually show up for
@@ -774,13 +793,13 @@ export function posterBand(e, now, { stats, spent = false } = {}) {
 }
 
 /** Overlapping avatar stack, capped at four plus a counter. */
-export function avatarStack(uids) {
+export function avatarStack(uids, { tappable = true } = {}) {
   const shown = uids.slice(0, 4);
   const rest = uids.length - shown.length;
   const chips = shown
     .map((uid) => {
       const id = safeId(uid);
-      const tap = id ? `class="mini tappable" onclick="event.stopPropagation(); window.openProfileScreen('${id}')"` : `class="mini"`;
+      const tap = id && tappable ? `class="mini tappable" onclick="event.stopPropagation(); window.openProfileScreen('${id}')"` : `class="mini"`;
       return `<div ${tap}>${renderAvatar(avatarFor(uid))}</div>`;
     })
     .join("");
@@ -1517,11 +1536,19 @@ export function renderEvents() {
             value: String(shownGuests.length),
             sub: hypeCount ? hypeCount + " hyped" : "" };
 
+      /* THE WHOLE STUB OPENS THE MEMORY. Only the title used to, and
+         the thing under most of a thumb was the row of faces — each of
+         which opened that person's profile. Tapping a memory took you
+         to somebody's profile about as often as to the memory. The
+         faces here are just faces now (the event page lists who went,
+         by name); the host's name still opens their profile, and like
+         and comment stop the tap on their way. */
       recapCards.push({ id, html: `
-        <article class="event card poster-card stub${fading ? " fading" : ""}" id="event-${id}"${tagAttr} style="--vibe:${vibe}">
+        <article class="event card poster-card stub stub-open${fading ? " fading" : ""}" id="event-${id}"${tagAttr} style="--vibe:${vibe}"
+                 onclick="window.openEventPage('${id}')">
           ${posterBand(e, now, { stats: [turnout], spent: true })}
           <div class="card-body">
-            <div class="event-title tappable" onclick="window.openEventPage('${id}')">${escapeHtml(e.title)}</div>
+            <div class="event-title tappable">${escapeHtml(e.title)}</div>
             <div class="event-place"><i class='bx bx-map-pin'></i><span>${escapeHtml(e.place)}</span></div>
             <div class="byline">
               <div class="av-ring tappable" ${openHost}>
@@ -1530,7 +1557,7 @@ export function renderEvents() {
               <span class="byline-name tappable" ${openHost}>${escapeHtml(displayNameFor(e.hostUid))}</span>
               <span class="byline-meta" data-vt="ago"></span>
             </div>
-            ${shownGuests.length ? `<div class="going-row">${avatarStack(shownGuests)}<span class="going-text">${escapeHtml(wentText)}</span></div>` : ""}
+            ${shownGuests.length ? `<div class="going-row">${avatarStack(shownGuests, { tappable: false })}<span class="going-text">${escapeHtml(wentText)}</span></div>` : ""}
             ${leaves}
           </div>
           <!-- Like and comment right here (memoryService). Empty in the

@@ -4785,7 +4785,8 @@ group('chat photos, memories, stories and reports');
     box.innerHTML = prof.__cardForTest(state.eventCache.m1, Date.now(), { isSelf: true });
     const other = document.createElement('div');
     other.innerHTML = prof.__cardForTest(state.eventCache.m1, Date.now(), { isSelf: false });
-    const open = box.querySelector('.jr-open');
+    // The whole print is the tap target now, not only the photo.
+    const open = box.querySelector('.jr-card');
     return {
       tap: (open && open.getAttribute('onclick')) || '',
       cover: !!box.querySelector('.jr-cover img'),
@@ -5300,6 +5301,235 @@ group('a phone loading older memories');
     ok(`${width}px: and nothing errors`, errs.length === 0, errs.join(' | '));
     await ctx.close();
   }
+}
+
+/* ------------------------------------------------------------------ */
+group('many at once, a fresh profile, a whole memory, and coming back');
+{
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 800 }, hasTouch: true, isMobile: true });
+  const p = await ctx.newPage();
+  const errs = [];
+  p.on('pageerror', (e) => errs.push(e.message.slice(0, 120)));
+  p.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errs.push(m.text().slice(0, 120)); });
+  p.on('dialog', (d) => { errs.push('NATIVE DIALOG'); d.dismiss(); });
+  await p.addInitScript({ path: fileURLToPath(new URL('./stub.js', import.meta.url)) });
+  await p.goto(APP_URL, { waitUntil: 'domcontentloaded' });
+  await p.waitForTimeout(1500);
+  const setup = async () => p.evaluate(async () => {
+    const { state } = await import('/js/state/store.js');
+    window.__authSingleton.currentUser = { uid: 'me' };
+    state.uid = 'me'; state.blockedUids = []; state.privacyChosen = true; state.userAvatar = '\u{1F43C}';
+    state.userCache = { me: { uid: 'me', username: 'me_h', displayName: 'Me', avatar: '\u{1F43C}', followers: [], following: [], vouchedBy: [], hiddenEvents: [] } };
+    ['a', 'b', 'c'].forEach((u) => { state.userCache[u] = { uid: u, username: u, displayName: u.toUpperCase(), avatar: '\u{1F98A}', followers: [], following: [], vouchedBy: [] }; });
+    state.following = []; state.orbitUids = []; state.eventCache = {}; state.eventOrder = []; state.recapOrder = []; state.recapDone = true;
+    document.getElementById('loading-screen').classList.add('hidden');
+    document.querySelector('.app-frame').classList.remove('hidden');
+    window.switchScreen('home');
+  });
+  await setup();
+
+  // A burst of new events: the snapshot that brought a stranger host
+  // waits on their name; the one after it must not be painted over.
+  const burst = await p.evaluate(async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const ev = await import('/js/services/eventsService.js');
+    const { state } = await import('/js/state/store.js');
+    const now = Date.now();
+    const mk = (id, host) => ({ id, hostUid: host, title: id, place: 'Lawn', description: '', tag: '\u{1F389} Party',
+      startTime: now - 6e5, expiresAt: now + 36e5, participantUids: [host], hypedUids: [], pendingUids: [], unconfirmedUids: [], circleId: 'main' });
+    window.__events = [mk('A', 'a')];
+    ev.loadEvents();
+    await wait(100);
+    window.__stubDocs['users/zz'] = { uid: 'zz', username: 'zz', displayName: 'ZZ' };
+    window.__slowReads = { 'users/zz': 400 };
+    window.__events = [mk('A', 'a'), mk('B', 'zz')];
+    window.__fireEvents();           // slow: needs zz's name
+    window.__events = [mk('A', 'a'), mk('C', 'b')];
+    window.__fireEvents();           // fast, and newer: B is gone, C is new
+    await wait(700);
+    window.__slowReads = {};
+    const cards = [...document.querySelectorAll('#events .event')].map((c) => c.id.replace('event-', ''));
+    return { order: state.eventOrder.slice(), cards };
+  });
+  ok('many events at once: an older snapshot finishing late cannot paint over a newer one',
+    burst.order.includes('C') && !burst.order.includes('B') && burst.cards.includes('C') && !burst.cards.includes('B'), JSON.stringify(burst));
+
+  // Two people opening the same chat in the same moment: theirs lands
+  // first, ours must still go through, as a reply in their thread.
+  const race = await p.evaluate(async () => {
+    const chat = await import('/js/services/chatService.js');
+    const theirs = { userUids: ['a', 'me'], initiatedByUid: 'a', status: 'icebreaker', icebreakerUsed: true,
+      unreadByUid: 'me', unreadCount: 1, lastUpdated: Date.now(), createdAt: 1 };
+    let refused = 0;
+    window.__rules = (path, data, kind) => {
+      if (path === 'chats/a_me' && kind === 'set' && data && 'createdAt' in data) {
+        if (!window.__stubDocs['chats/a_me']) window.__stubDocs['chats/a_me'] = Object.assign({}, theirs);
+        refused++;
+        return { code: 'permission-denied' };
+      }
+      return null;
+    };
+    let err = '';
+    try { await chat.sendDirectText('a', 'hey, same time!'); } catch (e) { err = e.code || e.message; }
+    window.__rules = null;
+    const msgs = Object.keys(window.__stubDocs).filter((k) => k.startsWith('chats/a_me/messages/'))
+      .map((k) => window.__stubDocs[k].text);
+    const doc = window.__stubDocs['chats/a_me'];
+    return { err, refused, msgs, initiator: doc.initiatedByUid, status: doc.status, unreadBy: doc.unreadByUid };
+  });
+  ok('two people starting the same chat at once: the second message is not lost',
+    !race.err && race.refused === 1 && race.msgs.includes('hey, same time!'), JSON.stringify(race));
+  ok('and it lands as a reply in THEIR thread, which it unlocks',
+    race.initiator === 'a' && race.status === 'unlocked' && race.unreadBy === 'a', JSON.stringify(race));
+
+  // A new profile opens at its top, not as far down as the last one.
+  const scroll = await p.evaluate(async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    window.__events = [];
+    window.openProfileScreen('a');
+    await wait(500);
+    const body = document.querySelector('#profileScreen .profile-scroll-body');
+    const pad = document.createElement('div'); pad.style.height = '3000px'; pad.id = 'tallPad';
+    body.appendChild(pad);
+    body.scrollTop = 900;
+    const before = body.scrollTop;
+    window.openProfileScreen('b');
+    await wait(300);
+    const afterOpen = body.scrollTop;
+    body.scrollTop = 700;
+    window.closeProfileScreen();       // back along the trail, to a
+    await wait(300);
+    const afterBack = body.scrollTop;
+    document.getElementById('tallPad')?.remove();
+    window.closeProfileScreen({ all: true });
+    return { before, afterOpen, afterBack };
+  });
+  ok('a profile opened from another profile starts at its top', scroll.before > 500 && scroll.afterOpen === 0, JSON.stringify(scroll));
+  ok('and so does going back to the one before', scroll.afterBack === 0, JSON.stringify(scroll));
+
+  // A memory in Recap is one tap target; its faces no longer open profiles.
+  const stub = await p.evaluate(async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const ev = await import('/js/services/eventsService.js');
+    const { state } = await import('/js/state/store.js');
+    const now = Date.now();
+    state.eventCache.R1 = { id: 'R1', hostUid: 'a', title: 'Last night', place: 'Lawn', description: '', tag: '\u{1F389} Party',
+      startTime: now - 3 * 36e5, expiresAt: now - 36e5, participantUids: ['a', 'b', 'c', 'me'], hypedUids: [], pendingUids: [], unconfirmedUids: [], circleId: 'main' };
+    state.recapOrder = ['R1'];
+    ev.renderEvents();
+    window.showTab('recap');
+    await wait(200);
+    const card = document.getElementById('event-R1');
+    const faces = card ? [...card.querySelectorAll('.av-stack .mini')] : [];
+    const host = card ? card.querySelector('.byline-name') : null;
+    let opened = false;
+    if (card) {
+      card.querySelector('.going-text')?.click();
+      await wait(120);
+      opened = !document.getElementById('eventScreen').classList.contains('hidden');
+      window.closeEventPage();
+      await wait(120);
+    }
+    return {
+      card: !!card, tap: card ? card.getAttribute('onclick') || '' : '',
+      facesTap: faces.filter((f) => f.getAttribute('onclick')).length, faces: faces.length,
+      hostStops: host ? /stopPropagation/.test(host.getAttribute('onclick') || '') : false, opened
+    };
+  });
+  ok('a Recap memory opens from anywhere on it, not just its title',
+    stub.card && stub.tap.includes("openEventPage('R1')") && stub.opened, JSON.stringify(stub));
+  ok('its row of faces no longer sends you to somebody\'s profile; the host\'s name still does',
+    stub.faces > 0 && stub.facesTap === 0 && stub.hostStops, JSON.stringify(stub));
+  await p.evaluate(() => window.showTab('events'));
+
+  // Coming back after the browser reloaded the tab.
+  const back = await p.evaluate(async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const r = await import('/js/utils/restore.js');
+    window.showTab('chats');
+    r.saveRestorePoint();
+    const saved = JSON.parse(sessionStorage.getItem('livesociya.restore') || 'null');
+    window.showTab('events');
+    document.documentElement.classList.add('restoring');
+    const probe = document.createElement('div'); probe.className = 'stagger'; probe.innerHTML = '<div></div>';
+    document.body.appendChild(probe);
+    const frozen = getComputedStyle(probe.firstChild).animationDuration;
+    document.dispatchEvent(new CustomEvent('livesociya:ready'));
+    await wait(700);
+    const tab = document.querySelector('.nav-item.active[data-tab]')?.dataset.tab;
+    const stillRestoring = document.documentElement.classList.contains('restoring');
+    const moving = getComputedStyle(probe.firstChild).animationDuration;
+    probe.remove();
+    // Old or damaged points are ignored.
+    sessionStorage.setItem('livesociya.restore', JSON.stringify({ at: Date.now() - 2 * 36e5, tab: 'recap' }));
+    const stale = r.takeRestorePoint();
+    sessionStorage.setItem('livesociya.restore', '{nope');
+    const junk = r.takeRestorePoint();
+    return { saved: saved && saved.tab, tab, frozen, moving, stillRestoring, stale, junk };
+  });
+  ok('where you were is saved when the page is put away', back.saved === 'chats', JSON.stringify(back));
+  ok('a reload of the tab puts you back on it', back.tab === 'chats', JSON.stringify(back));
+  ok('with nothing rising in while it does, and animations back afterwards',
+    back.frozen === '0s' && back.moving !== '0s' && !back.stillRestoring, JSON.stringify(back));
+  ok('an old or broken restore point is ignored', back.stale === null && back.junk === null, JSON.stringify(back));
+  await p.evaluate(() => window.showTab('events'));
+  ok('and nothing here errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+
+  // The warm start is decided before the first paint.
+  const wctx = await browser.newContext({ viewport: { width: 390, height: 800 } });
+  await wctx.addInitScript(() => {
+    try { localStorage.setItem('livesociya.warm', '1'); } catch (e) {}
+    // Every class the root is given, in order: the stub signs nobody in,
+    // so the app goes cold again almost at once, and the warm classes
+    // have to be caught as they are set.
+    window.__rootClasses = [];
+    const add = DOMTokenList.prototype.add;
+    DOMTokenList.prototype.add = function (...names) {
+      const r = add.apply(this, names);
+      if (names.includes('warm')) window.__rootClasses.push(String(this.value));
+      return r;
+    };
+  });
+  const wp = await wctx.newPage();
+  await wp.addInitScript({ path: fileURLToPath(new URL('./stub.js', import.meta.url)) });
+  await wp.goto(APP_URL, { waitUntil: 'domcontentloaded' });
+  const warm = await wp.evaluate(() => {
+    const root = document.documentElement;
+    const first = (window.__rootClasses || []).find((c) => /warm/.test(c)) || '';
+    root.classList.add('warm');
+    const spinnerHidden = getComputedStyle(document.querySelector('#loading-screen .spinner')).visibility;
+    root.classList.remove('warm');
+    return { first, manual: history.scrollRestoration, spinnerHidden, warmFlag: localStorage.getItem('livesociya.warm') };
+  });
+  ok('a warm start: no spinner flash, entry animations off, scroll left to us',
+    /warm/.test(warm.first) && /restoring/.test(warm.first) && warm.manual === 'manual' && warm.spinnerHidden === 'hidden', JSON.stringify(warm));
+  ok('and a start that turns out signed out goes cold again', warm.warmFlag === null, JSON.stringify(warm));
+  await wctx.close();
+
+  // The Privacy Policy and the Terms exist, and are reachable.
+  const lctx = await browser.newContext({ viewport: { width: 360, height: 780 } });
+  const lp = await lctx.newPage();
+  const legal = {};
+  for (const path of ['privacy.html', 'terms.html']) {
+    const res = await lp.goto(APP_URL.replace('index.html', path));
+    legal[path] = {
+      status: res.status(),
+      h1: await lp.evaluate(() => document.querySelector('h1')?.textContent || ''),
+      wide: await lp.evaluate(() => document.documentElement.scrollWidth > window.innerWidth),
+      contact: await lp.evaluate(() => !!document.querySelector('a[href^="mailto:"]'))
+    };
+  }
+  await lctx.close();
+  ok('privacy.html and terms.html load, and fit a 360px phone',
+    Object.values(legal).every((l) => l.status === 200 && l.h1 && !l.wide && l.contact), JSON.stringify(legal));
+  const links = await page.evaluate(() => ({
+    settings: [...document.querySelectorAll('#settingsScreen .legal-links a')].map((a) => a.getAttribute('href')),
+    login: [...document.querySelectorAll('#login .login-legal a')].map((a) => a.getAttribute('href'))
+  }));
+  ok('Settings and the sign-in screen link to both',
+    links.settings.includes('/privacy.html') && links.settings.includes('/terms.html')
+    && links.login.includes('/privacy.html') && links.login.includes('/terms.html'), JSON.stringify(links));
 }
 
 /* ------------------------------------------------------------------ */

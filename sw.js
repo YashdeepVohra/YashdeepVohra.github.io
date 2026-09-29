@@ -70,9 +70,15 @@ self.addEventListener("fetch", (e) => {
   // Everything else — Firestore, Auth, analytics — goes straight out.
 });
 
-/** A page is one copy whatever its ?e= says, so a shared link still opens offline. */
+/** A page is one copy whatever its ?e= says, so a shared link still opens offline.
+ *  Only the APP is folded onto "/": the Privacy Policy and Terms are pages
+ *  of their own, and folding them too would put the policy where the app
+ *  should be the next time someone opened livesociya offline. */
 function cacheKey(req) {
-  return req.mode === "navigate" ? new Request(new URL("/", self.location.origin).href) : req;
+  if (req.mode !== "navigate") return req;
+  const path = new URL(req.url).pathname;
+  const app = path === "/" || path === "/index.html";
+  return new Request(new URL(app ? "/" : path, self.location.origin).href);
 }
 
 async function networkFirst(e, req) {

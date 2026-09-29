@@ -27,6 +27,7 @@ import { loadBlocks } from './blockService.js';
 import { loadOrbit } from './orbitService.js';
 import { loadMyProfile } from './followService.js';
 import { refreshSocialUI } from '../utils/ui.js';
+import { markWarm, markCold, finishRestoring } from '../utils/restore.js';
 import { loadChatList } from './chatService.js';
 import { startPresence, stopPresence } from './presenceService.js';
 import { stopStories } from './storyService.js';
@@ -128,6 +129,7 @@ function showLoginError(message) {
 }
 
 function showLoggedOut() {
+  markCold();
   switchScreen("login");
   document.getElementById("topAvatar")?.classList.add("hidden");
   setLoading(false);
@@ -187,7 +189,20 @@ export function initAuthListener() {
       state.userEmail = userAuth.email || "";
 
       const userRef = db.collection("users").doc(state.uid);
-      let doc = await userRef.get();
+      /* YOUR OWN PROFILE FROM THE CACHE FIRST.
+         This was a plain get(), which goes to the server whenever
+         there is a network — so every start, including the browser
+         quietly reloading a tab it had thrown away, sat on "Logging
+         you in…" for a full round trip before anything appeared. The
+         offline cache already holds this document from last time. If
+         it is there and complete, start from it; the own-profile
+         listener (loadMyProfile) brings the server's copy a moment
+         later and applies it, a ban included. Only a first visit, or
+         a cache without a handle in it, waits for the server. */
+      let doc = null;
+      try { doc = await userRef.get({ source: "cache" }); } catch (e) { doc = null; }
+      const cached = doc && doc.exists ? (doc.data() || {}) : null;
+      if (!cached || !cached.username || cached.banned === true) doc = await userRef.get();
 
       // ---- Bootstrap a brand new account ----
       if (!doc.exists) {
@@ -235,6 +250,7 @@ export function initAuthListener() {
       // ---- Handle not claimed yet -> onboarding ----
       if (!data.username) {
         document.getElementById("topAvatar")?.classList.add("hidden");
+        finishRestoring();
         switchScreen("usernameScreen");
         setLoading(false);
         return;
@@ -248,6 +264,7 @@ export function initAuthListener() {
   });
 }
 
+let banHandled = false;
 export function initializeUserApp(userData) {
   // A banned account (set by the admin, docs/photos.md "Reports") is
   // told so and signed out. The rules are what actually stop it
@@ -316,7 +333,17 @@ export function initializeUserApp(userData) {
 
   // Somebody asking to follow you writes it into YOUR profile, so your
   // own document has to be watched or the request never arrives.
-  loadMyProfile(() => refreshSocialUI());
+  loadMyProfile(() => {
+    refreshSocialUI();
+    // The app may have started from the cached profile, so the server's
+    // copy is where a suspension is first seen. It also means a ban
+    // takes effect while the app is open, not at the next launch.
+    if (state.userCache[state.uid]?.banned === true && !banHandled) {
+      banHandled = true;
+      toast("This account has been suspended. Contact the livesociya admin if you think that's a mistake.");
+      setTimeout(() => logout(), 2500);
+    }
+  });
 
   loadChatList();
 
@@ -340,6 +367,11 @@ export function initializeUserApp(userData) {
   loadCircle();
 
   setLoading(false);
+
+  // The next start on this device is a warm one (utils/restore.js), and
+  // app.js puts back where this tab was, if the browser reloaded it.
+  markWarm();
+  document.dispatchEvent(new CustomEvent("livesociya:ready"));
 
   // If they arrived on a shared link, this is the first moment there
   // is anything to show them. The feed listener has only just been

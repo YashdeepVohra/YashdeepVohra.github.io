@@ -61,6 +61,8 @@ Each line is the whole rule. The file after it is the argument for it.
   handlers take ids only (`safeId`), never text.
 - Pair documents are one doc with a sorted composite id (`a_b`) — blocks,
   chats, orbit.
+- Two people can create the same chat at once; a refused create re-reads
+  and carries on as a reply (`createChatOrJoin`), never "wait for a reply".
 - `allow get` and `allow list` are different; a list rule must mirror the
   query's own constraint.
 - What you may still do to a message you sent is `messageRules.js`: an
@@ -246,6 +248,10 @@ Each line is the whole rule. The file after it is the argument for it.
   on failure) and cache-first only for versioned CDN URLs. It never
   touches Firestore, Auth or `/__/`.
 
+**Legal** — `privacy.html`, `terms.html`, `legal.css`: plain pages, linked
+from Sign in and Settings. What they promise must stay true of the code
+(no analytics, no location, email private). Open items: `docs/status.md`.
+
 **The mark**
 
 - The logo is the firefly: `logo.svg` (tile), `logo-mark.svg` (no tile), PNGs
@@ -280,6 +286,14 @@ Each line is the whole rule. The file after it is the argument for it.
 - The thread scrolls ITSELF constantly (new message, history prepended,
   typing). Go through `scrollThread()`, so the floating date can tell
   a thumb from us.
+- An async snapshot callback paints only if it is still the newest
+  (`gen` guard in the feed, inbox and thread): a burst finishes out of order.
+- The live feed is `expiresAt asc` — past `LIVE_LIMIT`, the far future is
+  what gets cut, never what is happening now.
+- A new profile opens at its top (`scrollProfileToTop`); a memory — journal
+  print or Recap stub — is one tap target, its faces are not links.
+- A signed-in reload is a WARM start (`utils/restore.js`, head of index.html):
+  own profile from cache, no entry animations, back to tab/scroll/chat.
 - A screen change closes every overlay (`switchScreen`). A layer sits
   at z-index 1500 and every screen is far below it, so anything opened
   under one is invisible until the layer goes.

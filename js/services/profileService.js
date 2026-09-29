@@ -92,11 +92,32 @@ export function openProfileScreen(targetUid = null) {
   // chat down first and let switchScreen own the swap.
   if (state.currentChat) closeChat({ silent: true });
 
+  const sameProfile = alreadyOnAProfile && state.currentProfileUid === uid;
+  // Where the feed was, so leaving the profile puts you back there. On
+  // a laptop the profile and the feed share the window's scroll.
+  if (!alreadyOnAProfile) feedScrollY = window.scrollY || 0;
+
   state.currentProfileUid = uid;
   switchScreen("profileScreen");
   document.querySelector(".topbar")?.classList.remove("hidden");
   history.pushState({ screen: "profile" }, "", window.location.href);
+  if (!sameProfile) scrollProfileToTop();
   loadProfileUI(uid);
+}
+
+/* A NEW PROFILE STARTS AT ITS TOP.
+   Scroll halfway down one person's journal, tap a name in it, and the
+   next profile opened exactly as far down — its header, name and
+   follow button all above the fold, as if you had already scrolled
+   past them. The screen is one element reused for every profile, and
+   nothing put its scroll back. On a phone the profile scrolls its own
+   body (a fixed layer); on a laptop it scrolls the window, the same as
+   the feed. Both are reset. */
+let feedScrollY = 0;
+function scrollProfileToTop() {
+  const body = document.querySelector("#profileScreen .profile-scroll-body");
+  if (body) body.scrollTop = 0;
+  if (window.scrollY) window.scrollTo(0, 0);
 }
 
 /**
@@ -107,6 +128,7 @@ export function closeProfileScreen({ all = false } = {}) {
   if (!all && profileTrail.length) {
     const previous = profileTrail.pop();
     state.currentProfileUid = previous;
+    scrollProfileToTop();
     loadProfileUI(previous);
     return;
   }
@@ -119,6 +141,11 @@ export function closeProfileScreen({ all = false } = {}) {
   unwatchFollowState();
   state.currentProfileUid = "";
   switchScreen("home");
+  // Back to where you were in the feed, not wherever the profile left
+  // the window.
+  const y = feedScrollY;
+  feedScrollY = 0;
+  requestAnimationFrame(() => window.scrollTo(0, y));
 }
 
 /* ---------------------------------------------------------------------
@@ -299,6 +326,10 @@ function filmStamp(ms) {
   return `\u2019${String(d.getFullYear()).slice(-2)} ${d.getMonth() + 1} ${d.getDate()}`;
 }
 
+/* The whole print opens the memory — its white border and the strip
+   under the caption used to be dead, so a tap that missed the photo
+   did nothing and left you on the profile. Everything inside that does
+   something else (like, comment, remove, show) stops the tap first. */
 function memoryCard(e, now, { isSelf, hidden = false }) {
   const id = safeId(e.id);
   if (!id) return "";
@@ -312,8 +343,8 @@ function memoryCard(e, now, { isSelf, hidden = false }) {
   // could not be read, and the caption says when anyway.
   const stamp = cover && !wasCalledOff(e) ? filmStamp(e.startTime) : "";
   return `
-    <article class="jr-card${hidden ? " is-hidden" : ""}" style="--vibe:${vibe}">
-      <button type="button" class="jr-open" onclick="window.openEventPage('${id}')">
+    <article class="jr-card${hidden ? " is-hidden" : ""}" style="--vibe:${vibe}" onclick="window.openEventPage('${id}')">
+      <button type="button" class="jr-open">
         <span class="jr-cover">${cover
           ? `<img src="${escapeHtml(cover)}" alt="" loading="lazy" decoding="async">`
           : `<span class="jr-glyph" aria-hidden="true">${glyph}</span>`}${stamp
@@ -324,11 +355,11 @@ function memoryCard(e, now, { isSelf, hidden = false }) {
         </span>
       </button>
       ${hidden
-        ? `<div class="jr-foot"><button type="button" class="act jr-restore" onclick="window.showOnProfile('${id}')">Show on profile</button></div>`
+        ? `<div class="jr-foot"><button type="button" class="act jr-restore" onclick="event.stopPropagation(); window.showOnProfile('${id}')">Show on profile</button></div>`
         : `<div class="jr-foot soc-bar" data-social="${id}" data-variant="mini"></div>`}
       ${isSelf && !hidden
         ? `<button type="button" class="jr-more" aria-label="Remove from your profile" title="Remove from your profile"
-                   onclick="window.hideFromProfile('${id}')">${MORE}</button>`
+                   onclick="event.stopPropagation(); window.hideFromProfile('${id}')">${MORE}</button>`
         : ""}
     </article>`;
 }

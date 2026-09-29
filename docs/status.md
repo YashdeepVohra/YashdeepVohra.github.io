@@ -54,6 +54,20 @@ On **Blaze day** (card added — `docs/photos.md` has the details):
 
 Admin: the user is the admin via `admins/{their uid}` (made in the console).
 
+Legal pages (`privacy.html`, `terms.html`, added 29 Sep 2026):
+- The contact on both is **support@livesociya.com**, which does NOT exist
+  yet — the user will make it (free forwarding works). Until then mail to
+  it bounces. If they choose another address, change it in both files.
+- Terms say 13+, under-18s only with a parent's or guardian's permission
+  (the user's call, "like Instagram"). India's DPDP Rules require
+  VERIFIABLE parental consent for under-18s from **13 May 2027**; a
+  self-declaration is not that. Before then: build a consent step, or
+  move to 18+.
+- No in-app account deletion yet: the policy says "email us". An in-app
+  Delete account would be the better answer.
+- The scoped-feed index (`circleId` + `expiresAt`) is ASCENDING now,
+  matching the live feed's order — create that one, not the old DESC.
+
 ## Findable by name
 
 `index.html` carries the title, description, canonical, Open Graph,

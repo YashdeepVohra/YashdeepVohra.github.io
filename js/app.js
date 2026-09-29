@@ -162,6 +162,7 @@ import { initEmojiPicker } from './interactions/emojiPicker.js';
 import { toggleShowActivity } from './services/presenceService.js';
 import { initQuietLinks } from './utils/quietLinks.js';
 import { popOverlay, anyOverlayOpen, clearOverlays } from './utils/overlays.js';
+import { saveRestorePoint, takeRestorePoint, scrollBackTo, finishRestoring } from './utils/restore.js';
 import { openSearch, closeSearch, onSearchInput, searchOpenProfile, searchOpenEvent, refreshSearchResults } from './interactions/searchUI.js';
 
 // ==========================================
@@ -461,11 +462,14 @@ function boot() {
   // A hype waits a moment before it is written, so anything still
   // waiting has to go when the app is put away — otherwise tapping and
   // immediately locking the phone would lose it.
-  const flushPending = () => { flushAllHype(); flushReceipt(); };
+  // Where you were goes with it: a phone may throw this tab away while
+  // it is in the background, and the reload should put you back.
+  const flushPending = () => { flushAllHype(); flushReceipt(); saveRestorePoint(); };
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") flushPending();
   });
   window.addEventListener("pagehide", flushPending);
+  document.addEventListener("livesociya:ready", restoreWhereWeWere, { once: true });
 
   // Page in more recap as it is scrolled, rather than all at once.
   const scroller = document.querySelector(".container");
@@ -480,6 +484,50 @@ function boot() {
     const doc = document.documentElement;
     if (doc.scrollTop + window.innerHeight > doc.scrollHeight - 320) loadRecap();
   }, { passive: true });
+}
+
+/* BACK WHERE YOU WERE, after the browser reloaded this tab by itself
+   (utils/restore.js). The tab, how far down it you were, and the
+   conversation you had open. Animations stay off until it is done, so
+   the screen appears in place instead of assembling itself. */
+function waitFor(test, ms) {
+  return new Promise((resolve) => {
+    const start = Date.now();
+    const tick = () => {
+      if (test()) return resolve(true);
+      if (Date.now() - start > ms) return resolve(false);
+      setTimeout(tick, 80);
+    };
+    tick();
+  });
+}
+
+async function restoreWhereWeWere() {
+  const done = () => setTimeout(finishRestoring, 250);
+  const point = takeRestorePoint();
+  if (!point || !state.uid) return done();
+
+  if (point.tab !== "events") goToTab(point.tab);
+
+  if (point.chat && point.chatType === "direct" && point.other
+      && point.chat.split("_").includes(state.uid) && point.chat.split("_").includes(point.other)) {
+    openChat(point.chat, point.other);
+    return done();
+  }
+  if (point.chat && point.chatType === "event") {
+    await waitFor(() => !!state.eventCache[point.chat], 2500);
+    const e = state.eventCache[point.chat];
+    if (e && e.expiresAt > Date.now() && !state.currentChat) {
+      openEventChat(point.chat);
+      return done();
+    }
+  }
+  if (point.home && point.y) {
+    // The feed (or Recap) is still arriving; wait for it to be tall enough.
+    await waitFor(() => !!document.querySelector("#events .event, #recapEvents .event, #chatList > *"), 2500);
+    await scrollBackTo(point.y);
+  }
+  done();
 }
 
 if (document.readyState === "loading") {

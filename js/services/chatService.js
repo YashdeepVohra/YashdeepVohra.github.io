@@ -65,6 +65,29 @@ function lastFields(text, msgId, photo = "") {
 function unreadCountAfterSend(data, otherUid) {
   return data && data.unreadByUid === otherUid ? FieldValue.increment(1) : 1;
 }
+/* TWO PEOPLE OPENING THE SAME CHAT IN THE SAME MOMENT.
+   A new conversation is created with a full set() (the rules need
+   createdAt == request.time and initiatedByUid == you). If the other
+   person's first message created it a moment before ours, our set()
+   is no longer a create but an UPDATE that tries to rewrite createdAt
+   and initiatedByUid, and the rules refuse it — so the second of two
+   people saying hi at once lost their message and was told to "wait
+   for them to reply". The same happened to one person pressing send
+   twice, fast, on a brand-new thread.
+   So a refused create looks again: if the chat exists now, return
+   what is in it and the caller carries on down the "already exists"
+   road. Returns null when OUR create is the one that landed. */
+async function createChatOrJoin(chatRef, createBody) {
+  try {
+    await chatRef.set(createBody);
+    return null;
+  } catch (error) {
+    let again = null;
+    try { again = await chatRef.get(); } catch (e) { /* fall through */ }
+    if (!again || !again.exists) throw error;
+    return again.data() || {};
+  }
+}
 function followPreview(chatId, type, msgId, text) {
   if (type !== "direct" || !chatId) return;
   const data = state.currentChat === chatId ? state.currentChatData : null;
@@ -161,14 +184,14 @@ export async function sendDirectText(otherUid, text) {
   const msgRef = chatRef.collection("messages").doc();
   const last = lastFields(body, msgRef.id);
   const snap = await chatRef.get();
-  const data = snap.exists ? (snap.data() || {}) : null;
   const mutual = await isMutualFollow(otherUid);
 
   let usedIcebreaker = false;
+  let data = snap.exists ? (snap.data() || {}) : null;
   if (!data) {
     const crossed = mutual || await checkCrossedPaths(state.uid, otherUid);
     const status = crossed ? "unlocked" : "icebreaker";
-    await chatRef.set({
+    data = await createChatOrJoin(chatRef, {
       userUids: [state.uid, otherUid].sort(),
       createdAt: FieldValue.serverTimestamp(),
       initiatedByUid: state.uid,
@@ -180,8 +203,9 @@ export async function sendDirectText(otherUid, text) {
       lastUpdated: Date.now(),
       ...last
     });
-    usedIcebreaker = status === "icebreaker";
-  } else {
+    if (!data) usedIcebreaker = status === "icebreaker";
+  }
+  if (data) {
     let status = data.status || "unlocked";
     if (status === "icebreaker" && (data.initiatedByUid === otherUid || mutual)) status = "unlocked";
     const mine = status === "icebreaker" && data.initiatedByUid === state.uid;
@@ -496,6 +520,11 @@ export async function sendMessage({ photo = "" } = {}) {
       }
     : null;
 
+  // The moment Enter was pressed, not the moment the chat document
+  // came back. Two quick sends each wait on their own round trip, and
+  // stamping after it could put the second one above the first.
+  const pressedAt = Date.now();
+
   input.value = "";
   state.replyingToMessage = null;
   updateChatFooterUI();
@@ -553,7 +582,7 @@ export async function sendMessage({ photo = "" } = {}) {
       const crossed = mutual || await checkCrossedPaths(state.uid, otherUid);
       status = crossed ? "unlocked" : "icebreaker";
       initiatedByUid = state.uid;
-      await chatRef.set({
+      const theirs = await createChatOrJoin(chatRef, {
         userUids: [state.uid, otherUid].sort(),
         createdAt: FieldValue.serverTimestamp(),
         initiatedByUid,
@@ -565,8 +594,17 @@ export async function sendMessage({ photo = "" } = {}) {
         lastUpdated: Date.now(),
         ...last
       });
-      usedIcebreaker = status === "icebreaker";
-    } else {
+      if (theirs) {
+        // Somebody else's create landed first — go the existing way.
+        chatExists = true;
+        chatData = theirs;
+        status = theirs.status || "unlocked";
+        initiatedByUid = theirs.initiatedByUid || "";
+      } else {
+        usedIcebreaker = status === "icebreaker";
+      }
+    }
+    if (chatExists) {
       // Their opening message unlocks it, and so does the two of you
       // having followed each other since — the thread stops being
       // between strangers the moment that is true.
@@ -596,7 +634,7 @@ export async function sendMessage({ photo = "" } = {}) {
       senderUid: state.uid,
       text,
       ...(photo ? { photo } : {}),
-      time: Date.now(),
+      time: pressedAt,
       sentAt: FieldValue.serverTimestamp(),
       replyTo: replyData
     };
@@ -1487,6 +1525,7 @@ function composeNote({ icon, title, body, cancel, variant = "" }) {
 }
 
 // ---------- Message stream ----------
+let messagesGen = 0;
 export function loadMessages() {
   if (state.messagesUnsubscribe) state.messagesUnsubscribe();
 
@@ -1510,6 +1549,7 @@ export function loadMessages() {
   state.messagesUnsubscribe = ref.orderBy("time", "asc").limitToLast(LIVE_WINDOW).onSnapshot(
     async (snapshot) => {
       if (state.currentChat !== openedChat) return;
+      const gen = ++messagesGen;
 
       const wasLive = state.liveMessages;
       state.liveMessages = [];
@@ -1550,8 +1590,18 @@ export function loadMessages() {
       }
 
       const msgs = state.olderMessages.concat(state.liveMessages);
-      await primeUsers(msgs.map((m) => m.senderUid));
+      try {
+        await primeUsers(msgs.map((m) => m.senderUid));
+      } catch (e) { /* names can follow; the words cannot wait */ }
       if (state.currentChat !== openedChat) return;
+      /* A BURST ARRIVES OUT OF ORDER. Each snapshot waits for the names
+         of whoever is in it, and a snapshot that brought a NEW sender
+         waits longer than the one after it. The later snapshot painted
+         first, then the earlier one painted over it with the thread as
+         it was a moment ago — and in a busy event chat the newest
+         message vanished until somebody else spoke. Only the newest
+         snapshot paints. */
+      if (gen !== messagesGen) return;
 
       renderMessages(msgs);
     },
@@ -2113,6 +2163,7 @@ export async function loadOlderChats() {
   }
 }
 
+let inboxGen = 0;
 export function loadChatList() {
   if (state.chatListUnsubscribe) state.chatListUnsubscribe();
 
@@ -2141,6 +2192,7 @@ export function loadChatList() {
         inboxRetries = 0;
         const list = document.getElementById("chatList");
         if (!list) return;
+        const gen = ++inboxGen;
 
         snapshot.docChanges().forEach((change) => {
           if (change.type !== "modified") return;
@@ -2173,6 +2225,10 @@ export function loadChatList() {
         } catch (e) {
           console.error("Inbox profile prefetch failed:", e.code || e.message);
         }
+        // Several chats moving at once: only the newest snapshot paints,
+        // or an older one finishing late puts the inbox back in the
+        // order it was in a moment ago (see loadMessages).
+        if (gen !== inboxGen) return;
 
         if (!chats.length) {
           list.innerHTML = `<div class="empty-state inbox-empty"><i class='bx bx-message-rounded-dots'></i><h4>No conversations yet</h4><p>Find someone by their handle above, or tap Chat on any event to talk to the people going.</p></div>`;

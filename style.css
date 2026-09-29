@@ -5256,3 +5256,31 @@ body:not(.is-admin) .admin-only { display: none !important; }
 @media (prefers-reduced-motion: reduce) {
   .sk-av, .sk-lines > span, .row-in { animation: none; }
 }
+
+/* A memory is one tap target, the whole of it (profileService
+   memoryCard, eventsService recap stub). */
+.jr-card, .stub-open { cursor: pointer; }
+.stub-open .av-stack .mini { cursor: inherit; }
+
+/* =====================================================================
+   A WARM START (js/utils/restore.js, and the script in index.html's
+   head). Coming back to a tab the phone threw away is a reload; it
+   should look like nothing happened. The loader is a bare canvas for
+   its first second, and nothing rises, fades or staggers in while the
+   screen is put back where it was.
+   ===================================================================== */
+html.warm #loading-screen > * { visibility: hidden; }
+html.restoring *:not(.skel):not(.sk-av):not(.sk-lines > span):not(.spinner),
+html.restoring *::before, html.restoring *::after {
+  /* The shimmer on a skeleton is left alone: it is the one animation
+     that means "still coming". */
+  animation-duration: 0s !important;
+  animation-delay: 0s !important;
+  transition-duration: 0s !important;
+  transition-delay: 0s !important;
+}
+
+/* Privacy Policy and Terms: under Sign in, and at the foot of Settings. */
+.login-legal { margin: var(--s-16) 0 0; font-size: 12.5px; line-height: 1.5; color: var(--fog); }
+.login-legal a, .legal-links a { color: var(--forest); text-underline-offset: 2px; }
+.legal-links { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--s-8) var(--s-20); margin-top: var(--s-24); font-size: 14px; }
