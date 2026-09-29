@@ -23,7 +23,8 @@ const rules = (path, data, kind) =>
 const snap = (docs = []) => ({
   _c: (window.__reads += docs.length),
   forEach: (f) => docs.forEach(f),
-  docChanges: () => [],
+  // window.__nextChanges: what the NEXT snapshot says changed, once.
+  docChanges: () => { const c = window.__nextChanges || []; window.__nextChanges = null; return c; },
   docs, size: docs.length, empty: docs.length === 0,
 });
 const docRef = (path) => ({

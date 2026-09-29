@@ -196,6 +196,11 @@ Each line is the whole rule. The file after it is the argument for it.
   visual viewport, not `innerHeight`.
 - Orbit faces start their counter-spin at `-var(--a)` (`faceSpin`), so a
   face travels round the ring but is never turned.
+- The composer is a TEXTAREA (`growComposer`): grows to 4 lines, then
+  scrolls (`.capped`, never before). Keyboard: Enter sends, Shift+Enter
+  is a line; touch: Return is a line, the button sends. Text out goes
+  through `cleanMessageText`; bubbles join lines with <br> in
+  `formatMessage` (never pre-wrap: the embeds' own markup has newlines).
 - Send, the emoji button and every emoji cell cancel their own mousedown, so the keyboard never drops; nothing
   inside a fixed layer may `scrollIntoView` (on iOS it scrolls the page).
 - A layer never scrolls itself: `.full-screen-view` is `overflow: clip`,

@@ -2622,7 +2622,7 @@ group('mobile keyboard and zoom');
     document.getElementById('loading-screen').classList.add('hidden');
     document.querySelector('.app-frame').classList.remove('hidden');
     window.switchScreen('chatScreen');
-    const input = document.querySelector('#chatScreen .chat-footer input');
+    const input = document.querySelector('#chatScreen .chat-footer #msgInput');
     const rect = (sel) => document.querySelector(sel).getBoundingClientRect();
     const out = { hasInput: !!input };
 
@@ -5530,6 +5530,347 @@ group('many at once, a fresh profile, a whole memory, and coming back');
   ok('Settings and the sign-in screen link to both',
     links.settings.includes('/privacy.html') && links.settings.includes('/terms.html')
     && links.login.includes('/privacy.html') && links.login.includes('/terms.html'), JSON.stringify(links));
+}
+
+/* ------------------------------------------------------------------ */
+group('pages that know when they end, and the chat, looked over');
+{
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 800 }, hasTouch: true, isMobile: true });
+  const p = await ctx.newPage();
+  const errs = [];
+  p.on('pageerror', (e) => errs.push(e.message.slice(0, 120)));
+  p.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errs.push(m.text().slice(0, 120)); });
+  p.on('dialog', (d) => { errs.push('NATIVE DIALOG'); d.dismiss(); });
+  await p.addInitScript({ path: fileURLToPath(new URL('./stub.js', import.meta.url)) });
+  await p.goto(APP_URL, { waitUntil: 'domcontentloaded' });
+  await p.waitForTimeout(1500);
+  await p.evaluate(async () => {
+    const { state } = await import('/js/state/store.js');
+    window.__authSingleton.currentUser = { uid: 'me' };
+    state.uid = 'me'; state.blockedUids = []; state.privacyChosen = true; state.userAvatar = '\u{1F43C}';
+    state.userCache = { me: { uid: 'me', username: 'me_h', displayName: 'Me', avatar: '\u{1F43C}', followers: [], following: [], vouchedBy: [], hiddenEvents: [] } };
+    ['a', 'b', 'c', 'd'].forEach((u) => { state.userCache[u] = { uid: u, username: u, displayName: u.toUpperCase(), avatar: '\u{1F98A}', followers: [], following: [], vouchedBy: [] }; });
+    state.following = []; state.orbitUids = []; state.eventCache = {}; state.eventOrder = []; state.recapOrder = []; state.recapDone = true;
+    document.getElementById('loading-screen').classList.add('hidden');
+    document.querySelector('.app-frame').classList.remove('hidden');
+    window.switchScreen('home');
+  });
+
+  // Joined: 3 joins hidden among 20 of their own events.
+  const joined = await p.evaluate(async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const now = Date.now(), D = 864e5;
+    const mk = (id, host, i) => ({ id, hostUid: host, title: id, place: 'Lawn', tag: '\u{1F389} Party', description: '',
+      startTime: now - (i + 1) * D - 36e5, expiresAt: now - (i + 1) * D,
+      participantUids: host === 'me' ? ['me'] : [host, 'me'], hypedUids: [], pendingUids: [], unconfirmedUids: [], circleId: 'main' });
+    window.__events = [];
+    for (let i = 0; i < 20; i++) window.__events.push(mk('h' + i, 'me', i));
+    [2, 9, 17].forEach((i, n) => window.__events.push(mk('j' + n, 'a', i)));
+    window.openProfileScreen('me');
+    await wait(800);
+    window.setProfileEventsTab('joined');
+    await wait(100);
+    const out = {
+      count: document.getElementById('peJoinedCount')?.innerText,
+      older: !!document.querySelector('#myProfileEvents .pe-older'),
+      cards: document.querySelectorAll('#myProfileEvents .jr-card').length
+    };
+    window.setProfileEventsTab('hosted');
+    await wait(100);
+    out.hostedCount = document.getElementById('peHostedCount')?.innerText;
+    // Exactly twelve hosted: no "+", no button.
+    window.__events = window.__events.slice(0, 12);
+    window.closeProfileScreen({ all: true });
+    window.openProfileScreen('me');
+    await wait(800);
+    out.twelve = document.getElementById('peHostedCount')?.innerText;
+    out.twelveOlder = !!document.querySelector('#myProfileEvents .pe-older');
+    window.closeProfileScreen({ all: true });
+    window.__events = [];
+    return out;
+  });
+  ok('Joined says 3, not "3+", when their own events fill the page', joined.count === '3' && !joined.older && joined.cards === 3, JSON.stringify(joined));
+  ok('Hosted still pages when there really is more', joined.hostedCount === '12+', JSON.stringify(joined));
+  ok('and exactly a page is a page: no "+", no Show older', joined.twelve === '12' && !joined.twelveOlder, JSON.stringify(joined));
+
+  // The inbox: exactly twenty chats is no "Show older chats"; 21 is.
+  const inbox = await p.evaluate(async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const chat = await import('/js/services/chatService.js');
+    const { state } = await import('/js/state/store.js');
+    const now = Date.now();
+    const seedChats = (n) => {
+      Object.keys(window.__stubDocs).filter((k) => k.startsWith('chats/')).forEach((k) => delete window.__stubDocs[k]);
+      for (let i = 0; i < n; i++) {
+        const u = 'u' + String(i).padStart(2, '0');
+        state.userCache[u] = { uid: u, username: u, displayName: u, avatar: '\u{1F98A}' };
+        window.__stubDocs['chats/me_' + u] = { userUids: ['me', u], status: 'unlocked', lastUpdated: now - i * 1000, unreadByUid: '', initiatedByUid: 'me', lastText: 'hi', lastMsgId: 'm' + i, lastSenderUid: u };
+      }
+    };
+    window.showTab('chats');
+    seedChats(20);
+    chat.loadChatList();
+    await wait(300);
+    const at20 = !!document.getElementById('inboxMore');
+    seedChats(21);
+    chat.loadChatList();
+    await wait(300);
+    const at21 = !!document.getElementById('inboxMore');
+    const rows21 = document.querySelectorAll('#chatList .chat-item').length;
+    return { at20, at21, rows21 };
+  });
+  ok('the inbox offers older chats only when there is one', !inbox.at20 && inbox.at21 && inbox.rows21 === 20, JSON.stringify(inbox));
+
+  // The chat itself.
+  const c = await p.evaluate(async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const chat = await import('/js/services/chatService.js');
+    const { state } = await import('/js/state/store.js');
+    const now = Date.now();
+    const out = {};
+    Object.keys(window.__stubDocs).filter((k) => k.startsWith('chats/')).forEach((k) => delete window.__stubDocs[k]);
+    try { localStorage.removeItem('livesociya.drafts'); localStorage.removeItem('livesociya.muted'); } catch (e) {}
+    window.__stubDocs['chats/a_me'] = { userUids: ['a', 'me'], status: 'unlocked', lastUpdated: now - 5e4, unreadByUid: '', initiatedByUid: 'a', lastMsgId: 'x0', lastText: 'yo', lastSenderUid: 'a' };
+    window.__stubDocs['chats/b_me'] = { userUids: ['b', 'me'], status: 'unlocked', lastUpdated: now - 6e4, unreadByUid: '', initiatedByUid: 'b', lastMsgId: 'y0', lastText: 'hey', lastSenderUid: 'b' };
+    for (let i = 0; i < 40; i++) {
+      window.__stubDocs['chats/a_me/messages/x' + String(i).padStart(2, '0')] = { senderUid: i % 2 ? 'a' : 'me', text: 'line ' + i + ' ' + 'word '.repeat(12), time: now - (40 - i) * 60000 };
+    }
+    window.showTab('chats');
+    chat.loadChatList();
+    await wait(300);
+
+    // A draft stays with its chat, and never follows you to another.
+    chat.openChat('a_me', 'a');
+    await wait(400);
+    const input = document.getElementById('msgInput');
+    input.value = 'half a thought for A';
+    chat.openChat('b_me', 'b');
+    await wait(300);
+    out.boxEmptyInB = input.value === '';
+    chat.openChat('a_me', 'a');
+    await wait(300);
+    out.draftBackInA = input.value === 'half a thought for A';
+    chat.closeChat({ silent: true });
+    window.switchScreen('home'); window.showTab('chats');
+    await wait(100);
+    out.inboxSaysDraft = [...document.querySelectorAll('#chatList .chat-item')].some((r) => /Draft:/.test(r.innerText) && /half a thought/.test(r.innerText));
+
+    // Sending clears the draft.
+    chat.openChat('a_me', 'a');
+    await wait(400);
+    await chat.sendMessage();
+    await wait(100);
+    out.draftGoneAfterSend = chat.draftFor('a_me') === '' && input.value === '';
+
+    // Enter while an Indian-language keyboard is still composing sends nothing.
+    input.value = 'namaste';
+    const w0 = window.__writes;
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, isComposing: true }));
+    await wait(50);
+    out.imeNoSend = window.__writes === w0 && input.value === 'namaste';
+    input.value = '';
+
+    // Read up the thread; a message arrives: you stay put and get a pill.
+    const box = document.getElementById('messages');
+    await wait(100);
+    box.scrollTop = 0;
+    await wait(250);
+    const before = box.scrollTop;
+    window.__stubDocs['chats/a_me/messages/x99'] = { senderUid: 'a', text: 'are you coming?', time: Date.now() };
+    window.__fireColl('chats/a_me/messages');
+    await wait(300);
+    const pill = document.getElementById('newBelow');
+    out.stayedPut = Math.abs(box.scrollTop - before) < 5;
+    out.pill = !!pill && !pill.classList.contains('hidden') && /1 new message/.test(pill.innerText);
+    // They start typing: you are still not dragged down.
+    window.__stubDocs['chats/a_me'].typingUid = 'a';
+    window.__fireDoc('chats/a_me');
+    await wait(150);
+    out.typingNoYank = Math.abs(box.scrollTop - before) < 5;
+    window.__stubDocs['chats/a_me'].typingUid = '';
+    window.__fireDoc('chats/a_me');
+    // Your own send brings you down, and the pill goes.
+    input.value = 'yes!';
+    await chat.sendMessage();
+    window.__fireColl('chats/a_me/messages');   // Firestore echoes a local write at once
+    await wait(300);
+    out.ownSendChases = box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+    out.pillGone = pill.classList.contains('hidden');
+
+    // Leaving an event chat for a DM lets go of the event's pin.
+    state.eventCache.ev1 = { id: 'ev1', hostUid: 'a', title: 'Jam', place: 'Lawn', tag: '\u{1F3B5} Music', startTime: now - 6e5, expiresAt: now + 36e5, participantUids: ['a', 'me'], hypedUids: [] };
+    window.__stubDocs['events/ev1/pinned/current'] = { messageId: 'p1', senderUid: 'a', text: 'Bring water', by: 'a' };
+    chat.openEventChat('ev1');
+    await wait(300);
+    out.pinInEvent = !document.getElementById('pinnedBar').classList.contains('hidden');
+    chat.openChat('b_me', 'b');
+    await wait(200);
+    window.__fireDoc('events/ev1/pinned/current');
+    await wait(100);
+    out.noPinInDm = document.getElementById('pinnedBar').classList.contains('hidden');
+    chat.closeChat({ silent: true });
+
+    return { out };
+  });
+  ok('a draft stays with its own chat, never in another one', c.out.boxEmptyInB && c.out.draftBackInA, JSON.stringify(c.out));
+  ok('the inbox says Draft, and sending clears it', c.out.inboxSaysDraft && c.out.draftGoneAfterSend, JSON.stringify(c.out));
+  ok('Enter on a keyboard still composing a word sends nothing', c.out.imeNoSend, JSON.stringify(c.out));
+  ok('reading back up: a new message does not move you, it tells you', c.out.stayedPut && c.out.pill, JSON.stringify(c.out));
+  ok('and them typing does not drag you down either', c.out.typingNoYank, JSON.stringify(c.out));
+  ok('your own message always comes into view, and the pill goes', c.out.ownSendChases && c.out.pillGone, JSON.stringify(c.out));
+  ok('an event\'s pin never follows you into a private chat', c.out.pinInEvent && c.out.noPinInDm, JSON.stringify(c.out));
+
+  // Pop-ups: only a new message, never a typing change; and never muted.
+  const pop = await p.evaluate(async () => {
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const chat = await import('/js/services/chatService.js');
+    const { state } = await import('/js/state/store.js');
+    // showNotification paints a toast with the sender's name; count those.
+    const seen = () => [...(document.getElementById('toastBox')?.children || [])].filter((x) => /see you at 6|New message from B/.test(x.textContent || '')).length;
+    const d = window.__stubDocs['chats/b_me'];
+    Object.assign(d, { unreadByUid: '', lastMsgId: 'y0' });
+    // The first snapshot names every chat as added, the way Firestore's does.
+    window.__nextChanges = [{ type: 'added', doc: { id: 'b_me', data: () => d } }];
+    chat.loadChatList();
+    await wait(250);
+    // Patch the snapshot so docChanges reports what changed.
+    const fireModified = async () => {
+      window.__nextChanges = [{ type: 'modified', doc: { id: 'b_me', data: () => d } }];
+      window.__fireColl('chats');
+      await wait(150);
+    };
+    Object.assign(d, { lastMsgId: 'y1', lastText: 'see you at 6', lastSenderUid: 'b', unreadByUid: 'me', unreadCount: 1, lastUpdated: Date.now() });
+    await fireModified();
+    const afterNew = seen();
+    await wait(4600);
+    d.typingUid = 'b';
+    await fireModified();
+    const afterTyping = seen();
+    // Muted: a new message makes no pop-up.
+    localStorage.setItem('livesociya.muted', JSON.stringify({ b_me: Date.now() }));
+    Object.assign(d, { lastMsgId: 'y2', lastText: 'see you at 6 sharp', typingUid: '' });
+    await wait(4600);
+    await fireModified();
+    const afterMuted = seen();
+    localStorage.removeItem('livesociya.muted');
+    return { afterNew, afterTyping, afterMuted };
+  });
+  ok('a pop-up for a new message, with what they said', pop.afterNew >= 1, JSON.stringify(pop));
+  ok('but not again because they started typing', pop.afterTyping === 0, JSON.stringify(pop));
+  ok('and never from a muted chat', pop.afterMuted === 0, JSON.stringify(pop));
+  ok('and nothing in the chat errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ------------------------------------------------------------------ */
+group('messages over several lines, and a box that stops at four');
+for (const view of [{ w: 320, h: 640, touch: true }, { w: 390, h: 800, touch: true }, { w: 1280, h: 800, touch: false }]) {
+  const ctx = await browser.newContext({ viewport: { width: view.w, height: view.h }, hasTouch: view.touch, isMobile: view.touch });
+  const p = await ctx.newPage();
+  const errs = [];
+  p.on('pageerror', (e) => errs.push(e.message.slice(0, 120)));
+  p.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errs.push(m.text().slice(0, 120)); });
+  await p.addInitScript({ path: fileURLToPath(new URL('./stub.js', import.meta.url)) });
+  await p.goto(APP_URL, { waitUntil: 'domcontentloaded' });
+  await p.waitForTimeout(1400);
+  const r = await p.evaluate(async (touch) => {
+    const wait = (ms) => new Promise((res) => setTimeout(res, ms));
+    const { state } = await import('/js/state/store.js');
+    const chat = await import('/js/services/chatService.js');
+    window.__authSingleton.currentUser = { uid: 'me' };
+    state.uid = 'me'; state.blockedUids = []; state.privacyChosen = true;
+    state.userCache = { me: { uid: 'me', username: 'me_h', displayName: 'Me', avatar: '\u{1F43C}', following: [] },
+                        a: { uid: 'a', username: 'a', displayName: 'A', avatar: '\u{1F98A}', following: [] } };
+    state.following = []; state.orbitUids = [];
+    document.getElementById('loading-screen').classList.add('hidden');
+    document.querySelector('.app-frame').classList.remove('hidden');
+    window.switchScreen('home');
+    const now = Date.now();
+    window.__stubDocs['chats/a_me'] = { userUids: ['a', 'me'], status: 'unlocked', lastUpdated: now, unreadByUid: '', initiatedByUid: 'a' };
+    for (let i = 0; i < 12; i++) window.__stubDocs['chats/a_me/messages/m' + String(i).padStart(2, '0')] = { senderUid: i % 2 ? 'a' : 'me', text: 'hello ' + i, time: now - (20 - i) * 60000 };
+    chat.openChat('a_me', 'a');
+    await wait(500);
+    const out = {};
+    const ta = document.getElementById('msgInput');
+    const type = (v) => { ta.value = v; ta.dispatchEvent(new Event('input', { bubbles: true })); };
+    out.isTextarea = ta.tagName === 'TEXTAREA';
+    type('one line');
+    const h1 = ta.offsetHeight;
+    type('one\ntwo\nthree');
+    const h3 = ta.offsetHeight;
+    type('1\n2\n3\n4\n5\n6\n7\n8\n9');
+    const h9 = ta.offsetHeight;
+    const lh = parseFloat(getComputedStyle(ta).lineHeight);
+    out.grows = h3 > h1 + lh * 1.5;
+    out.capsAtFour = Math.abs(h9 - (h1 + lh * 3)) <= 3 && ta.classList.contains('capped') && ta.scrollHeight > ta.clientHeight + 10;
+    out.notCappedBelow = (type('a\nb'), !ta.classList.contains('capped'));
+    // Nothing leaves the screen with the box at its tallest.
+    type('1\n2\n3\n4\n5\n6\n7\n8\n9');
+    await wait(50);
+    const send = document.getElementById('sendBtn').getBoundingClientRect();
+    const field = document.querySelector('.composer-field').getBoundingClientRect();
+    const box = document.getElementById('messages').getBoundingClientRect();
+    out.onScreen = send.bottom <= innerHeight + 1 && field.bottom <= innerHeight + 1 && send.right <= innerWidth + 1 && field.left >= -1;
+    out.threadStillThere = box.height > 120;
+    out.pageNotWider = document.documentElement.scrollWidth <= innerWidth;
+    // Enter: sends with a keyboard, new line on a phone; Shift+Enter never sends.
+    type('first\nsecond');
+    const w0 = window.__writes;
+    ta.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', shiftKey: true, bubbles: true, cancelable: true }));
+    await wait(60);
+    out.shiftEnterKeeps = window.__writes === w0 && ta.value === 'first\nsecond';
+    ta.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await wait(200);
+    out.enter = window.__writes > w0 ? 'sent' : 'kept';
+    if (out.enter === 'kept') await chat.sendMessage();
+    await wait(100);
+    out.shrinksAfterSend = ta.value === '' && Math.abs(ta.offsetHeight - h1) <= 2;
+    // What went out, and how it reads.
+    type('one\ntwo  \n\n\n\n\nthree <b>x</b>\nhttps://youtu.be/dQw4w9WgXcQ');
+    await chat.sendMessage();
+    await wait(80);
+    const sent = Object.keys(window.__stubDocs).filter((k) => k.startsWith('chats/a_me/messages/gen')).map((k) => window.__stubDocs[k]).sort((a, b) => a.time - b.time);
+    const last = sent[sent.length - 1] || {};
+    out.cleaned = last.text === 'one\ntwo\n\nthree <b>x</b>\nhttps://youtu.be/dQw4w9WgXcQ';
+    out.previewFlat = !/\n/.test(window.__stubDocs['chats/a_me'].lastText || '\n');
+    window.__fireColl('chats/a_me/messages');
+    await wait(300);
+    const bubbles = [...document.querySelectorAll('#messages .msg-sent .msg-text')];
+    const b = bubbles[bubbles.length - 1];
+    out.breaks = b ? b.querySelectorAll(':scope > br').length : -1;
+    out.escaped = b ? !b.querySelector('b') && /<b>x<\/b>/.test(b.textContent) : false;
+    out.embed = b ? !!b.querySelector('.media-embed.yt iframe') : false;
+    out.firstLine = b ? b.textContent.trim().startsWith('one') : false;
+    // Editing a message over several lines opens the box at its size.
+    const mine = state.liveMessages.filter((m) => m.senderUid === 'me').pop();
+    if (mine) { mine.time = Date.now(); mine.sentAt = { toMillis: () => Date.now() }; }
+    chat.startEditMessage(mine && mine.id);
+    await wait(80);
+    out.editGrows = ta.offsetHeight > h1 + lh;
+    chat.cancelEdit();
+    await wait(30);
+    out.editCancelShrinks = Math.abs(ta.offsetHeight - h1) <= 2;
+    // Drafts keep their lines.
+    type('a draft\nover two lines');
+    chat.closeChat({ silent: true });
+    chat.openChat('a_me', 'a');
+    await wait(300);
+    out.draftLines = ta.value === 'a draft\nover two lines' && ta.offsetHeight > h1 + lh * 0.5;
+    type('');
+    chat.closeChat({ silent: true });
+    return out;
+  }, view.touch);
+  const tag = `${view.w}px${view.touch ? ' (touch)' : ''}`;
+  ok(`${tag}: the box grows with each line, and stops at four`, r.isTextarea && r.grows && r.capsAtFour && r.notCappedBelow, JSON.stringify(r));
+  ok(`${tag}: at its tallest nothing leaves the screen and the thread keeps its room`, r.onScreen && r.threadStillThere && r.pageNotWider, JSON.stringify(r));
+  ok(`${tag}: Shift+Enter is a new line; Enter ${view.touch ? 'is a new line too on a phone' : 'sends'}`,
+    r.shiftEnterKeeps && r.enter === (view.touch ? 'kept' : 'sent'), JSON.stringify(r));
+  ok(`${tag}: sending empties the box back to one line`, r.shrinksAfterSend, JSON.stringify(r));
+  ok(`${tag}: a message keeps its lines, loses the extra blank ones, and the inbox gets one line`, r.cleaned && r.previewFlat && r.breaks === 4 && r.firstLine, JSON.stringify(r));
+  ok(`${tag}: it is still escaped, and a link on its own line still embeds`, r.escaped && r.embed, JSON.stringify(r));
+  ok(`${tag}: editing and drafts keep their lines too`, r.editGrows && r.editCancelShrinks && r.draftLines, JSON.stringify(r));
+  ok(`${tag}: and nothing errors`, errs.length === 0, errs.join(' | '));
+  await ctx.close();
 }
 
 /* ------------------------------------------------------------------ */

@@ -199,17 +199,30 @@ function eventEmbed(eventId, rawUrl) {
     </a>`;
 }
 
+/* A message can run to several lines now. Each line is formatted on
+   its own and the lines are joined with <br>: the embeds below are
+   built from template literals full of newlines and indentation, so
+   turning newlines into breaks AFTER them (or pre-wrap on the bubble)
+   would have printed that indentation as blank lines inside a video. */
 export function formatMessage(text, isMediaOnly = false) {
+  const lines = String(text == null ? "" : text).replace(/\r\n?/g, "\n").split("\n");
+  if (lines.length === 1) return formatLine(lines[0], isMediaOnly);
+  return lines.map((line) => formatLine(line, false)).join("<br>");
+}
+
+function formatLine(text, isMediaOnly = false) {
   // Escape FIRST. Everything after this point works on safe text.
   const safeText = escapeHtml(text);
   const urlRegex = /(https?:\/\/[^\s<]+)/g;
 
-  return safeText.replace(urlRegex, function (escapedUrl) {
+  // (The pattern has one capture group, so the offset is the THIRD argument.)
+  return safeText.replace(urlRegex, function (escapedUrl, _whole, offset) {
     const rawUrl = decodeEntities(escapedUrl);
     // An embed that IS the message needs no gap above it; one that
-    // follows text does.
+    // follows text ON ITS LINE does. A link at the start of a line
+    // already has the line's own break above it.
     const spaced = isMediaOnly ? "" : " spaced";
-    const lead = isMediaOnly ? "" : "<br>";
+    const lead = isMediaOnly || !offset ? "" : "<br>";
 
     // ---- One of ours ----
     const eventId = eventIdFromUrl(rawUrl);

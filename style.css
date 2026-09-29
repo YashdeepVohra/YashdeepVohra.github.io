@@ -5316,3 +5316,41 @@ html.restoring *::before, html.restoring *::after {
 .chat-mute.hidden { display: none; }
 .chat-draft { color: var(--forest); font-weight: 600; }
 .chat-muted { display: inline-block; vertical-align: -1px; margin-left: 5px; color: var(--fog); }
+
+/* =====================================================================
+   THE COMPOSER, MULTI-LINE (chatService growComposer)
+   ---------------------------------------------------------------------
+   A textarea now, one line tall until you write more. It grows to four
+   lines and then scrolls inside itself (.capped) — only then, so it is
+   never a scroll box with nothing to scroll. The base sheet's textarea
+   (92px tall, resizable, card radius, 12px under it) is shed here. The
+   buttons beside it sit at the BOTTOM, level with the line you are on,
+   as in every messenger.
+   ===================================================================== */
+.composer-field textarea,
+.composer-field textarea:focus {
+  flex: 1; min-width: 0;
+  display: block;
+  height: auto; min-height: 0; max-height: none;
+  /* The space above and below the text is MARGIN, not padding: padding
+     is inside the scroll area, so a capped box showed a sliver of the
+     line above and below the four it holds. Margin puts the clip edge
+     exactly on the text. */
+  margin: 12px 0; padding: 0 6px;
+  border: none; border-radius: 0; box-shadow: none; background: transparent;
+  line-height: 21px;
+  resize: none;
+  overflow-y: hidden; overflow-x: hidden;
+  overflow-wrap: anywhere; white-space: pre-wrap;
+  overscroll-behavior: contain;
+}
+.composer-field textarea.capped { overflow-y: auto; }
+.composer-field { align-items: flex-end; }
+.composer-field .composer-emoji { margin-bottom: 4px; }
+.composer-field.multi { border-radius: 22px; }
+.input-wrapper { align-items: flex-end; }
+.input-wrapper > button { margin-bottom: 1px; }
+
+/* A message keeps the lines it was written in. formatMessage joins
+   them with <br>; this only makes sure a long word still breaks. */
+.msg-text { overflow-wrap: anywhere; }

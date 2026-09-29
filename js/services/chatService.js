@@ -322,6 +322,7 @@ function saveComposerDraft() {
 function restoreComposerDraft(chatId) {
   const input = document.getElementById("msgInput");
   if (input) input.value = draftFor(chatId);
+  growComposer();
 }
 
 /* MUTE. A muted conversation still arrives and still shows as unread;
@@ -655,6 +656,7 @@ export function closeChat({ silent = false } = {}) {
   paintThreadHello(false);
   const input = document.getElementById("msgInput");
   if (input) input.value = "";
+  growComposer();
   paintMuteButton();
   // The inbox shows "Draft" for the thread you just left.
   paintInbox();
@@ -679,10 +681,67 @@ export function composerKey(event) {
     if (state.replyingToMessage) { event.preventDefault(); return cancelReply(); }
     return;
   }
-  if (event.key !== "Enter" || event.shiftKey) return;
+  if (event.key !== "Enter") return;
   if (event.isComposing || event.keyCode === 229) return;
+  // MULTI-LINE. With a keyboard, Enter sends and Shift+Enter starts a
+  // new line, the way every desktop messenger works. On a phone the
+  // Return key is the ONLY way to start a new line, so there it does
+  // that, and the Send button sends — as in WhatsApp and Instagram.
+  if (event.shiftKey || touchComposer()) return;
   event.preventDefault();
   sendMessage();
+}
+
+function touchComposer() {
+  return !!(window.matchMedia && matchMedia("(pointer: coarse)").matches);
+}
+
+/* THE BOX GROWS WITH WHAT YOU WRITE — UP TO FOUR LINES.
+   Past four it stops growing and scrolls inside itself, so a long
+   message can never push the thread off a phone screen with the
+   keyboard up. It is sized from its own line height, not a guessed
+   pixel number, so a larger system font still gets four whole lines.
+   The thread under it stays pinned to the bottom if that is where you
+   were: the footer getting taller must not hide the newest message. */
+const COMPOSER_MAX_LINES = 4;
+export function growComposer() {
+  const el = document.getElementById("msgInput");
+  if (!el || el.tagName !== "TEXTAREA") return;
+  const box = document.getElementById("messages");
+  const atBottom = box ? box.scrollHeight - box.scrollTop - box.clientHeight < 80 : false;
+
+  const cs = getComputedStyle(el);
+  const line = parseFloat(cs.lineHeight) || 21;
+  const pad = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+  const max = Math.round(line * COMPOSER_MAX_LINES + pad);
+
+  const before = el.offsetHeight;
+  el.style.height = "auto";
+  const want = el.scrollHeight;
+  const h = Math.min(want, max);
+  el.style.height = h + "px";
+  // Only a box that really has more than it shows may scroll (a dead
+  // scroll container is worse than none — layout.md).
+  el.classList.toggle("capped", want > max + 1);
+  // Capped with the caret at the end (a draft put back, an edit
+  // opened): show the END, where you are writing — not the first four
+  // lines with the fifth half-showing under them.
+  if (want > max + 1 && el.selectionEnd >= el.value.length) el.scrollTop = el.scrollHeight;
+  el.closest(".composer-field")?.classList.toggle("multi", want > line + pad + 2);
+
+  if (box && atBottom && h !== before) scrollThread(box, box.scrollHeight);
+}
+
+/* What goes out: Windows line endings made plain, spaces at the ends of
+   lines dropped, and no more than one empty line in a row — a message
+   of forty blank lines is a way to push a thread off screen, not
+   something anyone means to say. */
+export function cleanMessageText(raw) {
+  return String(raw || "")
+    .replace(/\r\n?/g, "\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 // ---------- Sending ----------
@@ -695,7 +754,7 @@ export async function sendMessage({ photo = "" } = {}) {
   if (state.editingMessage && !photo) return commitEdit();
 
   // A photo carries whatever is in the box as its caption, or nothing.
-  const text = input.value.trim();
+  const text = cleanMessageText(input.value);
   if ((!text && !photo) || !state.currentChat) return;
   if (text.length > 2000) return toast("That message is too long.");
 
@@ -713,6 +772,7 @@ export async function sendMessage({ photo = "" } = {}) {
   const pressedAt = Date.now();
 
   input.value = "";
+  growComposer();
   setDraft(state.currentChat, "");
   state.replyingToMessage = null;
   chaseOwnSend = true;
@@ -839,6 +899,7 @@ export async function sendMessage({ photo = "" } = {}) {
   } catch (error) {
     console.error("Send failed:", error.code || error.message);
     input.value = text;
+    growComposer();
     chaseOwnSend = false;
     // The upload landed but the message did not: nothing points at it.
     if (photo) deletePhotoByUrl(photo);
@@ -914,6 +975,7 @@ function writeTyping(on) {
 }
 
 export function handleTyping() {
+  growComposer();
   if (!state.currentChat) return;
 
   const now = Date.now();
@@ -1318,6 +1380,7 @@ export function startEditMessage(messageId) {
   const input = document.getElementById("msgInput");
   if (input) {
     input.value = state.editingMessage.text;
+    growComposer();
     // Caret at the end, not the start — you are almost always fixing
     // the last few characters.
     setTimeout(() => {
@@ -1332,6 +1395,7 @@ export function cancelEdit() {
   state.editingMessage = null;
   const input = document.getElementById("msgInput");
   if (input) input.value = "";
+  growComposer();
   updateChatFooterUI();
   input?.focus();
 }
@@ -1342,7 +1406,7 @@ async function commitEdit() {
   const target = state.editingMessage;
   if (!input || !target) return;
 
-  const text = input.value.trim();
+  const text = cleanMessageText(input.value);
   if (!text) return toast("An empty message isn't an edit — delete it instead.");
   if (text.length > 2000) return toast("That message is too long.");
   if (text === target.text) return cancelEdit();
@@ -1364,6 +1428,7 @@ async function commitEdit() {
   const written = { text, editedAt: FieldValue.serverTimestamp() };
 
   input.value = "";
+  growComposer();
   state.editingMessage = null;
   updateChatFooterUI();
   patchLocalMessage(target.id, shown);
