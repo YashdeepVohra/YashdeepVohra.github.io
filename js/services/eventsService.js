@@ -2125,7 +2125,10 @@ function updateRail(order, now) {
   order.forEach((id) => {
     const e = state.eventCache[id];
     if (!e) return;
-    if (e.expiresAt > now) live++;
+    // "Happening right now" means STARTED and not over — the same thing
+    // the "N ON NOW" pill counts. It used to count everything still to
+    // come as well, so the rail said 4 while the pill beside it said 1.
+    if (e.startTime <= now && e.expiresAt > now) live++;
     if (e.expiresAt > now - DAY_MS) (e.participantUids || []).forEach((u) => people.add(u));
   });
 

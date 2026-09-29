@@ -5874,6 +5874,35 @@ for (const view of [{ w: 320, h: 640, touch: true }, { w: 390, h: 800, touch: tr
 }
 
 /* ------------------------------------------------------------------ */
+group('the rail counts what is on now, the same as the pill');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const p = await ctx.newPage();
+  await p.addInitScript({ path: fileURLToPath(new URL('./stub.js', import.meta.url)) });
+  await p.goto(APP_URL, { waitUntil: 'domcontentloaded' });
+  await p.waitForTimeout(1400);
+  const r = await p.evaluate(async () => {
+    const wait = (ms) => new Promise((res) => setTimeout(res, ms));
+    const { state } = await import('/js/state/store.js');
+    const ev = await import('/js/services/eventsService.js');
+    window.__authSingleton.currentUser = { uid: 'me' };
+    state.uid = 'me'; state.blockedUids = []; state.userCache = { me: { uid: 'me', username: 'me', displayName: 'Me' }, a: { uid: 'a', username: 'a', displayName: 'A' } };
+    state.following = []; state.orbitUids = [];
+    document.getElementById('loading-screen').classList.add('hidden');
+    document.querySelector('.app-frame').classList.remove('hidden');
+    window.switchScreen('home');
+    const now = Date.now(), H = 36e5;
+    const mk = (id, s, e) => ({ id, hostUid: 'a', title: id, place: 'x', tag: '☕ Chill', startTime: s, expiresAt: e, participantUids: ['a'], hypedUids: [], pendingUids: [], unconfirmedUids: [], circleId: 'main' });
+    window.__events = [mk('on1', now - 6e5, now + H), mk('soon1', now + H, now + 2 * H), mk('soon2', now + 5 * H, now + 6 * H)];
+    ev.loadEvents();
+    await wait(1600);
+    return document.getElementById('railLiveCount')?.dataset.value || document.getElementById('railLiveCount')?.innerText;
+  });
+  ok('"events happening right now" counts only what has started', String(r) === '1', String(r));
+  await ctx.close();
+}
+
+/* ------------------------------------------------------------------ */
 group('overall');
 ok('no errors, no native dialogs, all the way through', errors.length === 0, errors.join(' | '));
 
