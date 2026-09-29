@@ -132,7 +132,7 @@ export function summarise(receipt, key = monthKey(Date.now())) {
   const m = (receipt && receipt.months && receipt.months[key]) || null;
   const base = {
     key, label: monthLabel(key),
-    went: 0, hosted: 0, topTag: "", people: [], total: 0, months: 0
+    went: 0, hosted: 0, topTag: "", tags: [], people: [], total: 0, months: 0
   };
   if (!receipt) return base;
 
@@ -147,6 +147,9 @@ export function summarise(receipt, key = monthKey(Date.now())) {
     went: m.went || 0,
     hosted: m.hosted || 0,
     topTag: tags.length ? tags[0][0] : "",
+    // Every vibe you went to this month, most first — the receipt's
+    // line items.
+    tags: tags.slice(0, 6).map(([tag, count]) => ({ tag, count })),
     // Only people you have actually run into more than once are
     // interesting. One shared event is a coincidence, not a pattern.
     people: Object.entries(m.people || {})
@@ -155,4 +158,31 @@ export function summarise(receipt, key = monthKey(Date.now())) {
       .slice(0, 4)
       .map(([uid, count]) => ({ uid, count }))
   };
+}
+
+/**
+ * The rubber stamp on the receipt: what this month makes you. Nothing
+ * for a quiet month — a stamp for turning up once would mean nothing.
+ */
+export function stampFor(went, hosted = 0) {
+  if (went >= 10) return { title: "Local legend", sub: `${went} times out` };
+  if (hosted >= 3) return { title: "Host", sub: `started ${hosted}` };
+  if (went >= 5) return { title: "Regular", sub: `${went} times out` };
+  if (went >= 3) return { title: "Out & about", sub: `${went} times out` };
+  return null;
+}
+
+/**
+ * A barcode for the receipt, as bar widths: the same receipt always
+ * prints the same bars. [[bar, gap], ...], each 1–3.
+ */
+export function barcodeOf(seed, bars = 44) {
+  const s = String(seed || "livesociya");
+  let h = 7;
+  const out = [];
+  for (let i = 0; i < bars; i++) {
+    h = (h * 31 + s.charCodeAt(i % s.length)) % 997;
+    out.push([1 + (h % 3), 1 + ((h >> 2) % 3)]);
+  }
+  return out;
 }

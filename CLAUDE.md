@@ -87,6 +87,9 @@ Each line is the whole rule. The file after it is the argument for it.
   path at a time.
 - The pinned message lives in `events/{id}/pinned/current` and holds a
   COPY of the text, not an id.
+- The receipt is a PRINTED SLIP (torn mask, mono, stamp `stampFor`,
+  barcode `barcodeOf`); it prints out once a session and a repaint that
+  says nothing new writes nothing — that is what lets the print finish.
 - The receipt folds events already in the cache and queries nothing. It
   is READ when Recap opens (`primeReceipt`), and the card paints
   nothing until it has: "not read yet" is not "nothing to show".

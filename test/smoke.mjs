@@ -1981,7 +1981,7 @@ group('reactions, pins and the receipt');
   ok('leaving the chat clears the bar', dom.barGoneOnClose === true);
 
   ok('the receipt card fills in from events already on screen',
-     /showed up/.test(dom.receipt) && /3 times/.test(dom.receipt)
+     /showed up/.test(dom.receipt) && /3 Times you showed up/.test(dom.receipt)
      && dom.summary.went === 3 && dom.summary.hosted === 1, dom.receipt);
   ok('it names the people you keep running into', dom.receiptPeople === 2
      && dom.summary.people.map((x) => x.uid + ':' + x.count).join(',') === 'a:3,b:2',
@@ -5918,6 +5918,91 @@ group('the rail counts what is on now, the same as the pill');
   ok('nobody out: what starts next; nothing on: a way to start something',
     r.next.title === 'Up next' && /soon1/.test(r.next.text) && r.quiet.title === 'Quiet right now' && /Start something/.test(r.quiet.text), JSON.stringify(r));
   await ctx.close();
+}
+
+/* ------------------------------------------------------------------ */
+group('the receipt, printed');
+{
+  const pure = await page.evaluate(async () => {
+    const rr = await import('/js/services/receiptRules.js');
+    return {
+      none: rr.stampFor(2, 0), out: rr.stampFor(3, 0)?.title, reg: rr.stampFor(6, 1)?.title,
+      host: rr.stampFor(6, 3)?.title, legend: rr.stampFor(12, 5)?.title,
+      same: JSON.stringify(rr.barcodeOf('0926-A')) === JSON.stringify(rr.barcodeOf('0926-A')),
+      differ: JSON.stringify(rr.barcodeOf('0926-A')) !== JSON.stringify(rr.barcodeOf('0926-B')),
+      tags: rr.summarise({ months: { '2026-09': { went: 4, hosted: 0, tags: { a: 1, b: 3 }, people: {} } } }, '2026-09').tags
+    };
+  });
+  ok('a stamp only for a month worth stamping, and the right one', pure.none === null && pure.out === 'Out & about' && pure.reg === 'Regular' && pure.host === 'Host' && pure.legend === 'Local legend', JSON.stringify(pure));
+  ok('the same receipt always prints the same barcode', pure.same && pure.differ);
+  ok('the line items are every vibe, most first', JSON.stringify(pure.tags) === '[{"tag":"b","count":3},{"tag":"a","count":1}]', JSON.stringify(pure.tags));
+
+  for (const [w, theme] of [[320, 'light'], [390, 'dark']]) {
+    const ctx = await browser.newContext({ viewport: { width: w, height: 760 }, hasTouch: true, isMobile: true });
+    await ctx.addInitScript((t) => { try { localStorage.setItem('livesociya.theme', t); } catch (e) {} }, theme);
+    const p = await ctx.newPage();
+    const errs = [];
+    p.on('pageerror', (e) => errs.push(e.message.slice(0, 120)));
+    await p.addInitScript({ path: fileURLToPath(new URL('./stub.js', import.meta.url)) });
+    await p.goto(APP_URL, { waitUntil: 'domcontentloaded' });
+    await p.waitForTimeout(1400);
+    const r = await p.evaluate(async () => {
+      const wait = (ms) => new Promise((res) => setTimeout(res, ms));
+      const { state } = await import('/js/state/store.js');
+      const receipt = await import('/js/services/receiptService.js');
+      window.__authSingleton.currentUser = { uid: 'me' };
+      state.uid = 'me'; state.username = 'me_h'; state.blockedUids = []; state.following = []; state.orbitUids = [];
+      state.userCache = { me: { uid: 'me', username: 'me_h', displayName: 'Me' }, a: { uid: 'a', username: 'a', displayName: 'Aarav Kumar Sharma the Third' } };
+      document.getElementById('loading-screen').classList.add('hidden');
+      document.querySelector('.app-frame').classList.remove('hidden');
+      window.switchScreen('home');
+      receipt.clearReceipt();
+      const key = new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0');
+      window.__stubDocs['users/me/private/receipt'] = { months: { [key]: { went: 6, hosted: 1, tags: { '🎉 Party': 4, '☕ Chill': 2 }, people: { a: 5 } } }, counted: [] };
+      window.showTab('recap');
+      await wait(700);
+      const card = document.getElementById('receiptCard');
+      const rc = card.querySelector('.receipt');
+      const out = {
+        printing: rc?.classList.contains('printing'),
+        torn: /conic-gradient/.test(getComputedStyle(rc).maskImage || getComputedStyle(rc).webkitMaskImage || ''),
+        stamp: card.querySelector('.rc-stamp')?.textContent || '',
+        items: card.querySelectorAll('.rc-row:not(.rc-head)').length,
+        bars: card.querySelectorAll('.rc-bars i').length,
+        person: !!card.querySelector('.receipt-person[onclick*="openProfileScreen(\'a\')"]'),
+        wide: document.documentElement.scrollWidth > innerWidth
+      };
+      // Nothing in it may reach past the paper.
+      const box = rc.getBoundingClientRect();
+      out.outside = [...rc.querySelectorAll('*')].filter((el) => {
+        if (el.closest('.rc-stamp')) return false;
+        const b = el.getBoundingClientRect();
+        return b.width && (b.right > box.right + 2 || b.left < box.left - 2);
+      }).map((el) => el.className).slice(0, 4);
+      // A repaint writes nothing and does not print it out again.
+      const node = card.firstElementChild;
+      receipt.renderReceipt();
+      await wait(50);
+      out.samePrint = card.firstElementChild === node;
+      window.showTab('events'); window.showTab('recap');
+      receipt.renderReceipt();
+      out.printsOnce = !card.querySelector('.receipt.printing') || card.firstElementChild === node;
+      // An empty receipt still says how it fills in.
+      receipt.clearReceipt();
+      window.__stubDocs['users/me/private/receipt'] = { months: {}, counted: [] };
+      receipt.primeReceipt();
+      await wait(300);
+      out.empty = /Nothing printed yet/i.test(card.innerText) && /fills in/.test(card.innerText);
+      return out;
+    });
+    ok(`${w}px ${theme}: a torn slip, line items, the regulars, a stamp and a barcode`,
+      r.torn && r.items === 4 && r.person && /Regular/.test(r.stamp) && r.bars > 30, JSON.stringify(r));
+    ok(`${w}px ${theme}: nothing on it reaches past the paper, and the page never scrolls sideways`, !r.wide && r.outside.length === 0, JSON.stringify(r));
+    ok(`${w}px ${theme}: it prints out once, and a repaint touches nothing`, r.printing && r.samePrint && r.printsOnce, JSON.stringify(r));
+    ok(`${w}px ${theme}: an empty receipt says how it fills in`, r.empty, JSON.stringify(r));
+    ok(`${w}px ${theme}: and nothing errors`, errs.length === 0, errs.join(' | '));
+    await ctx.close();
+  }
 }
 
 /* ------------------------------------------------------------------ */

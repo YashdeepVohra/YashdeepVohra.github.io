@@ -19,8 +19,9 @@ import { state } from '../state/store.js';
 import { escapeHtml, safeId, renderAvatar } from '../utils/formatters.js';
 import { displayNameFor, avatarFor } from './userService.js';
 import {
-  emptyReceipt, countable, foldAll, summarise, monthKey
+  emptyReceipt, countable, foldAll, summarise, monthKey, stampFor, barcodeOf
 } from './receiptRules.js';
+import { vibeColor } from './eventsService.js';
 
 const SAVE_DEBOUNCE_MS = 1500;
 
@@ -175,53 +176,100 @@ export function renderReceipt() {
 
   const s = receiptSummary();
 
+  /* A RECEIPT, PRINTED. The card used to be a sentence in a box; it is
+     a till slip now — torn at both ends, set in the mono voice, line
+     items for what you went to, the regulars, a total, a stamp for the
+     month and a barcode that is always the same for the same receipt.
+     It prints itself out once per session (the first time it has
+     something to say), and never again while you scroll. */
+  const now = new Date();
+  // Spelled out by hand: en-GB's short month is "Sept", which no till prints.
+  const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const printed = `${now.getDate()} ${MON[now.getMonth()]} ${now.getFullYear()}`;
+  const [yy, mm] = String(s.key || "").split("-");
+  const handle = String(state.username || "you").toUpperCase().replace(/[^A-Z0-9_]/g, "").slice(0, 14) || "YOU";
+  const number = `${mm || "00"}${String(yy || "").slice(2)}-${handle}`;
+  const bars = barcodeOf(number + ":" + s.went + ":" + s.hosted)
+    .map(([w, g]) => `<i style="width:${w}px;margin-right:${g}px"></i>`).join("");
+  const top = `
+      <div class="rc-brand"><img src="/logo-mark.svg" alt="" width="18" height="18">livesociya</div>
+      <div class="rc-meta">Receipt for ${escapeHtml(s.label)}</div>
+      <div class="rc-meta">No. ${escapeHtml(number)} \u00b7 ${escapeHtml(printed)}</div>`;
+  const tail = `
+      <div class="rc-bars" aria-hidden="true">${bars}</div>
+      <div class="rc-meta rc-c">see you out there</div>`;
+
   // Nothing to show is not the same as nothing to say. Somebody who
   // has never been to anything gets the point of the thing explained
   // once; after that the card earns its place.
   if (!s.went && !s.total) {
+    lastReceiptHtml = "";
     el.innerHTML = `
       <div class="receipt receipt-empty">
-        <b>Your receipt</b>
+        ${top}
+        <hr class="rc-rule">
+        <b class="rc-empty-title">Nothing printed yet</b>
         <p>Go to something and this fills in — how often you turned up,
            what you went to, and who you keep running into.</p>
+        ${tail}
       </div>`;
     return;
   }
 
+  const row = (q, item, extra = "") =>
+    `<div class="rc-row${extra}"><span class="rc-q">${q}</span><span class="rc-i">${item}</span></div>`;
+  const items = [
+    s.went ? row(s.went, s.went === 1 ? "Time you showed up" : "Times you showed up") : "",
+    s.hosted ? row(s.hosted, s.hosted === 1 ? "Thing you started" : "Things you started") : "",
+    ...(s.tags || []).map((t) => row(t.count,
+      `<span class="rc-sw" style="background:${vibeColor(t.tag)}"></span>${escapeHtml(t.tag)}`))
+  ].join("");
+
   const people = s.people.map((p) => {
     const id = safeId(p.uid);
-    const avatar = `<div class="receipt-face">${renderAvatar(avatarFor(p.uid))}</div>`;
+    const inner = `<span class="receipt-face">${renderAvatar(avatarFor(p.uid))}</span><span class="rc-name">${escapeHtml(displayNameFor(p.uid))}</span><span class="rc-dots"></span><b>\u00d7${p.count}</b>`;
     return id
-      ? `<div class="receipt-person" onclick="window.openProfileScreen('${id}')">
-           ${avatar}<span>${escapeHtml(displayNameFor(p.uid))}</span><b>${p.count}</b>
-         </div>`
-      : `<div class="receipt-person">${avatar}<span>${escapeHtml(displayNameFor(p.uid))}</span><b>${p.count}</b></div>`;
+      ? `<div class="receipt-person" role="button" onclick="window.openProfileScreen('${id}')">${inner}</div>`
+      : `<div class="receipt-person">${inner}</div>`;
   }).join("");
 
-  // "1 time" reads like a bug.
-  const times = s.went === 1 ? "once" : s.went + " times";
+  const stamp = stampFor(s.went, s.hosted);
+  const stampHtml = stamp
+    ? `<div class="rc-stamp" style="--c:${s.topTag ? vibeColor(s.topTag) : "var(--forest)"}" aria-label="${escapeHtml(stamp.title)}">${escapeHtml(stamp.title)}<small>${escapeHtml(stamp.sub)}</small></div>`
+    : "";
 
-  el.innerHTML = `
+  const html = `
     <div class="receipt">
-      <div class="receipt-head">
-        <b>Your receipt</b>
-        <span>${escapeHtml(s.label)}</span>
-      </div>
-
-      <div class="receipt-line">
-        You showed up <strong>${escapeHtml(times)}</strong>${
-          s.hosted ? ` and started <strong>${s.hosted}</strong> of them` : ""
-        }${s.topTag ? `, mostly <strong>${escapeHtml(s.topTag)}</strong>` : ""}.
-      </div>
-
+      ${top}
+      ${stampHtml}
+      <hr class="rc-rule">
+      <div class="rc-row rc-head"><span class="rc-q">Qty</span><span class="rc-i">Item</span></div>
+      ${items}
+      <hr class="rc-rule">
       ${people
-        ? `<div class="receipt-people-head">Who you keep running into</div>
+        ? `<div class="rc-head receipt-people-head">Who you kept running into</div>
            <div class="receipt-people">${people}</div>`
         : `<div class="receipt-note">Go to a couple more and the people you
              keep running into show up here.</div>`}
-
-      ${s.total > s.went
-        ? `<div class="receipt-foot">${s.total} in total since you started using this.</div>`
-        : ""}
+      <hr class="rc-rule">
+      ${s.topTag ? `<div class="rc-total"><span>Mostly</span><b>${escapeHtml(s.topTag)}</b></div>` : ""}
+      <div class="rc-total rc-big"><span>Total, ${escapeHtml(s.label)}</span><b>${s.went}</b></div>
+      ${s.total > s.went ? `<div class="rc-total rc-small"><span>Since you started</span><b>${s.total}</b></div>` : ""}
+      <hr class="rc-rule">
+      <div class="rc-thanks">Thank you for showing up</div>
+      ${tail}
     </div>`;
+  // Repainted with the feed; only written when it says something new —
+  // which is also what lets the print-out finish: the Recap repaint
+  // straight after the first paint used to replace the slip halfway
+  // through printing.
+  if (html === lastReceiptHtml && el.firstElementChild) return;
+  lastReceiptHtml = html;
+  el.innerHTML = html;
+  if (!printedOnce) {
+    printedOnce = true;
+    el.firstElementChild?.classList.add("printing");
+  }
 }
+let printedOnce = false;
+let lastReceiptHtml = "";
