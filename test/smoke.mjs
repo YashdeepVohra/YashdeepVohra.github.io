@@ -5991,7 +5991,7 @@ group('the receipt, printed');
       const rc = card.querySelector('.receipt');
       const out = {
         printing: rc?.classList.contains('printing'),
-        torn: /conic-gradient/.test(getComputedStyle(rc).maskImage || getComputedStyle(rc).webkitMaskImage || ''),
+        torn: /conic-gradient/.test(getComputedStyle(rc, '::after').backgroundImage),
         stamp: card.querySelector('.rc-stamp')?.textContent || '',
         items: card.querySelectorAll('.rc-row:not(.rc-head)').length,
         bars: card.querySelectorAll('.rc-bars i').length,
@@ -6051,6 +6051,88 @@ group('the receipt, printed');
     ok(`${w}px ${theme}: on a 2-core phone it simply appears, no animation`, r.lowEndStill, JSON.stringify(r));
     ok(`${w}px ${theme}: an empty receipt says how it fills in`, r.empty && r.emptyTile, JSON.stringify(r));
     ok(`${w}px ${theme}: and nothing errors`, errs.length === 0, errs.join(' | '));
+    await ctx.close();
+  }
+}
+
+/* ------------------------------------------------------------------ */
+group('you can type, nothing selects by accident, the slip holds its shape');
+{
+  for (const [w, h] of [[360, 560], [390, 844]]) {
+    const ctx = await browser.newContext({ viewport: { width: w, height: h }, hasTouch: true, isMobile: true });
+    await ctx.addInitScript(() => {
+      Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8, configurable: true });
+    });
+    const p = await ctx.newPage();
+    const errs = [];
+    p.on('pageerror', (e) => errs.push(e.message.slice(0, 120)));
+    await p.addInitScript({ path: fileURLToPath(new URL('./stub.js', import.meta.url)) });
+    await p.goto(APP_URL, { waitUntil: 'domcontentloaded' });
+    await p.waitForTimeout(1400);
+    await p.evaluate(async () => {
+      const { state } = await import('/js/state/store.js');
+      window.__authSingleton.currentUser = { uid: 'me' };
+      state.uid = 'me'; state.username = 'me_h'; state.blockedUids = []; state.following = []; state.orbitUids = [];
+      state.userCache = { me: { uid: 'me', username: 'me_h', displayName: 'Me' }, a: { uid: 'a', username: 'a', displayName: 'A' } };
+      document.getElementById('loading-screen').classList.add('hidden');
+      document.querySelector('.app-frame').classList.remove('hidden');
+      window.switchScreen('home');
+      window.__stubDocs['chats/a_me'] = { userUids: ['a', 'me'], status: 'unlocked', lastUpdated: Date.now(), unreadByUid: '', initiatedByUid: 'a' };
+      window.openChat('a_me', 'a');
+    });
+    await p.waitForTimeout(400);
+    // THE BUG: the box measured itself while the chat was still hidden
+    // and pinned itself at 0px, so there was nothing to tap.
+    const box = await p.evaluate(() => document.getElementById('msgInput').offsetHeight);
+    let typed = '';
+    try {
+      await p.tap('#msgInput', { timeout: 3000 });
+      await p.keyboard.type('hi there');
+      typed = await p.evaluate(() => document.getElementById('msgInput').value);
+    } catch (e) { typed = 'TAP FAILED'; }
+    ok(`${w}x${h}: the message box is there the moment a chat opens, and takes typing`, box >= 20 && typed === 'hi there', JSON.stringify({ box, typed }));
+
+    const sel = await p.evaluate(async () => {
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+      const out = {
+        page: getComputedStyle(document.body).userSelect || getComputedStyle(document.body).webkitUserSelect,
+        field: getComputedStyle(document.getElementById('msgInput')).userSelect || getComputedStyle(document.getElementById('msgInput')).webkitUserSelect
+      };
+      const ev = (el) => { const e = new Event('selectstart', { bubbles: true, cancelable: true }); el.dispatchEvent(e); return e.defaultPrevented; };
+      out.cardBlocked = ev(document.querySelector('.chat-header') || document.body);
+      out.fieldAllowed = !ev(document.getElementById('msgInput'));
+      const d = new Event('dragstart', { bubbles: true, cancelable: true });
+      document.querySelector('.chat-header img, .chat-header, body').dispatchEvent(d);
+      out.dragBlocked = d.defaultPrevented;
+      window.closeChat({ silent: true });
+      window.switchScreen('home');
+      // The receipt: painted ends, not a mask; a sheet that fits.
+      const receipt = await import('/js/services/receiptService.js');
+      receipt.clearReceipt();
+      const key = new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0');
+      window.__stubDocs['users/me/private/receipt'] = { months: { [key]: { went: 9, hosted: 2, tags: { '🎉 Party': 4, '☕ Chill': 2, '🍕 Food': 2, '📚 Study': 1 }, people: { a: 5 } } }, counted: [] };
+      window.showTab('recap');
+      await wait(600);
+      receipt.openReceipt();
+      await wait(1500);
+      const rc = document.querySelector('#receiptFull .receipt');
+      const cs = getComputedStyle(rc);
+      const sheet = document.querySelector('#receiptSheet .receipt-sheet').getBoundingClientRect();
+      out.noMask = !/gradient/.test((cs.maskImage || '') + (cs.webkitMaskImage || ''));
+      out.teeth = /conic-gradient/.test(getComputedStyle(rc, '::before').backgroundImage) && /conic-gradient/.test(getComputedStyle(rc, '::after').backgroundImage);
+      out.notTurned = cs.transform === 'none';
+      out.fits = sheet.top >= 0 && sheet.bottom <= innerHeight + 1;
+      const close = document.querySelector('#receiptSheet .receipt-close').getBoundingClientRect();
+      out.closeOnScreen = close.top >= 0 && close.bottom <= innerHeight + 1 && close.height > 20;
+      const full = document.getElementById('receiptFull');
+      out.notSquashed = full.getBoundingClientRect().height >= rc.scrollHeight - 1;
+      receipt.closeReceipt();
+      return out;
+    });
+    ok(`${w}x${h}: nothing on the page selects, fields still do`, sel.page === 'none' && sel.field === 'text' && sel.cardBlocked && sel.fieldAllowed && sel.dragBlocked, JSON.stringify(sel));
+    ok(`${w}x${h}: the slip's torn ends are painted, it is upright, and it is never squashed`, sel.noMask && sel.teeth && sel.notTurned && sel.notSquashed, JSON.stringify(sel));
+    ok(`${w}x${h}: its sheet fits the screen, top and bottom, and Close is always on it`, sel.fits && sel.closeOnScreen, JSON.stringify(sel));
+    ok(`${w}x${h}: and nothing errors`, errs.length === 0, errs.join(' | '));
     await ctx.close();
   }
 }

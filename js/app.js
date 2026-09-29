@@ -440,6 +440,8 @@ function boot() {
   initEmojiPicker();
   initQuietLinks();
 
+  noAccidentalSelection();
+
   document.getElementById("login-btn")?.addEventListener("click", () => loginWithGoogle());
 
   document.getElementById("claimBtn")?.addEventListener("click", async () => {
@@ -498,6 +500,19 @@ function boot() {
     const doc = document.documentElement;
     if (doc.scrollTop + window.innerHeight > doc.scrollHeight - 320) loadRecap();
   }, { passive: true });
+}
+
+/* NOTHING SELECTS OR DRAGS BY ACCIDENT (style.css says why). CSS does
+   most of it; these two catch the browsers that ignore user-select on
+   some elements, and Firefox, which has no -webkit-user-drag. Fields
+   are left alone: you can still select, copy and paste what you type. */
+function noAccidentalSelection() {
+  const inField = (t) => {
+    const el = t && t.nodeType === 3 ? t.parentElement : t;
+    return !!(el && el.closest && el.closest('input, textarea, select, [contenteditable="true"]'));
+  };
+  document.addEventListener("selectstart", (e) => { if (!inField(e.target)) e.preventDefault(); });
+  document.addEventListener("dragstart", (e) => { if (!inField(e.target)) e.preventDefault(); });
 }
 
 /* BACK WHERE YOU WERE, after the browser reloaded this tab by itself

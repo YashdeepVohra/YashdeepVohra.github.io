@@ -146,6 +146,14 @@ Each line is the whole rule. The file after it is the argument for it.
   volatile. A stub keeps the compact side-by-side layout (fixed --tear).
 - A stub keeps its vibe colour. Taking the colour out takes the
   information out.
+- Dark mode is the light theme's GREEN at night: every neutral (canvas,
+  paper, bone, ash, print) sits on its hue, never blue-grey slate; the
+  active pill is `--ink-fill` (pale sage). theme-color is #141d18 in
+  index.html AND utils/theme.js.
+- Nothing selects or drags except fields (`html { user-select: none }`
+  + `noAccidentalSelection` in app.js). Copying is the message sheet's job.
+- A box measured while hidden reads 0: `growComposer` leaves an
+  unmeasurable textarea alone (it once pinned itself at 0px — no typing).
 - Dark mode is tokens, not overrides. Never write a literal colour; add a
   role token with a value in both blocks, then run `test/contrast.mjs`.
 - There is no `--violet`, `--aubergine`, `--periwinkle`, `--lavender` or

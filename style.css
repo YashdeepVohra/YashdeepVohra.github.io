@@ -210,6 +210,23 @@
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+/* NOTHING SELECTS BY ACCIDENT. This is an app, not a document: a firm
+   press or a long hold on a phone, or a double-click on a laptop, lit
+   up words, cards and whole areas in the selection colour and offered a
+   Copy bubble. Nothing on screen is selectable now, and nothing can be
+   dragged out as an image, except what you type into — fields keep
+   selection, the caret and paste. Text worth copying has its own Copy:
+   a message's long-press sheet does it. */
+html {
+  -webkit-user-select: none; user-select: none;
+  -webkit-touch-callout: none;
+}
+input, textarea, select, [contenteditable="true"] {
+  -webkit-user-select: text; user-select: text;
+  -webkit-touch-callout: default;
+}
+img, svg, a { -webkit-user-drag: none; }
+::selection { background: color-mix(in srgb, var(--forest) 28%, transparent); }
 
 /* NO VISIBLE SCROLLBARS, anywhere. Everything still scrolls — by
    finger, wheel, trackpad and keyboard — only the bar is gone. On a
@@ -4323,21 +4340,25 @@ html.rotate-lock body *::after { animation-play-state: paused !important; }
    ===================================================================== */
 
 :root[data-theme="dark"] {
-  --viewer:     #0d1412;
+  --viewer:     #0b120f;
   --viewer-ink: #f4f9ef;
   color-scheme: dark;
 
-  /* The same system after dark: the page goes to a deep slate-green,
-     cards to the forest slate above it, and the pale paper colour
-     becomes the text. The ember lifts a little so it still reads as
-     heat against a dark ground. */
+  /* The same system after dark — the same GREEN. The page and every
+     surface used to be a blue-grey slate (#1a2327, #273338), a cold
+     neutral under warm sage accents, which is why dark mode never felt
+     like the light one: two moods on one screen. The neutrals now sit
+     on the light theme's own hue, a forest at night — canvas, cards,
+     fills, hairlines and prints all green-black — and the strong pill
+     (active tab, chosen filter) is a pale sage instead of a cream that
+     glared. The ember lifts a little so it still reads as heat. */
   --ink:        #e6f2dd;
   --ink-deep:   #f4f9ef;
   --forest:     #88bda4;   /* the action colour, inverted for dark */
   --sage:       #9cb080;
   --moss:       #88bda4;
-  --fern:       #35564a;
-  --wash:       #2f4a42;
+  --fern:       #33584a;
+  --wash:       #274236;
 
   --ember:      #e8875c;
   --ember-ink:  #f0a17c;
@@ -4345,7 +4366,7 @@ html.rotate-lock body *::after { animation-play-state: paused !important; }
   --ember-line: #6d4433;
 
   --band-mix: 40%;
-  --band-dot: rgba(9, 15, 16, 0.42);
+  --band-dot: rgba(6, 12, 9, 0.42);
 
   --vibe-chill:  #87bccb;
   --vibe-food:   #e0a86c;
@@ -4353,12 +4374,12 @@ html.rotate-lock body *::after { animation-play-state: paused !important; }
   --vibe-study:  #a0a6dd;
   --vibe-sports: #93bd74;
 
-  --paper:      #273338;   /* cards, sheets, inputs */
-  --canvas:     #1a2327;   /* the page */
+  --paper:      #1c2721;   /* cards, sheets, inputs */
+  --canvas:     #141d18;   /* the page */
   --obsidian:   #e6f2dd;   /* body text */
-  --fog:        #a2b3aa;   /* secondary text: 6:1 on --paper */
-  --ash:        #3a4b4f;   /* borders, dividers */
-  --bone:       #2f3d41;   /* quiet fills */
+  --fog:        #a6b8ab;   /* secondary text: 6:1 on --paper */
+  --ash:        #33443a;   /* borders, dividers */
+  --bone:       #243029;   /* quiet fills */
 
   --mint:       #5cc79c;
   --blush:      #3a2624;
@@ -4372,7 +4393,8 @@ html.rotate-lock body *::after { animation-play-state: paused !important; }
   --glow:   0 0 0 3px rgba(136, 189, 164, 0.3);
 
   --on-accent:    #14201c;
-  --on-ink-fill:  #1a2327;
+  --ink-fill:     #b9dcc6;   /* the active pill: pale sage, not glaring cream */
+  --on-ink-fill:  #141d18;
   --deep-a:       #2b5748;
   --deep-b:       #1e3f34;
   --chip-ink:     #eef6e8;
@@ -4381,12 +4403,12 @@ html.rotate-lock body *::after { animation-play-state: paused !important; }
   --rose-ink:     #ef9b8f;
   --blush-hover:  #4a312e;
   --butter-hover: #4a4128;
-  --shimmer-hi:   #324246;
-  --glass:        rgba(39, 51, 56, 0.96);
-  --glass-canvas: rgba(26, 35, 39, 0.94);
+  --shimmer-hi:   #2b3a32;
+  --glass:        rgba(28, 39, 33, 0.96);
+  --glass-canvas: rgba(20, 29, 24, 0.94);
   --glass-edge:   rgba(255, 255, 255, 0.06);
   --glass-soft:   rgba(255, 255, 255, 0.06);
-  --backdrop:     rgba(6, 12, 11, 0.68);
+  --backdrop:     rgba(4, 9, 7, 0.7);
   --amb-1: rgba(136, 189, 164, 0.14);
   --amb-2: rgba(232, 135, 92, 0.07);
   --amb-3: rgba(156, 176, 128, 0.08);
@@ -4400,8 +4422,8 @@ html.rotate-lock body *::after { animation-play-state: paused !important; }
   --knob:        #e6f2dd;
   --danger-fill: #b34a45;
   --on-danger:   #fff5f3;
-  --print:        #2f3d42;
-  --print-edge:   #43555a;
+  --print:        #222e27;
+  --print-edge:   #3a4c42;
   --print-shadow: 0 1px 1px rgba(0, 0, 0, 0.4), 0 12px 20px -10px rgba(0, 0, 0, 0.7);
   --print-shadow-up: 0 2px 2px rgba(0, 0, 0, 0.4), 0 20px 30px -12px rgba(0, 0, 0, 0.75);
   --print-gloss:  rgba(255, 255, 255, 0.07);
@@ -5331,7 +5353,7 @@ html.restoring *::before, html.restoring *::after {
 .composer-field textarea:focus {
   flex: 1; min-width: 0;
   display: block;
-  height: auto; min-height: 0; max-height: none;
+  height: auto; min-height: 21px; max-height: none;   /* never less than a line: a box of 0 cannot be tapped */
   /* The space above and below the text is MARGIN, not padding: padding
      is inside the scroll area, so a capped box showed a sliver of the
      line above and below the four it holds. Margin puts the clip edge
@@ -5395,28 +5417,35 @@ html.restoring *::before, html.restoring *::after {
    box-shadow off. The first time it has something to say in a session
    it prints itself out, top to bottom, in steps like a print head.
    ===================================================================== */
-#receiptFull { filter: drop-shadow(0 1px 1px var(--pin-shade)) drop-shadow(0 10px 12px color-mix(in srgb, var(--pin-shade) 45%, transparent)); margin: 4px 6px 0; }
+#receiptFull { filter: drop-shadow(0 6px 10px color-mix(in srgb, var(--pin-shade) 55%, transparent)); margin: 4px 6px 0; flex-shrink: 0; }
 .receipt {
   --z: 8px;
+  --slip: var(--paper);
   position: relative;
   margin: 0; padding: calc(var(--z) + 14px) 18px calc(var(--z) + 18px);
-  background: var(--paper);
+  /* PAINTED, NOT MASKED. The torn ends were a CSS mask on a rotated
+     box inside a scrolling sheet with a drop-shadow filter above it —
+     a combination phone browsers draw badly: the ends came out smeared
+     and stretched. Now the paper is a background that stops short of
+     each end by one tooth, and the teeth are drawn in the gap (::before
+     and ::after) with a plain conic gradient. Nothing is rotated. The
+     faint thermal lines ride on the same background. */
+  background:
+    repeating-linear-gradient(0deg, color-mix(in srgb, var(--ink) 3%, transparent) 0 1px, transparent 1px 3px) center / 100% calc(100% - var(--z) * 2) no-repeat,
+    linear-gradient(var(--slip), var(--slip)) center / 100% calc(100% - var(--z) * 2) no-repeat;
   border: none; border-radius: 0; box-shadow: none;
   font-family: var(--font-mono); font-size: 13px; line-height: 1.55; color: var(--ink);
-  transform: rotate(-0.8deg);
-  -webkit-mask:
-    conic-gradient(from 135deg at top, #0000, #000 1deg 89deg, #0000 90deg) top / calc(var(--z) * 2) var(--z) repeat-x,
-    conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / calc(var(--z) * 2) var(--z) repeat-x,
-    linear-gradient(#000 0 0) center / 100% calc(100% - var(--z) * 2) no-repeat;
-          mask:
-    conic-gradient(from 135deg at top, #0000, #000 1deg 89deg, #0000 90deg) top / calc(var(--z) * 2) var(--z) repeat-x,
-    conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / calc(var(--z) * 2) var(--z) repeat-x,
-    linear-gradient(#000 0 0) center / 100% calc(100% - var(--z) * 2) no-repeat;
 }
-/* Thermal paper: the faint lines a print head leaves. */
+.receipt::before, .receipt::after {
+  content: ""; position: absolute; left: 0; right: 0; height: var(--z); pointer-events: none;
+}
 .receipt::before {
-  content: ""; position: absolute; inset: 0; pointer-events: none;
-  background: repeating-linear-gradient(0deg, color-mix(in srgb, var(--ink) 3%, transparent) 0 1px, transparent 1px 3px);
+  top: 0;
+  background: conic-gradient(from 135deg at 50% 0, var(--slip) 90deg, transparent 0) 0 0 / calc(var(--z) * 2) var(--z) repeat-x;
+}
+.receipt::after {
+  bottom: 0;
+  background: conic-gradient(from -45deg at 50% 100%, var(--slip) 90deg, transparent 0) 0 0 / calc(var(--z) * 2) var(--z) repeat-x;
 }
 .receipt.printing { animation: printOut 1.1s steps(14, end) both; }
 @keyframes printOut { from { clip-path: inset(0 0 100% 0); } to { clip-path: inset(0 0 0 0); } }
@@ -5481,19 +5510,21 @@ html.restoring *::before, html.restoring *::after {
 #receiptCard { margin: 0 0 var(--s-16); }
 .receipt-tile {
   --z: 5px;
+  --slip: var(--paper);
+  position: relative;
   display: flex; align-items: center; gap: var(--s-12);
-  width: 100%; margin: 0; padding: 12px 14px calc(12px + var(--z));
-  background: var(--paper); color: var(--ink);
+  width: 100%; margin: 0 0 var(--z); padding: 12px 14px;
+  background: var(--slip); color: var(--ink);
   border: 1.5px solid var(--ash); border-bottom: none; border-radius: 14px 14px 0 0;
   box-shadow: none; text-align: left; font: inherit;
-  -webkit-mask:
-    conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / calc(var(--z) * 2) var(--z) repeat-x,
-    linear-gradient(#000 0 0) top / 100% calc(100% - var(--z)) no-repeat;
-          mask:
-    conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / calc(var(--z) * 2) var(--z) repeat-x,
-    linear-gradient(#000 0 0) top / 100% calc(100% - var(--z)) no-repeat;
 }
-.receipt-tile:hover:not(:disabled) { background: var(--bone); filter: none; transform: none; }
+/* Its torn bottom edge: the same painted teeth as the slip, hanging
+   just below the box. */
+.receipt-tile::after {
+  content: ""; position: absolute; left: -1.5px; right: -1.5px; top: 100%; height: var(--z); pointer-events: none;
+  background: conic-gradient(from -45deg at 50% 100%, var(--slip) 90deg, transparent 0) 0 0 / calc(var(--z) * 2) var(--z) repeat-x;
+}
+.receipt-tile:hover:not(:disabled) { --slip: var(--bone); filter: none; transform: none; }
 .receipt-tile:active:not(:disabled) { transform: none; filter: none; }
 .rt-icon { display: grid; place-items: center; width: 38px; height: 38px; flex-shrink: 0; border-radius: 50%; background: var(--wash); color: var(--forest); }
 .rt-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
@@ -5503,13 +5534,24 @@ html.restoring *::before, html.restoring *::after {
 
 .receipt-overlay { align-items: center; }
 .receipt-sheet {
-  width: 100%; max-width: 380px; max-height: calc(100dvh - 40px);
-  overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain;
+  /* Never taller than the screen, on browsers old enough not to know
+     dvh too (they read the vh line and skip the next). */
+  width: 100%; max-width: 380px;
+  max-height: calc(100vh - 40px);
+  max-height: calc(100dvh - 40px);
   display: flex; flex-direction: column; align-items: stretch;
-  padding: 6px 2px 4px;
+  padding: 0;
+}
+/* Only the slip scrolls, and only when it is taller than the room left
+   above Close — on a short phone Close used to scroll away under it. */
+.receipt-scroll {
+  flex: 1 1 auto; min-height: 0;
+  overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain;
+  padding: 6px 2px 8px;
 }
 .receipt-close {
-  width: auto; align-self: center; margin: var(--s-16) 0 0; padding: 10px 26px;
+  flex: none;
+  width: auto; align-self: center; margin: var(--s-12) 0 0; padding: 10px 26px;
   background: var(--paper); color: var(--ink);
   border: 1.5px solid var(--ash); border-radius: var(--r-pill); box-shadow: none;
   font-size: 14px; font-weight: 600;

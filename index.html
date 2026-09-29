@@ -154,7 +154,7 @@
       r.setAttribute("data-theme", t);
       r.style.colorScheme = t;
       var m = document.querySelector('meta[name="theme-color"]');
-      if (m) m.setAttribute("content", t === "dark" ? "#1a2327" : "#e6f2dd");
+      if (m) m.setAttribute("content", t === "dark" ? "#141d18" : "#e6f2dd");
     })();
   </script>
   <!-- A WARM START: somebody was signed in here, so this is almost
@@ -791,7 +791,8 @@
      backdrop or Close puts it away; so does Android back. -->
 <div id="receiptSheet" class="modal-overlay receipt-overlay hidden" role="dialog" aria-label="Your receipt" onclick="if (event.target === this) closeReceipt()">
   <div class="receipt-sheet">
-    <div id="receiptFull"></div>
+    <!-- The slip scrolls; Close stays on screen under it. -->
+    <div class="receipt-scroll"><div id="receiptFull"></div></div>
     <button type="button" class="receipt-close" onclick="closeReceipt()">Close</button>
   </div>
 </div>

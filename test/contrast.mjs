@@ -34,6 +34,10 @@ function tokens(startMarker) {
   // The band mix is a percentage and the dot is an rgba, neither of
   // which is a hex — but both decide whether text is readable.
   for (const m of block.matchAll(/--(band-mix|band-dot):\s*([^;]+);/g)) out[m[1]] = m[2].trim();
+  // A token that is another token (`--ink-fill: var(--ink)`) takes its value.
+  for (const m of block.matchAll(/--([a-z0-9-]+):\s*var\(--([a-z0-9-]+)\)\s*;/g)) {
+    if (!out[m[1]] && out[m[2]]) out[m[1]] = out[m[2]];
+  }
   return out;
 }
 
@@ -65,6 +69,9 @@ const CHECKS = [
   ['muted text on a quiet fill', 'fog',        'bone',       4.5],
   ['label on the primary button','on-accent',  'forest',     4.5],
   ['label on an ink pill',       'on-ink-fill','ink',        4.5],
+  // The active tab and the chosen filter. In dark mode this is its own
+  // pale sage now, not the ink colour, so it is checked on its own.
+  ['label on the active pill',   'on-ink-fill','ink-fill',   4.5],
   ['a link or accent on a card', 'forest',     'paper',      4.5],
   ['ink on the marker wash',     'ink',        'fern',       4.5],
   ['ink on a soft fill',         'ink',        'wash',       4.5],

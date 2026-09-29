@@ -487,6 +487,9 @@ export function openChat(chatId, otherUid) {
   document.querySelector(".topbar")?.classList.add("hidden");
   switchScreen("chatScreen");
   history.pushState({ modalOpen: true }, "", window.location.href);
+  // Now it is on screen it can be measured: a draft of several lines
+  // opens at its size.
+  growComposer();
 
   // The icebreaker is a wall between strangers. Two people who follow
   // each other have both chosen this, so it does not apply — one read,
@@ -587,6 +590,9 @@ export function openEventChat(eventId) {
   document.querySelector(".topbar")?.classList.add("hidden");
   switchScreen("chatScreen");
   history.pushState({ modalOpen: true }, "", window.location.href);
+  // Now it is on screen it can be measured: a draft of several lines
+  // opens at its size.
+  growComposer();
 
   if (state.chatDocUnsubscribe) state.chatDocUnsubscribe();
   state.chatDocUnsubscribe = db.collection("events").doc(eventId).onSnapshot((doc) => {
@@ -714,6 +720,19 @@ export function growComposer() {
   const line = parseFloat(cs.lineHeight) || 21;
   const pad = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
   const max = Math.round(line * COMPOSER_MAX_LINES + pad);
+
+  /* THE BOX WENT TO ZERO HEIGHT, AND NOBODY COULD TYPE.
+     openChat puts the draft back BEFORE the chat screen is shown, and
+     a hidden textarea measures 0 — so it was pinned at height: 0px and
+     there was nothing left to tap. A box that cannot be measured is
+     left to its own one-line height, and measured the next time it is
+     on screen (app.js and openChat call this again after showing it). */
+  if (!el.offsetParent || el.scrollHeight === 0) {
+    el.style.height = "";
+    el.classList.remove("capped");
+    el.closest(".composer-field")?.classList.remove("multi");
+    return;
+  }
 
   const before = el.offsetHeight;
   el.style.height = "auto";
