@@ -2134,6 +2134,86 @@ function updateRail(order, now) {
 
   countTo(liveEl, live);
   countTo(peopleEl, people.size);
+  updateRailPeople(order, now);
+}
+
+/* ---------------------------------------------------------------------
+   The rail's last card: YOUR PEOPLE, OUT NOW
+   ---------------------------------------------------------------------
+   It used to be a paragraph of help text ("Events vanish when they
+   end…") that never changed — the only thing on the laptop's right
+   side that said nothing about right now. Now it answers the question
+   the app exists for: who that I'd show up for is out, and where.
+   People in your orbit or that you follow, at something that has
+   STARTED. Nobody out: what starts next. Nothing at all: a way to
+   start something. Everything comes from the feed's own cache — no
+   read, no listener — and the card is only rewritten when what it
+   says changes. */
+let railPeopleHtml = "";
+function updateRailPeople(order, now) {
+  const box = document.getElementById("railPeople");
+  const title = document.getElementById("railPeopleTitle");
+  if (!box) return;
+  const mine = new Set([...(state.orbitUids || []), ...(state.following || [])]);
+  mine.delete(state.uid);
+
+  const out = [];          // [{ uid, event }]
+  const seen = new Set();
+  let next = null;
+  order.forEach((id) => {
+    const e = state.eventCache[id];
+    if (!e || isBlocked(e.hostUid)) return;
+    const started = e.startTime <= now && e.expiresAt > now;
+    if (started) {
+      (e.participantUids || []).forEach((u) => {
+        if (!mine.has(u) || seen.has(u) || isBlocked(u)) return;
+        seen.add(u);
+        out.push({ uid: u, event: e });
+      });
+    } else if (e.startTime > now && (!next || e.startTime < next.startTime)) {
+      next = e;
+    }
+  });
+  // Your orbit first: those are the people you said you'd show up for.
+  out.sort((a, b) => (inOrbit(b.uid) ? 1 : 0) - (inOrbit(a.uid) ? 1 : 0));
+
+  let heading;
+  let html;
+  if (out.length) {
+    heading = "Your people, out now";
+    const shown = out.slice(0, 4);
+    html = shown.map(({ uid, event }) => {
+      const id = safeId(event.id);
+      return `
+        <button type="button" class="rail-person" onclick="window.openEventPage('${id}')">
+          <span class="rail-person-face">${renderAvatar(avatarFor(uid))}</span>
+          <span class="rail-person-text">
+            <b>${escapeHtml(displayNameFor(uid))}</b>
+            <small>at ${escapeHtml(event.title || "something")}</small>
+          </span>
+        </button>`;
+    }).join("") + (out.length > shown.length
+      ? `<p class="rail-note">and ${out.length - shown.length} more</p>` : "");
+  } else if (next) {
+    heading = "Up next";
+    const mins = Math.max(1, Math.round((next.startTime - now) / 60000));
+    const when = mins < 60 ? `in ${mins} min` : mins < 24 * 60 ? `in ${Math.round(mins / 60)} h` : `at ${clockTime(next.startTime)}`;
+    html = `
+      <button type="button" class="rail-next" onclick="window.openEventPage('${safeId(next.id)}')">
+        <b>${escapeHtml(next.title || "")}</b>
+        <small>${escapeHtml(when)}${next.place ? " \u00b7 " + escapeHtml(next.place) : ""}</small>
+      </button>
+      <p class="rail-note">Nobody you know is out yet.</p>`;
+  } else {
+    heading = "Quiet right now";
+    html = `
+      <p class="rail-note">Nothing's on. Somebody has to start — it could be you.</p>
+      <button type="button" class="rail-start" onclick="window.openCreateScreen()">Start something</button>`;
+  }
+  if (title && title.textContent !== heading) title.textContent = heading;
+  if (html === railPeopleHtml) return;
+  railPeopleHtml = html;
+  box.innerHTML = html;
 }
 
 

@@ -5354,3 +5354,32 @@ html.restoring *::before, html.restoring *::after {
 /* A message keeps the lines it was written in. formatMessage joins
    them with <br>; this only makes sure a long word still breaks. */
 .msg-text { overflow-wrap: anywhere; }
+
+/* =====================================================================
+   RAIL: YOUR PEOPLE, OUT NOW (eventsService updateRailPeople)
+   ===================================================================== */
+.rail-people { display: flex; flex-direction: column; gap: 2px; }
+.rail-person, .rail-next {
+  display: flex; align-items: center; gap: var(--s-12);
+  width: 100%; padding: 8px; margin: 0 -8px; box-sizing: content-box;
+  background: transparent; color: var(--ink);
+  border: none; border-radius: 12px; box-shadow: none;
+  text-align: left; font: inherit;
+}
+.rail-person:hover:not(:disabled), .rail-next:hover:not(:disabled) { background: var(--bone); filter: none; transform: none; }
+.rail-person-face {
+  width: 36px; height: 36px; flex-shrink: 0;
+  display: grid; place-items: center; overflow: hidden;
+  border-radius: 50%; background: var(--wash); font-size: 17px;
+}
+.rail-person-text, .rail-next { min-width: 0; }
+.rail-next { flex-direction: column; align-items: flex-start; gap: 2px; }
+.rail-person-text { display: flex; flex-direction: column; }
+.rail-person b, .rail-next b { font-size: 14.5px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.rail-person small, .rail-next small { font-size: 12.5px; color: var(--fog); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.rail-start {
+  width: auto; margin-top: var(--s-12); padding: 9px 16px;
+  background: var(--forest); color: var(--on-accent);
+  border: none; border-radius: var(--r-pill); box-shadow: none;
+  font-size: 14px; font-weight: 600;
+}

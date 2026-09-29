@@ -5896,9 +5896,27 @@ group('the rail counts what is on now, the same as the pill');
     window.__events = [mk('on1', now - 6e5, now + H), mk('soon1', now + H, now + 2 * H), mk('soon2', now + 5 * H, now + 6 * H)];
     ev.loadEvents();
     await wait(1600);
-    return document.getElementById('railLiveCount')?.dataset.value || document.getElementById('railLiveCount')?.innerText;
+    const out = { live: document.getElementById('railLiveCount')?.dataset.value || document.getElementById('railLiveCount')?.innerText };
+    const card = () => ({ title: document.getElementById('railPeopleTitle')?.textContent, text: document.getElementById('railPeople')?.innerText || '' });
+    // Nobody you know is out: what starts next.
+    out.next = card();
+    // Someone you follow is at the one that has started.
+    state.following = ['a'];
+    ev.renderEvents();
+    await wait(100);
+    out.people = card();
+    out.tap = document.querySelector('#railPeople .rail-person')?.getAttribute('onclick') || '';
+    // Nothing on at all.
+    window.__events = []; state.following = [];
+    window.__fireEvents();
+    await wait(400);
+    out.quiet = card();
+    return out;
   });
-  ok('"events happening right now" counts only what has started', String(r) === '1', String(r));
+  ok('"events happening right now" counts only what has started', String(r.live) === '1', JSON.stringify(r));
+  ok('the rail\'s last card: who you know is out, and where', r.people.title === 'Your people, out now' && /A/.test(r.people.text) && /at on1/.test(r.people.text) && r.tap.includes("openEventPage('on1')"), JSON.stringify(r));
+  ok('nobody out: what starts next; nothing on: a way to start something',
+    r.next.title === 'Up next' && /soon1/.test(r.next.text) && r.quiet.title === 'Quiet right now' && /Start something/.test(r.quiet.text), JSON.stringify(r));
   await ctx.close();
 }
 
