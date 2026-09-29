@@ -36,6 +36,7 @@ import { inRecap } from './recapRules.js';
 import { searchPeople } from './searchService.js';
 import { closeEmojiPicker } from '../interactions/emojiPicker.js';
 import { features } from '../config/features.js';
+import { buzz } from '../utils/haptics.js';
 import { PHOTO, isOurPhotoUrl } from './photoRules.js';
 import { pickImages, compressImage, uploadPhoto, deletePhotoByUrl, photoError } from './photoService.js';
 import { activityOf, primePresence, onPresenceChange, setPresenceTargets, MAX_FETCH } from './presenceService.js';
@@ -1225,6 +1226,8 @@ function runMessageAction(key) {
   closeMessageActions();
   if (!msg || key === "cancel") return;
 
+  // Reply and Copy answer with the same small tick as picking it up.
+  if (key === "reply" || key === "copy") buzz(10);
   if (key === "reply") return initiateReply(msg.senderUid, String(msg.text || (msg.photo ? "\u{1F4F7} Photo" : "")), msg.id);
   if (key === "copy") return copyMessageText(msg);
   if (key === "pin") return pinMessage(id);
@@ -1372,7 +1375,7 @@ export function toggleReaction(messageId, emojiIndex) {
   else delete after[state.uid];
 
   patchLocalMessage(messageId, { reactions: after });
-  if (navigator.vibrate) navigator.vibrate(12);
+  buzz(12);
 
   const chatId = state.currentChat;
   const type = state.currentChatType;
@@ -1551,7 +1554,7 @@ export function handleMessageTap(event, element) {
       decodeURIComponent(element.getAttribute("data-text") || ""),
       element.getAttribute("data-msg-id")
     );
-    if (navigator.vibrate) navigator.vibrate(50);
+    buzz(30);
   } else {
     toggleTime(element);
   }

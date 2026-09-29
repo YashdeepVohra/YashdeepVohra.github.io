@@ -13,6 +13,7 @@
 // ==========================================
 
 import { initiateReply, openMessageActions } from '../services/chatService.js';
+import { buzz } from '../utils/haptics.js';
 import { state } from '../state/store.js';
 
 let startX = 0;
@@ -60,7 +61,8 @@ function handleDragStart(e) {
     // nothing to finish, and swallow the click that follows the lift.
     currentSwipeItem = null;
     state.suppressNextTap = true;
-    if (navigator.vibrate) navigator.vibrate(18);
+    // The tick that says "picked up" — as the sheet opens, not after.
+    buzz(18);
     openMessageActions(id);
   }, HOLD_MS);
 }
@@ -92,8 +94,12 @@ function handleDragMove(e) {
 
     currentSwipeItem.style.transform = `translateX(${movePx}px)`;
 
-    if (Math.abs(movePx) >= 50) currentSwipeItem.classList.add("ready-to-reply");
-    else currentSwipeItem.classList.remove("ready-to-reply");
+    // The tick comes the moment the swipe has gone FAR ENOUGH, the way
+    // WhatsApp does it — so you feel when letting go will reply. It used
+    // to come on release, after the decision had already been made.
+    const ready = Math.abs(movePx) >= 50;
+    if (ready && !currentSwipeItem.classList.contains("ready-to-reply")) buzz(10);
+    currentSwipeItem.classList.toggle("ready-to-reply", ready);
   }
 }
 
@@ -109,7 +115,6 @@ function handleDragEnd() {
     const messageId = currentSwipeItem.getAttribute("data-msg-id");
 
     initiateReply(senderUid, text, messageId);
-    if (navigator.vibrate) navigator.vibrate(50);
   }
 
   currentSwipeItem.style.transition = "transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)";
@@ -141,8 +146,13 @@ export function initSwipeListeners() {
     const id = wrapper.getAttribute("data-msg-id");
     if (!id) return;
     e.preventDefault();
+    // Some Android browsers turn a long press into THIS instead of
+    // letting the hold timer finish — it still gets its tick. A mouse's
+    // right-click does not: nothing to feel on a laptop.
+    const byTouch = holdTimer !== null || (e.pointerType && e.pointerType !== "mouse");
     cancelHold();
     state.suppressNextTap = true;
+    if (byTouch) buzz(18);
     openMessageActions(id);
   });
 }

@@ -6186,6 +6186,81 @@ group('every stamp stays on the paper and off the words');
 }
 
 /* ------------------------------------------------------------------ */
+group('a tick you can feel: picking up a message, swiping to reply');
+{
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 800 }, hasTouch: true, isMobile: true });
+  await ctx.addInitScript(() => {
+    window.__buzz = [];
+    Object.defineProperty(navigator, 'vibrate', { value: (ms) => { window.__buzz.push(ms); return true; }, configurable: true });
+  });
+  const p = await ctx.newPage();
+  const errs = [];
+  p.on('pageerror', (e) => errs.push(e.message.slice(0, 120)));
+  await p.addInitScript({ path: fileURLToPath(new URL('./stub.js', import.meta.url)) });
+  await p.goto(APP_URL, { waitUntil: 'domcontentloaded' });
+  await p.waitForTimeout(1400);
+  const r = await p.evaluate(async () => {
+    const wait = (ms) => new Promise((res) => setTimeout(res, ms));
+    const { state } = await import('/js/state/store.js');
+    window.__authSingleton.currentUser = { uid: 'me' };
+    state.uid = 'me'; state.blockedUids = []; state.following = []; state.orbitUids = [];
+    state.userCache = { me: { uid: 'me', username: 'me' }, a: { uid: 'a', username: 'a', displayName: 'A' } };
+    document.getElementById('loading-screen').classList.add('hidden');
+    document.querySelector('.app-frame').classList.remove('hidden');
+    window.switchScreen('home');
+    const now = Date.now();
+    window.__stubDocs['chats/a_me'] = { userUids: ['a', 'me'], status: 'unlocked', lastUpdated: now, unreadByUid: '', initiatedByUid: 'a' };
+    window.__stubDocs['chats/a_me/messages/m1'] = { senderUid: 'a', text: 'hold me', time: now - 60000 };
+    window.openChat('a_me', 'a');
+    await wait(500);
+    const bubble = document.querySelector('#msg-m1 .msg-bubble');
+    const r = bubble.getBoundingClientRect();
+    const touch = (type, x, y) => {
+      const t = new Touch({ identifier: 1, target: bubble, clientX: x, clientY: y });
+      bubble.dispatchEvent(new TouchEvent(type, { bubbles: true, cancelable: true, touches: type === 'touchend' ? [] : [t], changedTouches: [t] }));
+    };
+    const out = {};
+    // A long press: one tick as the sheet opens.
+    window.__buzz = [];
+    touch('touchstart', r.left + 10, r.top + 10);
+    await wait(560);
+    out.holdBuzz = window.__buzz.slice();
+    out.sheetOpen = !document.getElementById('msgActionSheet')?.classList.contains('hidden');
+    touch('touchend', r.left + 10, r.top + 10);
+    // Reply from the sheet: another small tick.
+    window.__buzz = [];
+    document.querySelector('#msgActionSheet [data-act="reply"]')?.click();
+    await wait(150);
+    out.replyBuzz = window.__buzz.slice();
+    out.replying = !!state.replyingToMessage;
+    window.cancelReply?.();
+    // A swipe: one tick when it goes far enough, none on letting go.
+    window.__buzz = [];
+    const x0 = r.left + 20, y0 = r.top + 10;
+    touch('touchstart', x0, y0);
+    for (let dx = 0; dx <= 200; dx += 20) { touch('touchmove', x0 + dx, y0); await wait(10); }
+    out.swipeBuzzBeforeRelease = window.__buzz.length;
+    touch('touchend', x0 + 200, y0);
+    await wait(80);
+    out.swipeBuzzTotal = window.__buzz.length;
+    out.swipeReplied = !!state.replyingToMessage;
+    window.cancelReply?.();
+    // A laptop right-click opens the sheet without a buzz.
+    window.__buzz = [];
+    bubble.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    await wait(100);
+    out.rightClickBuzz = window.__buzz.length;
+    return out;
+  });
+  ok('holding a message ticks once as its sheet opens', r.sheetOpen && r.holdBuzz.length === 1, JSON.stringify(r));
+  ok('Reply from the sheet ticks too', r.replying && r.replyBuzz.length === 1, JSON.stringify(r));
+  ok('a swipe ticks the moment it is far enough to reply — once, not again on release', r.swipeBuzzBeforeRelease === 1 && r.swipeBuzzTotal === 1 && r.swipeReplied, JSON.stringify(r));
+  ok('a right-click with a mouse does not buzz', r.rightClickBuzz === 0, JSON.stringify(r));
+  ok('and nothing errors', errs.length === 0, errs.join(' | '));
+  await ctx.close();
+}
+
+/* ------------------------------------------------------------------ */
 group('overall');
 ok('no errors, no native dialogs, all the way through', errors.length === 0, errors.join(' | '));
 

@@ -31,6 +31,7 @@ import { resetPhotoTray, commitTray, deleteEventPhotos } from './eventPhotoServi
 import { renderEventPage, isEventPageOpen } from './eventPage.js';
 import { storyRailHtml, loadStories, onStoriesChange } from './storyService.js';
 import { paintSocial } from './memoryService.js';
+import { buzz } from '../utils/haptics.js';
 
 // Stories land asynchronously; the rail is painted by renderEvents.
 onStoriesChange(() => renderEvents());
@@ -1875,7 +1876,7 @@ export function toggleHype(id) {
   setHypedLocally(e, desired);
 
   if (desired) {
-    if (navigator.vibrate) navigator.vibrate(45);
+    buzz(45);
     burstFrom(document.querySelector(`#event-${safeId(id)} .act`));
   }
 
